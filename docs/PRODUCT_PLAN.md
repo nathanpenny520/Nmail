@@ -1,0 +1,217 @@
+# Nmail 产品方案（v0.2，已吸收首轮反馈）
+
+> AI 驱动的本地聚合邮箱客户端 · 本地优先 · 隐私自持 · MIT 开源
+
+**v0.2 变更**：AI 分类改为先行（移除规则引擎）；跨端策略收紧（不用 OS 独有 API，通知走浏览器标准 API）；新增参考项目分析（MiNiMail / inbox-zero / mailmind）；补轮询原理说明。
+
+---
+
+## 1. 产品定位
+
+**Nmail 是一个跑在本机上的邮箱客户端，内置 AI 助理，帮你把邮箱变成"只看值得看的邮件"。**
+
+- 你只管看信、写信、拍板；AI 负责分类、过滤噪音、预先写好草稿、每天给你汇报。
+- 数据全部留在本机（SQLite），不依赖任何云端服务；AI 用你自己的 OpenAI 兼容 API key，也可以指向 Ollama / LM Studio 实现 100% 本地推理。
+- 纯客户端：通过 IMAP/SMTP 收发邮件，**不自建任何邮件服务器底层**。
+- 跨平台：Python 后端 + 浏览器前端（localhost），Windows / macOS / Linux 通吃；**核心只依赖跨平台技术，不调用操作系统独有 API**。
+
+## 2. 设计原则（硬约束）
+
+| # | 原则 | 说明 |
+|---|------|------|
+| 1 | **只做邮件** | 收、发、读、搜、分类、归档。明确不做日历、联系人 CRM、任务管理、聊天（反面教材：Outlook） |
+| 2 | **本地优先** | 邮件、索引、AI 记录全部存本地 SQLite；无云端账号体系 |
+| 3 | **AI 自带钥匙** | 用户自行填写 OpenAI 兼容端点（base_url + key + model），支持本地模型 |
+| 4 | **AI 分类先行** | 不自建规则引擎；AI 承担全部智能分类，仅有发件人白/黑名单作为零成本补充 |
+| 5 | **人在回路默认** | AI 对邮箱的"写操作"分级授权，默认一切发送须经人工审核 |
+| 6 | **跨端优先** | 不使用任何 OS 独有 API：密钥存本地文件、通知走浏览器 Notification API、无托盘/注册表/launchd |
+| 7 | **无服务器** | 不部署任何服务端，只有一个本机进程 + 浏览器页面 |
+| 8 | **MIT 开源** | 全新代码库；参考项目仅借鉴思想，不搬运受限许可的代码 |
+
+## 3. 功能清单
+
+### 3.1 邮箱核心（P1，MVP 主体）
+
+- **多账号聚合**：添加账号时按邮箱地址自动匹配服务商预设（QQ / 163 / Gmail / Outlook / iCloud 等 30+，含中文服务商授权码说明），也可手动填 IMAP/SMTP；所有账号统一收件箱 + 按账号/文件夹切换。
+- **收信**：定时轮询（默认 5 分钟，可配 1–60 分钟）+ 手动刷新；基于 UID 的增量同步，处理 UIDVALIDITY 变化；IMAP 断线自动重连。轮询不丢邮件（原理见 §7）。
+- **读信**：会话线程视图；HTML 邮件消毒 + iframe sandbox 渲染；**默认拦截远程图片**（防追踪像素，点击才加载）；附件列表 / 下载 / 图片和 PDF 预览。
+- **发信**：新邮件 / 回复 / 回复全部 / 转发；正文支持 Markdown 自动转 HTML；签名（每账号可选）；附件；（可选）定时发送、5 秒撤回——借鉴 MiNiMail。
+- **搜索**：SQLite FTS5 全文（含中文处理）+ 筛选器（账号 / 文件夹 / 已读 / 星标 / 分类 / 重要度 / 时间 / 发件人）。
+- **管理**：已读 / 星标 / 移动 / 删除 / 归档；本地标签（tag）；批量操作。
+- **账号健康**：连接失败、授权码失效时账号标红 + 通知"授权码可能已过期"，设置页给出对应服务商重新授权指引。
+
+### 3.2 AI 能力（P2）
+
+- **AI 分类（先行，无规则引擎）**：新邮件按批次（约 20 封/请求）送 AI，一次调用输出全部结构化结果：
+  - 类别：工作 / 个人 / 通知 / 验证码 / 营销订阅 / 社交
+  - 重要度：critical / high / normal / low
+  - 是否需要回复 + 一句"为什么"
+  - 参考实现：mailmind 的 ClassificationService（MIT，~170 行，few-shot + JSON 输出）
+- **零成本静态过滤**（不是规则引擎，就是两个集合）：
+  - **白名单**：指定发件人永远进收件箱 + 立即通知，跳过 AI 等待
+  - **黑名单**：指定发件人直接归档，跳过 AI
+  - 在邮件上右键即可"以后收这个人always通知/直接归档"，无需任何规则管理界面
+- **无 AI 兜底**：未配置 AI 端点时，全部邮件进收件箱、不分类、功能不受影响（诚实降级，不假装智能）。
+- **营销邮件自动归档**：AI 判定为营销/订阅 → 移出聚合收件箱进"已归档"视图。按账号可开关。默认仅本地视图（服务器不动），可选同步到服务器归档文件夹。
+- **新邮件自动草稿**：判定"需要回复"→ 立即按账号权限生成回复草稿，通知"草稿已就绪"。草稿语言**跟随来信语言**。
+- **AI 对话面板**：随时唤起，上下文可以是"当前邮件 / 会话 / 搜索结果 / 某账号近 N 天"。用途：总结、翻译、提取关键信息（金额、截止日期）、帮你写新邮件。
+- **写作辅助**：对任何草稿：润色 / 改写 / 翻译 / 调整语气（更正式 / 更委婉 / 更简短）。
+- **Tone DNA（P3+，借鉴 mailmind）**：从该账号已发邮件学习你的用词、正式度、署名习惯，注入草稿提示词，让 AI 草稿像你写的。
+- **AI 用量透明**：每次调用记录任务类型、模型、token 用量、估算成本；设置页统计面板；可设每日调用预算上限。
+
+### 3.3 每日摘要（P3）
+
+每天定时（默认 08:30，可配）AI 生成结构化摘要：
+
+- **今日概览**：新邮件总数、未读数、分类分布（环形图）、近 7 天趋势（折线）、各账号分布
+- **需要回复清单**：借鉴 inbox-zero 的 Reply Zero 思想，双清单——"等你回复的" + "等对方回复的（已跟进）"
+- **重要邮件高亮**：验证码、账单、截止日期、重要联系人
+- **AI 已处理**：自动归档 N 封营销邮件（可展开明细）
+- **一键直达**对应邮件/草稿；可导出 Markdown
+
+呈现：摘要页（卡片 + ECharts 图表）+ **浏览器通知**（页面开着时弹出；页面关闭则进应用内通知中心，打开即见红点）。
+
+### 3.4 账号级 AI 权限（P3，模型现在就定，实现分步）
+
+每账号独立三档：
+
+| 档位 | AI 能做什么 | 状态 |
+|------|------------|------|
+| **只读摘要** | 只能读取、总结、分类；不写草稿、不归档 | P3 |
+| **草稿待审**（默认） | 自动归档营销邮件 + 生成回复草稿；发送必须人工审核 | P2 起 |
+| **自动助理**（agent mail） | **低风险回复**可直接发送：发件人有历史往来 + 无未识别链接/附件 + 简短确认类。所有自动发送留痕可查 | 远期（P4+），开启需二次确认 |
+
+> 自动助理正是"agent mail"场景的核心：专门给 AI 建一个邮箱、全自动收发。权限模型现在按三档设计到位，实现放远期——先把基础做稳。
+
+### 3.5 安全与隐私（全跨平台，无 OS 独有 API）
+
+- **密钥存储**：本地配置文件（应用数据目录，SQLite/JSON），文档明示位置；远期可选"主密码加密"（纯跨平台算法 PBKDF2 + Fernet）。**不用** DPAPI/keyring 等系统接口。
+- **通知**：**浏览器 Notification API**（Web 标准，三平台一致）+ 应用内通知中心。不用任何系统 toast 库。
+- **AI 外发提示**：云端 AI 端点会收到邮件正文；设置页明确提示，每账号可单独关 AI；指向 Ollama 等本地端点 = 0 外发。远期可选 PII 脱敏后再调用（借鉴 mailmind 的 pii.py 思路）。
+- **HTML 邮件安全**：内容消毒 + iframe sandbox + 远程资源默认拦截。
+- **网络**：服务仅绑定 `127.0.0.1`。
+- **数据位置**：platformdirs 标准路径（Windows `%LOCALAPPDATA%/Nmail`），这是跨平台库选择目录，非系统 API。
+
+### 3.6 明确不做
+
+日历/日程、联系人 CRM、任务管理、聊天 IM、端到端加密邮件、自建邮件服务器、云同步、移动原生 App、多用户/团队协作、插件市场、系统托盘。
+
+## 4. 系统架构
+
+```
+Nmail/
+├─ backend/                    Python 3.11+ · FastAPI
+│  └─ app/
+│     ├─ main.py               FastAPI 入口，托管前端静态文件
+│     ├─ api/                  REST 路由 + SSE（新邮件/草稿/任务实时事件流）
+│     ├─ core/
+│     │  ├─ imap_client.py     IMAP 收信（imap-tools）、UID 增量同步、断线重连
+│     │  ├─ smtp_client.py     发信（MIME、附件、Markdown→HTML）
+│     │  ├─ providers.py       服务商预设库（30+）
+│     │  └─ sync.py            增量同步引擎（UIDVALIDITY / 软删除处理）
+│     ├─ ai/
+│     │  ├─ llm.py             OpenAI 兼容客户端（openai SDK，base_url 可覆盖）
+│     │  ├─ tasks/             classify.py · draft.py · digest.py · chat.py
+│     │  └─ prompts/           提示词模板（用户可自定义覆盖）
+│     ├─ pipeline/
+│     │  ├─ filters.py         发件人白/黑名单（零成本静态过滤）
+│     │  └─ events.py          新邮件事件流水线编排
+│     ├─ scheduler.py          APScheduler：定时收信 + 每日摘要 + 健康检查
+│     ├─ db/                   SQLite（WAL）+ FTS5 + 版本化迁移
+│     └─ security.py           本地密钥文件读写（远期可选主密码加密）
+├─ frontend/                   React 18 + Vite + TypeScript
+│  ├─ 三栏布局：侧栏（账号/文件夹/分类）│ 邮件列表 │ 阅读区 + 可收起 AI 面板
+│  ├─ 页面：聚合收件箱 · 待审草稿 · 已归档 · 每日摘要 · 通知中心 · 设置
+│  └─ ECharts 摘要可视化；Notification API 通知
+├─ run.py                      一键启动：起服务 + webbrowser 标准库开浏览器
+├─ LICENSE                     MIT
+└─ docs/
+```
+
+**选型理由**
+
+| 选择 | 理由 |
+|------|------|
+| Python 后端 | IMAP 生态（imap-tools）最成熟；mailmind（MIT）证明 Python+FastAPI 路线可承载完整 AI 邮件产品；mail-skill 实践经验可平移 |
+| FastAPI | 异步、SSE 原生支持、自动 API 文档 |
+| SQLite + FTS5 | 零运维、单文件、十万级邮件无压力（mail-skill 已验证） |
+| APScheduler | 进程内定时，无外部依赖 |
+| React + Vite + TS | 生态最大，图表库丰富 |
+| openai SDK | 覆盖 base_url → 任意 OpenAI 兼容端点（OpenAI/DeepSeek/Ollama/LM Studio…） |
+| 浏览器 Web API（通知等） | 跨平台一致，零 OS 依赖；将来 Tauri 打包可无缝升级为系统通知 |
+| 轮询而非 IMAP IDLE | 各服务商 IDLE 实现差异大、连接易静默假死；轮询每次全新连接，状态干净可靠 |
+
+## 5. 数据模型（核心表）
+
+| 表 | 关键字段 |
+|----|---------|
+| `accounts` | email, provider, imap/smtp 配置, ai_permission(readonly/draft_review/auto), ai_enabled, 颜色, 健康状态 |
+| `emails` | account_id, uid, message_id, folder, subject, sender, recipients, date, body_text, html_path, is_read, starred, category, importance, needs_reply, reply_reason, archived_local, ai_classified_at |
+| `sender_lists` | account_id, sender, list_type(whitelist/blacklist) —— 白/黑名单 |
+| `attachments` | email_id, filename, mime, size, path |
+| `tags` / `email_tags` | 本地标签 |
+| `drafts` | email_id, account_id, content, origin(ai/human), status(pending/approved/sent/discarded), created_at |
+| `ai_logs` | task_type, account_id, model, prompt_tokens, completion_tokens, est_cost, summary |
+| `notifications` | type, title, body, ref_id, is_read, created_at —— 应用内通知中心 |
+| `digest_history` | date, content_json, is_read |
+| `settings` | KV：轮询间隔、摘要时间、AI 端点/模型、主题 |
+| `sync_state` | account_id, folder, last_uid, uidvalidity |
+
+## 6. AI 流水线
+
+```
+新邮件到达（轮询拉回）
+   │
+   ├─ 1. 白名单？→ 直接进收件箱 + 立即通知（0 成本，不等 AI）
+   ├─ 2. 黑名单？→ 直接归档（0 成本）
+   │
+   ├─ 3. AI 分类（批量约 20 封/请求，正文截断，输出 JSON：
+   │      category + importance + needs_reply + reason）
+   │      未配置 AI → 全部进收件箱（诚实降级）
+   │
+   ├─ 4. 营销/订阅 → 本地归档视图（按账号开关）→ 记入"AI 已处理"
+   │
+   ├─ 5. needs_reply 且账号权限 ≥ 草稿档 → 生成回复草稿（线程上下文 + Tone DNA）
+   │      → 待审草稿 + 通知
+   │
+   └─ 6. 通知中心 + 浏览器通知：「新邮件 N 封，M 份草稿待审」
+```
+
+**成本量级**：批量 20 封/请求 + 截断 500 字符 → 日收 50 封 ≈ 3 次请求 ≈ 1–2 万 token/天。便宜模型（gpt-4o-mini / deepseek-chat）每天不到 1 分钱；Ollama 本地 = 0。
+
+## 7. 轮询原理说明（为什么不会丢邮件）
+
+1. 邮件永远先送到**服务商服务器**（QQ/Gmail 的服务器是别人来信的落点，与 Nmail 是否在线无关）。
+2. Nmail 每隔 N 分钟用 IMAP 问服务器："上次同步到的 UID 是 X，之后有新的吗？"（UID 是服务器给每封邮件的永久递增编号）。
+3. 有新邮件 → 拉回存入本地 SQLite，记录新 UID；下次从新 UID 继续。
+4. UID 只增不减，配合 UIDVALIDITY 校验（服务器文件夹重置时自动全量重同步），**不漏**。
+
+**结论：不会收不到，只会晚到。** 最坏延迟 = 一个轮询间隔（默认 5 分钟）；Nmail 关机一天，邮件在服务器上等着，打开即全量补同步。选轮询而非 IMAP IDLE 的原因：IDLE 是长连接"推"通知，各服务商实现差异大、连接易静默断开（看似在线实际收不到）；轮询每次新建连接，状态干净。Gmail 有真正推送 API（Pub/Sub）但需 OAuth+云配置，远期。
+
+## 8. 路线图
+
+| 阶段 | 内容 | 验收标准 |
+|------|------|---------|
+| **P0 骨架** | 仓库、MIT、run.py 一键启动、FastAPI+React 打通、DB 迁移、设置页（AI 端点） | `python run.py` 浏览器打开界面 |
+| **P1 邮箱核心 MVP** | 账号添加（预设+手动）、轮询收信、三栏 UI、读信（安全渲染+图片拦截）、搜索、发/回/转、已读/星标/移动/删除/本地归档、多账号聚合、健康检查与失效提醒 | 真实收发、两账号聚合、QQ/163 授权码失效当天有提醒 |
+| **P2 AI 层** | AI 批量分类、白/黑名单、营销自动归档、AI 草稿+审核流、AI 对话面板、写作辅助、用量统计 | 营销邮件自动归档；需回复邮件自动出现待审草稿；未配 AI 时功能不受影响 |
+| **P3 摘要与权限** | 每日摘要+可视化、通知中心+浏览器通知、账号三档权限（只读/草稿待审）、Tone DNA | 定时摘要+图表正确；不同账号权限行为符合预期 |
+| **P4 打磨** | 定时发送/5秒撤回、附件预览增强、主题、i18n、自然语言 AI 规则（借鉴 inbox-zero 思想：一句话告诉 AI 怎么处理邮箱）、打包分发（可选 Tauri） | 全新机器可运行 |
+| **远期** | **自动助理档 / agent mail**、Gmail OAuth、PII 脱敏、主密码加密、MCP 接口（让 Claude 等 Agent 调用 Nmail） | — |
+
+## 9. 参考项目（只借思想，不搬受限代码）
+
+| 项目 | 许可证 | 技术栈 | 借鉴什么 |
+|------|--------|--------|---------|
+| **mailmind** | **MIT** ✅ | Python 3.12 + FastAPI + Next.js + LangGraph（云端重架构，核心纯 Python） | **代码级参考**：AI 先行分类（few-shot+JSON，~170 行）、五轴可解释评分、Tone DNA（tone_dna.py）、PII 脱敏（pii.py）、优先级人工反馈循环 |
+| **MiNiMail** | Apache-2.0 ✅ | Electron + TS（桌面路线，与我们不同） | 产品形态参考：本地优先缓存、远程图片默认拦截、HTML 清洗、定时发送、5 秒撤回、快捷短语/模板、账号自动配置体验 |
+| **inbox-zero** | **AGPL-3.0** ⚠️ | Next.js + Postgres + Redis + OAuth（重型自托管） | **只能借思想，严禁抄代码**（AGPL 传染 MIT）：自然语言 AI 规则、Reply Zero 双清单（待回复/待跟进）、批量退订、冷邮件拦截 |
+| **mail-skill** | 无 LICENSE ⚠️ | Python CLI Agent skill | 架构参考：服务商预设数据（事实性配置）、UID 同步/断线重连模式、FTS5 方案。不复制代码 |
+
+## 10. 已拍板决策（首轮反馈确认）
+
+1. **自动归档 = 本地归档视图**：Nmail 在本地数据库打"已归档"标记，聚合收件箱隐藏这些邮件；服务器上邮件原地不动（网页版登录仍可见）；"已归档"页面随时查看/搜索/撤销。可选升级为同步服务器归档文件夹。
+2. **自动助理（agent mail）保留**，排远期 P4+；权限模型现在按三档设计到位。
+3. **草稿语言跟随来信**。
+4. **Python 后端确认**（mailmind 为同栈先例）。
+5. **AI 分类先行**，规则引擎移除，仅保留发件人白/黑名单。

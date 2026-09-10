@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Node
+node_modules/
+frontend/dist/
+
+# 本地数据与密钥（正常情况在系统数据目录，此处仅防误放）
+*.db
+*.db-wal
+*.db-shm
+secrets.json
+.data/
+
+# 环境与 IDE
+.env
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
