@@ -13,13 +13,19 @@ export default function HtmlMail({ html }: HtmlMailProps) {
   const [height, setHeight] = useState(320)
 
   const handleLoad = () => {
-    try {
-      const doc = iframeRef.current?.contentDocument
-      if (doc?.body) {
-        setHeight(Math.max(200, Math.min(doc.body.scrollHeight + 24, 20000)))
-      }
-    } catch {
-      // 沙箱限制下读取失败则保持固定高度（可滚动）
+    // 图片等资源异步加载会改变文档高度，加载后多次复测
+    const remeasure = [0, 600, 1500, 3000]
+    for (const delay of remeasure) {
+      setTimeout(() => {
+        try {
+          const doc = iframeRef.current?.contentDocument
+          if (doc?.body) {
+            setHeight(Math.max(200, Math.min(doc.body.scrollHeight + 24, 20000)))
+          }
+        } catch {
+          // 沙箱限制下读取失败则保持固定高度（可滚动）
+        }
+      }, delay)
     }
   }
 

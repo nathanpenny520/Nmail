@@ -26,10 +26,12 @@ function detailToString(detail: unknown): string {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  })
+  const headers = new Headers(init?.headers)
+  // FormData 交给浏览器自动设置 multipart 边界，不能手动指定 Content-Type
+  if (!(init?.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+  const res = await fetch(url, { ...init, headers })
   if (!res.ok) {
     let detail: unknown = res.statusText
     try {

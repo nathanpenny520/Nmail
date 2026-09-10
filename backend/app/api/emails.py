@@ -172,6 +172,7 @@ def _imap_for(account_id: int) -> tuple[imap_client.MailConfig, dict]:
     cfg = imap_client.MailConfig(
         email=row["email"], password=password,
         imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
+        smtp_server=row["smtp_server"], smtp_port=int(row["smtp_port"]),
     )
     return cfg, {"email": row["email"], "smtp_server": row["smtp_server"], "smtp_port": row["smtp_port"]}
 
