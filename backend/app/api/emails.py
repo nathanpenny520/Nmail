@@ -20,7 +20,8 @@ router = APIRouter(prefix="/api", tags=["emails"])
 LIST_COLUMNS = (
     "e.id, e.account_id, a.email AS account_email, a.color AS account_color,"
     " e.folder, e.uid, e.subject, e.sender_name, e.sender_email, e.date, e.snippet,"
-    " e.is_read, e.starred, e.archived_local, e.has_attachments"
+    " e.is_read, e.starred, e.archived_local, e.has_attachments,"
+    " e.category, e.importance, e.needs_reply, e.reply_reason"
 )
 
 
@@ -36,6 +37,7 @@ def list_emails(
     q: str | None = None,
     is_read: bool | None = None,
     starred: bool | None = None,
+    category: str | None = None,
     archived: bool = False,
     limit: int = 50,
     offset: int = 0,
@@ -44,6 +46,10 @@ def list_emails(
     offset = max(0, offset)
     where: list[str] = []
     params: list = []
+
+    if category:
+        where.append("e.category = ?")
+        params.append(category)
 
     if q and q.strip():
         # 搜索时忽略文件夹/归档过滤，覆盖该（或全部）账号的所有文件夹
@@ -107,6 +113,10 @@ def _summary(r) -> dict:  # noqa: ANN001
         "starred": bool(r["starred"]),
         "archived_local": bool(r["archived_local"]),
         "has_attachments": bool(r["has_attachments"]),
+        "category": r["category"] or "",
+        "importance": r["importance"] or "",
+        "needs_reply": bool(r["needs_reply"]),
+        "reply_reason": r["reply_reason"] or "",
     }
 
 

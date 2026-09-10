@@ -23,6 +23,35 @@ def build_client(base_url: str, api_key: str | None, timeout: httpx.Timeout = AI
     )
 
 
+def chat(base_url: str, model: str, api_key: str | None,
+         system: str, user: str, **kwargs) -> tuple[str, dict]:
+    """单轮对话，返回 (回复文本, 用量 dict)。"""
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    return chat_messages(base_url, model, api_key, messages, **kwargs)
+
+
+def chat_messages(base_url: str, model: str, api_key: str | None,
+                  messages: list[dict], max_tokens: int = 2000,
+                  temperature: float = 0.3) -> tuple[str, dict]:
+    """多轮对话，返回 (回复文本, {prompt_tokens, completion_tokens})。"""
+    client = build_client(base_url, api_key)
+    resp = client.chat.completions.create(
+        model=model,
+        messages=messages,  # type: ignore[arg-type]
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    usage = {
+        "prompt_tokens": getattr(resp.usage, "prompt_tokens", 0) or 0,
+        "completion_tokens": getattr(resp.usage, "completion_tokens", 0) or 0,
+    }
+    content = resp.choices[0].message.content or "" if resp.choices else ""
+    return content, usage
+
+
 def test_connection(base_url: str, model: str, api_key: str | None) -> dict:
     """发送一个极小请求，验证端点 / 密钥 / 模型名是否可用。"""
     started = time.perf_counter()

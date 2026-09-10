@@ -113,6 +113,52 @@ MIGRATIONS: list[tuple[int, str]] = [
         END;
         """,
     ),
+    (
+        3,
+        """
+        -- P2 AI 层：分类结果、待审草稿、AI 用量、发件人白/黑名单、账号 AI 权限
+        ALTER TABLE emails ADD COLUMN category TEXT NOT NULL DEFAULT '';
+        ALTER TABLE emails ADD COLUMN importance TEXT NOT NULL DEFAULT '';
+        ALTER TABLE emails ADD COLUMN needs_reply INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE emails ADD COLUMN reply_reason TEXT NOT NULL DEFAULT '';
+        ALTER TABLE emails ADD COLUMN ai_classified_at TEXT;
+        CREATE INDEX IF NOT EXISTS idx_emails_category ON emails(category);
+
+        ALTER TABLE accounts ADD COLUMN ai_permission TEXT NOT NULL DEFAULT 'draft_review';
+
+        CREATE TABLE IF NOT EXISTS drafts (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_id    INTEGER NOT NULL REFERENCES emails(id) ON DELETE CASCADE,
+            account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            content     TEXT NOT NULL,
+            origin      TEXT NOT NULL DEFAULT 'ai',
+            status      TEXT NOT NULL DEFAULT 'pending',
+            instruction TEXT,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS ai_logs (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_type         TEXT NOT NULL,
+            account_id        INTEGER,
+            model             TEXT NOT NULL DEFAULT '',
+            prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+            completion_tokens INTEGER NOT NULL DEFAULT 0,
+            ok                INTEGER NOT NULL DEFAULT 1,
+            summary           TEXT NOT NULL DEFAULT '',
+            created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS sender_lists (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            pattern   TEXT NOT NULL UNIQUE,
+            list_type TEXT NOT NULL CHECK (list_type IN ('whitelist', 'blacklist')),
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """,
+    ),
 ]
 
 

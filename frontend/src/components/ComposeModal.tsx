@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import { X } from 'lucide-react'
+import { Loader2, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { api } from '../api/client'
 import type { Account, EmailDetail } from '../types'
@@ -8,6 +8,14 @@ export interface ComposeInit {
   mode: 'reply' | 'replyAll' | 'forward' | 'new'
   base?: EmailDetail | null
 }
+
+const WRITE_OPS = [
+  { key: 'polish', label: '润色' },
+  { key: 'formal', label: '更正式' },
+  { key: 'shorten', label: '更简短' },
+  { key: 'translate_zh', label: '译中' },
+  { key: 'translate_en', label: '译英' },
+]
 
 interface ComposeModalProps {
   accounts: Account[]
@@ -72,6 +80,22 @@ export default function ComposeModal({ accounts, init, onClose, onSent }: Compos
   const [body, setBody] = useState(prefill.body)
   const [files, setFiles] = useState<File[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
+  const [assistBusy, setAssistBusy] = useState(false)
+  const [assistError, setAssistError] = useState('')
+
+  const runAssist = async (op: string) => {
+    if (!body.trim() || assistBusy) return
+    setAssistBusy(true)
+    setAssistError('')
+    try {
+      const { text } = await api.aiWrite({ text: body, op })
+      setBody(text)
+    } catch (err) {
+      setAssistError((err as Error).message)
+    } finally {
+      setAssistBusy(false)
+    }
+  }
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -138,12 +162,29 @@ export default function ComposeModal({ accounts, init, onClose, onSent }: Compos
               onChange={(e) => setSubject(e.target.value)}
             />
           </div>
-          <textarea
-            className={`${inputClass} min-h-56 resize-y font-mono text-[13px] leading-relaxed`}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="支持 Markdown 格式"
-          />
+          <div>
+            <textarea
+              className={`${inputClass} min-h-56 resize-y font-mono text-[13px] leading-relaxed`}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="支持 Markdown 格式"
+            />
+            <div className="mt-2 flex items-center gap-1.5 text-xs">
+              <span className="text-gray-400">AI 辅助：</span>
+              {WRITE_OPS.map((op) => (
+                <button
+                  key={op.key}
+                  className="rounded-md border border-violet-200 px-2 py-0.5 text-violet-600 hover:bg-violet-50 disabled:opacity-40"
+                  disabled={assistBusy || !body.trim()}
+                  onClick={() => runAssist(op.key)}
+                >
+                  {op.label}
+                </button>
+              ))}
+              {assistBusy && <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />}
+              {assistError && <span className="text-red-500">{assistError}</span>}
+            </div>
+          </div>
           <div>
             <input
               ref={fileRef}

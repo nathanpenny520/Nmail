@@ -216,6 +216,16 @@ def append_sent(cfg: MailConfig, message: EmailMessage) -> None:
         logger.warning("append sent failed for %s: %s", cfg.email, exc)
 
 
+def reply_subject(subject: str) -> str:
+    """补 Re: 前缀；已带则原样返回。"""
+    trimmed = (subject or "").strip()
+    if not trimmed:
+        return "Re:"
+    if re.match(r"^(re|回复|答复)\s*(:|：)", trimmed, re.IGNORECASE):
+        return trimmed
+    return f"Re: {trimmed}"
+
+
 def send_email(
     cfg: MailConfig,
     to: list[str],
@@ -225,7 +235,8 @@ def send_email(
     body_text: str,
     body_html: str | None,
     attachment_paths: list[str] | None = None,
-) -> None:
+    in_reply_to: str | None = None,
+) -> EmailMessage:
     """通过 SMTP 发送邮件；失败抛异常，由调用方转为错误响应。"""
     if not to:
         raise ValueError("收件人不能为空")
@@ -239,6 +250,9 @@ def send_email(
     msg["Subject"] = subject
     msg["Date"] = email.utils.formatdate(localtime=True)
     msg["Message-ID"] = email.utils.make_msgid(domain=cfg.email.rsplit("@", 1)[-1])
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+        msg["References"] = in_reply_to
     msg.set_content(body_text or "")
     if body_html:
         msg.add_alternative(body_html, subtype="html")

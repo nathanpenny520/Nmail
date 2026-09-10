@@ -31,8 +31,9 @@ class AccountIn(BaseModel):
     smtp_port: int | None = None
 
 
-class PasswordIn(BaseModel):
-    password: str
+class AccountPatchIn(BaseModel):
+    password: str | None = None
+    ai_permission: str | None = None  # readonly | draft_review
 
 
 def _resolve_config(payload: AccountIn) -> tuple[imap_client.MailConfig, str | None]:
@@ -71,6 +72,7 @@ def _account_dict(row) -> dict[str, Any]:  # noqa: ANN001
         "smtp_server": row["smtp_server"],
         "smtp_port": row["smtp_port"],
         "color": row["color"],
+        "ai_permission": row["ai_permission"] if "ai_permission" in row.keys() else "draft_review",
         "status": row["status"],
         "status_detail": row["status_detail"],
         "last_sync_at": row["last_sync_at"],
@@ -141,20 +143,34 @@ def list_accounts() -> dict:
 
 
 @router.patch("/accounts/{account_id}")
-def update_account_password(account_id: int, payload: PasswordIn) -> dict:
-    row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+def update_account(account_id: int, payload: AccountPatchIn) -> dict:
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
     if not row:
         raise HTTPException(404, "账号不存在")
-    cfg = imap_client.MailConfig(
-        email=row["email"], password=payload.password,
-        imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
-    )
-    ok, detail = imap_client.test_connection(cfg)
-    if not ok:
-        raise HTTPException(400, detail)
-    set_secret(f"account_pwd:{account_id}", payload.password)
-    sync_engine._set_account_status(account_id, "ok")  # noqa: SLF001 — 模块内复用
-    return {"ok": True, "detail": "授权码已更新"}
+
+    if payload.ai_permission is not None:
+        if payload.ai_permission not in ("readonly", "draft_review"):
+            raise HTTPException(400, "ai_permission 需为 readonly/draft_review")
+        conn.execute(
+            "UPDATE accounts SET ai_permission = ? WHERE id = ?",
+            (payload.ai_permission, account_id),
+        )
+        conn.commit()
+
+    if payload.password is not None:
+        cfg = imap_client.MailConfig(
+            email=row["email"], password=payload.password,
+            imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
+        )
+        ok, detail = imap_client.test_connection(cfg)
+        if not ok:
+            raise HTTPException(400, detail)
+        set_secret(f"account_pwd:{account_id}", payload.password)
+        sync_engine._set_account_status(account_id, "ok")  # noqa: SLF001 — 模块内复用
+
+    updated = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+    return {"ok": True, "account": _account_dict(updated)}
 
 
 @router.delete("/accounts/{account_id}")

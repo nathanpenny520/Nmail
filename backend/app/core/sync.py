@@ -172,6 +172,17 @@ def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dic
             first.get("latest_subject") or "",
             str(account_id),
         )
+
+    # AI 流水线（白/黑名单 → 分类 → 自动归档 → 草稿）；失败不影响同步结果
+    new_ids = [eid for r in results for eid in r.get("new_email_ids", [])]
+    if new_ids:
+        try:
+            from app.core.pipeline import process_new_emails
+
+            process_new_emails(account, new_ids)
+        except Exception:  # noqa: BLE001
+            logger.exception("pipeline crashed for account %s", account_id)
+
     return {"ok": True, "folders": results, "error": None}
 
 
@@ -195,11 +206,13 @@ def _sync_folder(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001
 
     new_count = 0
     latest_subject = ""
+    new_email_ids: list[int] = []
     for parsed in fetch_new(mb, folder, last_uid, first_sync_days=FIRST_SYNC_DAYS):
         email_id = _upsert_email(account_id, folder, parsed)
         _save_attachments(account_id, email_id, parsed)
         last_uid = max(last_uid, parsed.uid)
         new_count += 1
+        new_email_ids.append(email_id)
         latest_subject = latest_subject or parsed.subject
 
     conn.execute(
@@ -209,7 +222,12 @@ def _sync_folder(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001
         (account_id, folder, last_uid, uidvalidity or stored_uidv),
     )
     conn.commit()
-    return {"folder": folder, "new_count": new_count, "latest_subject": latest_subject}
+    return {
+        "folder": folder,
+        "new_count": new_count,
+        "latest_subject": latest_subject,
+        "new_email_ids": new_email_ids,
+    }
 
 
 def delete_account_files(account_id: int) -> None:

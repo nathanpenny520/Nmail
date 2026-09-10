@@ -46,6 +46,7 @@ export interface Account {
   smtp_server: string
   smtp_port: number
   color: string
+  ai_permission: 'readonly' | 'draft_review'
   status: 'ok' | 'auth_error' | 'connection_error' | 'never_synced'
   status_detail: string | null
   last_sync_at: string | null
@@ -87,6 +88,17 @@ export interface SyncResult {
   error: string | null
 }
 
+export type Category = 'work' | 'personal' | 'notification' | 'verification' | 'promo' | 'social' | ''
+
+export const CATEGORY_META: Record<string, { label: string; cls: string }> = {
+  work: { label: '工作', cls: 'bg-indigo-100 text-indigo-700' },
+  personal: { label: '个人', cls: 'bg-emerald-100 text-emerald-700' },
+  notification: { label: '通知', cls: 'bg-sky-100 text-sky-700' },
+  verification: { label: '验证码', cls: 'bg-amber-100 text-amber-700' },
+  promo: { label: '营销', cls: 'bg-rose-100 text-rose-600' },
+  social: { label: '社交', cls: 'bg-violet-100 text-violet-700' },
+}
+
 export interface EmailSummary {
   id: number
   account_id: number
@@ -103,6 +115,10 @@ export interface EmailSummary {
   starred: boolean
   archived_local: boolean
   has_attachments: boolean
+  category: Category
+  importance: string
+  needs_reply: boolean
+  reply_reason: string
 }
 
 export interface EmailDetail extends EmailSummary {
@@ -141,4 +157,47 @@ export interface NotificationItem {
 export interface NotificationsResp {
   unread: number
   items: NotificationItem[]
+}
+
+// ── P2 AI 层 ─────────────────────────────────────────────────
+
+export interface Draft {
+  id: number
+  email_id: number
+  account_id: number
+  content: string
+  origin: string
+  status: 'pending' | 'sent' | 'discarded'
+  instruction: string | null
+  created_at: string
+  email: {
+    subject: string
+    sender_name: string
+    sender_email: string
+    date: string | null
+    snippet: string
+  }
+}
+
+export interface OrganizeResult {
+  classified: number
+  archived: number
+  drafts: number
+  skipped_no_ai: boolean
+}
+
+export interface UsageStats {
+  calls: number
+  prompt_tokens: number
+  completion_tokens: number
+  failures: number
+  by_day: { day: string; calls: number; tokens: number }[]
+  by_task: { task_type: string; calls: number; tokens: number }[]
+}
+
+export interface SenderListEntry {
+  id: number
+  pattern: string
+  list_type: 'whitelist' | 'blacklist'
+  created_at: string
 }

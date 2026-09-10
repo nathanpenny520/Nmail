@@ -72,6 +72,14 @@ export default function SettingsPage() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['accounts'] }),
   })
 
+  const permissionMutation = useMutation({
+    mutationFn: ({ id, ai_permission }: { id: number; ai_permission: string }) =>
+      api.updateAccount(id, { ai_permission }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['accounts'] }),
+  })
+
+  const usageQuery = useQuery({ queryKey: ['ai-usage'], queryFn: api.aiUsage })
+
   const handleSave = () => {
     saveMutation.mutate({
       ai: { base_url: baseUrl, model, ...(apiKey ? { api_key: apiKey } : {}) },
@@ -145,6 +153,17 @@ export default function SettingsPage() {
                     )}
                   </div>
                 </div>
+                <select
+                  className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 outline-none focus:border-indigo-400"
+                  value={account.ai_permission || 'draft_review'}
+                  onChange={(e) =>
+                    permissionMutation.mutate({ id: account.id, ai_permission: e.target.value })
+                  }
+                  title="该账号的 AI 权限"
+                >
+                  <option value="draft_review">AI：草稿待审</option>
+                  <option value="readonly">AI：只读摘要</option>
+                </select>
                 <button
                   className="rounded-lg border border-gray-200 p-1.5 text-gray-500 hover:bg-white hover:text-indigo-600 disabled:opacity-40"
                   title="立即同步"
@@ -317,6 +336,58 @@ export default function SettingsPage() {
             />
           </label>
         </div>
+      </section>
+
+      {/* AI 用量 */}
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="font-semibold">AI 用量</h2>
+        {usageQuery.data ? (
+          <>
+            <div className="mt-3 grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-xl bg-gray-50 px-3 py-3">
+                <div className="text-lg font-semibold text-gray-800">{usageQuery.data.calls}</div>
+                <div className="text-[11px] text-gray-400">总调用</div>
+              </div>
+              <div className="rounded-xl bg-gray-50 px-3 py-3">
+                <div className="text-lg font-semibold text-gray-800">
+                  {((usageQuery.data.prompt_tokens + usageQuery.data.completion_tokens) / 1000).toFixed(1)}k
+                </div>
+                <div className="text-[11px] text-gray-400">总 tokens</div>
+              </div>
+              <div className="rounded-xl bg-gray-50 px-3 py-3">
+                <div className="text-lg font-semibold text-gray-800">{usageQuery.data.failures}</div>
+                <div className="text-[11px] text-gray-400">失败</div>
+              </div>
+            </div>
+            {usageQuery.data.by_task.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {usageQuery.data.by_task.map((t) => {
+                  const labels: Record<string, string> = {
+                    classify: '分类', draft: '草稿', chat: '对话', write: '写作辅助',
+                  }
+                  return (
+                    <div key={t.task_type} className="flex items-center gap-2 text-xs">
+                      <span className="w-16 text-gray-500">{labels[t.task_type] ?? t.task_type}</span>
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className="h-full rounded-full bg-violet-400"
+                          style={{
+                            width: `${Math.max(4, (t.tokens / Math.max(...usageQuery.data.by_task.map((x) => x.tokens))) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="w-24 text-right text-gray-400">
+                        {t.calls} 次 · {t.tokens.toLocaleString()} tk
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="mt-2 text-xs text-gray-400">加载用量中…</p>
+        )}
       </section>
     </div>
   )

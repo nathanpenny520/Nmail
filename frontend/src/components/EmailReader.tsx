@@ -1,11 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Archive, ArchiveRestore, CornerUpLeft, CornerUpRight, ExternalLink,
-  Forward, Loader2, Star, Trash2,
+  Archive, ArchiveRestore, Ban, CircleCheck, CornerUpLeft, CornerUpRight, ExternalLink,
+  Forward, Loader2, Sparkles, Star, Trash2,
 } from 'lucide-react'
 import { useState } from 'react'
 import { api } from '../api/client'
 import type { EmailDetail } from '../types'
+import AiPanel from './AiPanel'
 import HtmlMail from './HtmlMail'
 
 interface EmailReaderProps {
@@ -35,6 +36,27 @@ export default function EmailReader({
   detail, archived, actionBusy, onAction, onCompose, onShowImages,
 }: EmailReaderProps) {
   const [moveOpen, setMoveOpen] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [listMessage, setListMessage] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+
+  const senderListMutation = useMutation({
+    mutationFn: ({ type }: { type: 'whitelist' | 'blacklist' }) =>
+      api.addSenderList(detail.sender_email, type),
+    onSuccess: (_data, variables) => {
+      setListMessage(
+        variables.type === 'whitelist'
+          ? '已加入白名单：该发件人以后直接进收件箱'
+          : '已加入黑名单：该发件人以后自动归档',
+      )
+      void queryClient.invalidateQueries({ queryKey: ['sender-lists'] })
+      setTimeout(() => setListMessage(null), 5000)
+    },
+    onError: (err: Error) => {
+      setListMessage(`操作失败：${err.message}`)
+      setTimeout(() => setListMessage(null), 5000)
+    },
+  })
 
   return (
     <div className="flex h-full flex-col">
@@ -127,7 +149,32 @@ export default function EmailReader({
         >
           <Trash2 className="h-3.5 w-3.5" /> 删除
         </button>
+        <span className="mx-1 h-4 w-px bg-gray-200" />
+        <button
+          className={btn}
+          title="白名单：以后该发件人的邮件直接进收件箱，AI 不参与"
+          onClick={() => senderListMutation.mutate({ type: 'whitelist' })}
+          disabled={senderListMutation.isPending}
+        >
+          <CircleCheck className="h-3.5 w-3.5 text-emerald-500" /> 永久收信
+        </button>
+        <button
+          className={btn}
+          title="黑名单：以后该发件人的邮件直接归档，AI 不参与"
+          onClick={() => senderListMutation.mutate({ type: 'blacklist' })}
+          disabled={senderListMutation.isPending}
+        >
+          <Ban className="h-3.5 w-3.5 text-rose-500" /> 拉黑归档
+        </button>
+        <span className="mx-1 h-4 w-px bg-gray-200" />
+        <button
+          className={`${btn} border-violet-200 text-violet-700 hover:bg-violet-50`}
+          onClick={() => setAiOpen((v) => !v)}
+        >
+          <Sparkles className="h-3.5 w-3.5" /> AI 助手
+        </button>
         {actionBusy && <Loader2 className="ml-1 h-4 w-4 animate-spin text-gray-400" />}
+        {listMessage && <span className="ml-2 text-xs text-indigo-600">{listMessage}</span>}
       </div>
 
       {/* 正文 */}
@@ -175,6 +222,8 @@ export default function EmailReader({
           </div>
         </div>
       )}
+
+      {aiOpen && <AiPanel email={detail} onClose={() => setAiOpen(false)} />}
     </div>
   )
 }

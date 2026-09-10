@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ChevronLeft, ChevronRight, Inbox, Paperclip, Pencil, RefreshCw, Search, Star,
+  ChevronLeft, ChevronRight, Inbox, Paperclip, Pencil, RefreshCw, Search, Sparkles, Star,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type EmailQuery } from '../api/client'
-import type { EmailDetail, EmailSummary, FolderInfo, SyncResult } from '../types'
+import {
+  CATEGORY_META, type EmailDetail, type EmailSummary, type FolderInfo, type SyncResult,
+} from '../types'
 import ComposeModal, { type ComposeInit } from './ComposeModal'
 import EmailReader from './EmailReader'
 
@@ -28,6 +30,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   const [q, setQ] = useState('')
   const [qInput, setQInput] = useState('')
   const [starredOnly, setStarredOnly] = useState(false)
+  const [category, setCategory] = useState('')
   const [page, setPage] = useState(0)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showImages, setShowImages] = useState(false)
@@ -46,7 +49,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   })
   const folders: FolderInfo[] = foldersQuery.data?.folders ?? []
 
-  const listQueryKey = ['emails', { archived, accountId, folder, q, starredOnly, page }]
+  const listQueryKey = ['emails', { archived, accountId, folder, q, starredOnly, category, page }]
   const listQuery = useQuery({
     queryKey: listQueryKey,
     queryFn: () =>
@@ -56,6 +59,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
         folder: q ? undefined : folder,
         q: q || undefined,
         starred: starredOnly ? true : null,
+        category: category || null,
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       } satisfies EmailQuery),
@@ -118,6 +122,25 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
       setTimeout(() => setSyncMessage(null), 5000)
     },
     onError: (error: Error) => setSyncMessage(`同步失败：${error.message}`),
+  })
+
+  const organizeMutation = useMutation({
+    mutationFn: () => api.aiOrganize({ account_id: accountId ?? undefined, folder: 'INBOX', limit: 200 }),
+    onSuccess: (result) => {
+      invalidateMail()
+      if (result.skipped_no_ai) {
+        setSyncMessage('未配置 AI 端点，请到设置中填写')
+      } else {
+        setSyncMessage(
+          `AI 整理完成：分类 ${result.classified} 封${result.archived > 0 ? `，归档营销 ${result.archived} 封` : ''}`,
+        )
+      }
+      setTimeout(() => setSyncMessage(null), 6000)
+    },
+    onError: (error: Error) => {
+      setSyncMessage(`AI 整理失败：${error.message}`)
+      setTimeout(() => setSyncMessage(null), 6000)
+    },
   })
 
   const selectEmail = (item: EmailSummary) => {
@@ -242,7 +265,35 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               <Star className={`h-3 w-3 ${starredOnly ? 'fill-amber-400 text-amber-400' : ''}`} />
               星标
             </button>
+            <select
+              className="flex-1 rounded-lg border border-gray-300 px-1 py-1 outline-none focus:border-indigo-500"
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value)
+                setPage(0)
+                setSelectedId(null)
+              }}
+              title="按 AI 分类筛选"
+            >
+              <option value="">全部分类</option>
+              {Object.entries(CATEGORY_META).map(([key, meta]) => (
+                <option key={key} value={key}>
+                  {meta.label}
+                </option>
+              ))}
+            </select>
           </div>
+          {!archived && (
+            <button
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+              onClick={() => organizeMutation.mutate()}
+              disabled={organizeMutation.isPending}
+              title="让 AI 为收件箱中未分类的邮件补跑分类，营销邮件自动归档"
+            >
+              <Sparkles className={`h-3.5 w-3.5 ${organizeMutation.isPending ? 'animate-pulse' : ''}`} />
+              {organizeMutation.isPending ? 'AI 整理中…' : 'AI 整理收件箱'}
+            </button>
+          )}
           <div className="flex items-center justify-between px-0.5 text-[11px] text-gray-400">
             <span>
               {archived ? '已归档' : q ? `搜索「${q}」` : '收件箱'} · 共 {total} 封
@@ -281,6 +332,13 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
                 {item.subject || '（无主题）'}
               </div>
               <div className="mt-0.5 flex items-center gap-1.5">
+                {item.category && CATEGORY_META[item.category] && (
+                  <span
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${CATEGORY_META[item.category].cls}`}
+                  >
+                    {CATEGORY_META[item.category].label}
+                  </span>
+                )}
                 <span className="flex-1 truncate text-xs text-gray-400">{item.snippet}</span>
                 {item.has_attachments && <Paperclip className="h-3 w-3 shrink-0 text-gray-400" />}
                 {item.starred && <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />}

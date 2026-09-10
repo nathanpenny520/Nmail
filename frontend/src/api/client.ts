@@ -3,14 +3,18 @@ import type {
   AITestResult,
   Account,
   AccountAddPayload,
+  Draft,
   EmailDetail,
   EmailListResp,
   FolderInfo,
   NotificationsResp,
+  OrganizeResult,
   ProvidersResp,
+  SenderListEntry,
   Settings,
   SettingsPayload,
   SyncResult,
+  UsageStats,
 } from '../types'
 
 function detailToString(detail: unknown): string {
@@ -51,6 +55,7 @@ export interface EmailQuery {
   q?: string
   is_read?: boolean | null
   starred?: boolean | null
+  category?: string | null
   archived?: boolean
   limit?: number
   offset?: number
@@ -63,6 +68,7 @@ function emailQueryString(query: EmailQuery): string {
   if (query.q) params.set('q', query.q)
   if (query.is_read != null) params.set('is_read', String(query.is_read))
   if (query.starred != null) params.set('starred', String(query.starred))
+  if (query.category) params.set('category', query.category)
   if (query.archived) params.set('archived', 'true')
   params.set('limit', String(query.limit ?? 50))
   params.set('offset', String(query.offset ?? 0))
@@ -113,4 +119,55 @@ export const api = {
   getNotifications: () => request<NotificationsResp>('/api/notifications'),
   markNotificationsRead: () =>
     request<{ ok: boolean }>('/api/notifications/read-all', { method: 'POST' }),
+
+  // ── AI 层 ──
+  getDrafts: (status: string = 'pending') =>
+    request<{ drafts: Draft[] }>(`/api/drafts?status=${status}`),
+  updateDraft: (id: number, content: string) =>
+    request<{ ok: boolean }>(`/api/drafts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content }),
+    }),
+  draftAction: (id: number, action: 'approve' | 'discard', content?: string) =>
+    request<{ ok: boolean }>(`/api/drafts/${id}/action`, {
+      method: 'POST',
+      body: JSON.stringify({ action, ...(content !== undefined ? { content } : {}) }),
+    }),
+  regenerateDraft: (emailId: number, instruction?: string) =>
+    request<{ ok: boolean; draft_id: number; content: string }>('/api/drafts/regenerate', {
+      method: 'POST',
+      body: JSON.stringify({ email_id: emailId, ...(instruction ? { instruction } : {}) }),
+    }),
+  aiChat: (payload: { email_id?: number; email_ids?: number[]; question: string; history?: { role: string; content: string }[] }) =>
+    request<{ answer: string }>('/api/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  aiWrite: (payload: { text: string; op: string; instruction?: string }) =>
+    request<{ text: string }>('/api/ai/write', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  aiOrganize: (payload: { account_id?: number; folder?: string; limit?: number }) =>
+    request<OrganizeResult>('/api/ai/organize', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  aiUsage: () => request<UsageStats>('/api/ai/usage'),
+
+  // ── 白/黑名单 ──
+  getSenderLists: () =>
+    request<{ entries: SenderListEntry[] }>('/api/sender-lists'),
+  addSenderList: (pattern: string, list_type: 'whitelist' | 'blacklist') =>
+    request<{ ok: boolean }>('/api/sender-lists', {
+      method: 'POST',
+      body: JSON.stringify({ pattern, list_type }),
+    }),
+  removeSenderList: (id: number) =>
+    request<{ ok: boolean }>(`/api/sender-lists/${id}`, { method: 'DELETE' }),
+  updateAccount: (id: number, payload: { password?: string; ai_permission?: string }) =>
+    request<{ ok: boolean; account: Account }>(`/api/accounts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
 }
