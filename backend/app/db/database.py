@@ -159,6 +159,19 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        4,
+        """
+        -- P3：每日摘要历史 + 账号 Tone DNA
+        CREATE TABLE IF NOT EXISTS digest_history (
+            date         TEXT PRIMARY KEY,
+            content_json TEXT NOT NULL,
+            is_read      INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        ALTER TABLE accounts ADD COLUMN tone_dna TEXT;
+        """,
+    ),
 ]
 
 

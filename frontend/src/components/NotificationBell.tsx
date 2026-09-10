@@ -1,10 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell } from 'lucide-react'
-import { useState } from 'react'
+import { Bell, BellRing } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
+
+type NotifyPermission = 'default' | 'granted' | 'denied' | 'unsupported'
+
+function notifyPermission(): NotifyPermission {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported'
+  return Notification.permission as NotifyPermission
+}
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false)
+  const [perm, setPerm] = useState<NotifyPermission>(notifyPermission())
   const queryClient = useQueryClient()
   const { data } = useQuery({
     queryKey: ['notifications'],
@@ -12,6 +20,26 @@ export default function NotificationBell() {
     refetchInterval: 15000,
   })
   const unread = data?.unread ?? 0
+
+  // 浏览器桌面通知：页面开着时，新通知到达即弹系统通知
+  const prevIds = useRef<Set<number> | null>(null)
+  useEffect(() => {
+    if (!data) return
+    const ids = new Set(data.items.map((i) => i.id))
+    if (prevIds.current !== null && notifyPermission() === 'granted') {
+      for (const item of data.items) {
+        if (!prevIds.current.has(item.id) && !item.is_read) {
+          try {
+            const n = new Notification(item.title, { body: item.body ?? '', tag: `nmail-${item.id}` })
+            n.onclick = () => window.focus()
+          } catch {
+            // 通知构造失败（如无头环境）静默忽略
+          }
+        }
+      }
+    }
+    prevIds.current = ids
+  }, [data])
 
   const readAllMutation = useMutation({
     mutationFn: api.markNotificationsRead,
@@ -32,6 +60,19 @@ export default function NotificationBell() {
           </span>
         )}
       </button>
+      {perm === 'default' && (
+        <button
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-amber-500 hover:bg-amber-50"
+          title="开启浏览器桌面通知：新邮件/草稿/摘要到达时提醒"
+          onClick={() => {
+            if ('Notification' in window) {
+              void Notification.requestPermission().then((p) => setPerm(p as NotifyPermission))
+            }
+          }}
+        >
+          <BellRing className="h-4 w-4" />
+        </button>
+      )}
 
       {open && (
         <>

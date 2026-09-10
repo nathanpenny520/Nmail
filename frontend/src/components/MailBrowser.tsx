@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronLeft, ChevronRight, Inbox, Paperclip, Pencil, RefreshCw, Search, Sparkles, Star,
 } from 'lucide-react'
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api, type EmailQuery } from '../api/client'
 import {
   CATEGORY_META, type EmailDetail, type EmailSummary, type FolderInfo, type SyncResult,
@@ -24,6 +24,7 @@ export interface ComposeContext {
  */
 export default function MailBrowser({ archived }: { archived: boolean }) {
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [accountId, setAccountId] = useState<number | null>(null)
   const [folder, setFolder] = useState('INBOX')
@@ -76,6 +77,16 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
     enabled: selectedId != null,
   })
   const detail: EmailDetail | null = detailQuery.data ?? null
+
+  // 摘要页「查看」跳转：/?focus=<email_id> 直接打开对应邮件
+  const focusId = searchParams.get('focus')
+  useEffect(() => {
+    if (focusId && !archived) {
+      setSelectedId(Number(focusId))
+      setShowImages(false)
+      setSearchParams({}, { replace: true })
+    }
+  }, [focusId, archived, setSearchParams])
 
   const invalidateMail = () => {
     void queryClient.invalidateQueries({ queryKey: ['emails'] })

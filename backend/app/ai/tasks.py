@@ -124,8 +124,15 @@ def generate_reply_draft(
     instruction: str | None = None,
     account_id: int | None = None,
 ) -> str:
-    """为一封来信生成回复草稿正文（Markdown）。"""
+    """为一封来信生成回复草稿正文（Markdown）；已学习 Tone DNA 时注入风格。"""
     base_url, model, api_key = _ai_config()
+    system = prompts.DRAFT_SYSTEM
+    if account_id is not None:
+        row = get_conn().execute(
+            "SELECT tone_dna FROM accounts WHERE id = ?", (account_id,)
+        ).fetchone()
+        if row and row["tone_dna"]:
+            system += f"\n\n用户的写作风格参考（尽量贴近模仿）：{row['tone_dna']}"
     body = email_row["body_text"] or ""
     if not body.strip():
         from bs4 import BeautifulSoup
@@ -145,7 +152,7 @@ def generate_reply_draft(
         user += f"\n\n用户的额外要求：{instruction}"
 
     try:
-        text, usage = llm.chat(base_url, model, api_key, prompts.DRAFT_SYSTEM, user)
+        text, usage = llm.chat(base_url, model, api_key, system, user)
         log_usage("draft", model,
                   usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
                   True, email_row["subject"][:80], account_id)
@@ -202,6 +209,49 @@ def write_assist(text: str, op: str, instruction: str | None = None) -> str:
         log_usage("write", model, 0, 0, False, str(exc)[:200], None)
         raise
     return result.strip()
+
+
+def digest_overview(user: str, account_id: int | None = None) -> str:
+    """每日摘要的 AI 综述段落。"""
+    base_url, model, api_key = _ai_config()
+    try:
+        text, usage = llm.chat(
+            base_url, model, api_key,
+            "你是邮件秘书，用中文写简洁的每日综述，只输出综述本身。",
+            user,
+        )
+        log_usage("digest", model,
+                  usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
+                  True, "digest", account_id)
+    except Exception as exc:  # noqa: BLE001
+        log_usage("digest", model, 0, 0, False, str(exc)[:200], account_id)
+        raise
+    return text.strip()
+
+
+def generate_tone_dna(samples: list[str], account_id: int | None = None) -> str:
+    """从已发邮件样本总结用户的写作风格（Tone DNA）。"""
+    base_url, model, api_key = _ai_config()
+    joined = "\n\n----\n\n".join(s[:1500] for s in samples if s.strip())
+    user = (
+        "以下是用户发出的若干封真实邮件，请总结这个人的写作风格，"
+        "输出一段 100-200 字的中文风格描述，包括：常用语言、正式程度、称呼与结尾习惯、"
+        "句子长短与语气、常见口头表达。只输出风格描述本身，供今后模仿其风格起草邮件。\n\n"
+        + joined
+    )
+    try:
+        text, usage = llm.chat(
+            base_url, model, api_key,
+            "你是写作风格分析师，只输出风格描述本身。",
+            user, temperature=0.2,
+        )
+        log_usage("tone_dna", model,
+                  usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
+                  True, f"{len(samples)} 封样本", account_id)
+    except Exception as exc:  # noqa: BLE001
+        log_usage("tone_dna", model, 0, 0, False, str(exc)[:200], account_id)
+        raise
+    return text.strip()
 
 
 def usage_stats() -> dict:

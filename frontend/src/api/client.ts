@@ -15,6 +15,7 @@ import type {
   SettingsPayload,
   SyncResult,
   UsageStats,
+  DigestResp,
 } from '../types'
 
 function detailToString(detail: unknown): string {
@@ -170,4 +171,11 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
+
+  // ── 每日摘要与语气 ──
+  getDigest: () => request<DigestResp>('/api/digest'),
+  generateDigest: () =>
+    request<DigestResp['digest']>('/api/digest/generate', { method: 'POST' }),
+  learnToneDna: (id: number) =>
+    request<{ ok: boolean; tone_dna: string }>(`/api/accounts/${id}/tone-dna`, { method: 'POST' }),
 }

@@ -80,6 +80,19 @@ export default function SettingsPage() {
 
   const usageQuery = useQuery({ queryKey: ['ai-usage'], queryFn: api.aiUsage })
 
+  const toneMutation = useMutation({
+    mutationFn: (id: number) => api.learnToneDna(id),
+    onSuccess: () => {
+      setAccountMessage('语气学习完成：AI 起草时会模仿你的写作风格')
+      void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      setTimeout(() => setAccountMessage(null), 6000)
+    },
+    onError: (err: Error) => {
+      setAccountMessage(`语气学习失败：${err.message}`)
+      setTimeout(() => setAccountMessage(null), 6000)
+    },
+  })
+
   const handleSave = () => {
     saveMutation.mutate({
       ai: { base_url: baseUrl, model, ...(apiKey ? { api_key: apiKey } : {}) },
@@ -164,6 +177,20 @@ export default function SettingsPage() {
                   <option value="draft_review">AI：草稿待审</option>
                   <option value="readonly">AI：只读摘要</option>
                 </select>
+                <button
+                  className={`rounded-lg border px-2 py-1.5 text-xs disabled:opacity-40 ${
+                    account.has_tone_dna
+                      ? 'border-violet-200 bg-violet-50 text-violet-600'
+                      : 'border-gray-200 text-gray-500 hover:bg-white hover:text-violet-600'
+                  }`}
+                  title={account.has_tone_dna ? '已学习，点击可重新学习' : '从已发送邮件学习你的写作语气，AI 草稿更像你写的'}
+                  onClick={() => toneMutation.mutate(account.id)}
+                  disabled={toneMutation.isPending}
+                >
+                  {toneMutation.isPending
+                    ? '学习中…'
+                    : account.has_tone_dna ? '语气已学 ✓' : '学习我的语气'}
+                </button>
                 <button
                   className="rounded-lg border border-gray-200 p-1.5 text-gray-500 hover:bg-white hover:text-indigo-600 disabled:opacity-40"
                   title="立即同步"
@@ -326,7 +353,7 @@ export default function SettingsPage() {
           </label>
           <label className="block">
             <span className="mb-1 block text-sm text-gray-600">
-              每日摘要时间<span className="ml-1 text-xs text-gray-400">P3 生效</span>
+              每日摘要时间<span className="ml-1 text-xs text-gray-400">每天到点自动生成并提醒</span>
             </span>
             <input
               className={inputClass}

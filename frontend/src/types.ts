@@ -47,6 +47,7 @@ export interface Account {
   smtp_port: number
   color: string
   ai_permission: 'readonly' | 'draft_review'
+  has_tone_dna: boolean
   status: 'ok' | 'auth_error' | 'connection_error' | 'never_synced'
   status_detail: string | null
   last_sync_at: string | null
@@ -200,4 +201,45 @@ export interface SenderListEntry {
   pattern: string
   list_type: 'whitelist' | 'blacklist'
   created_at: string
+}
+
+// ── P3 每日摘要 ──────────────────────────────────────────────
+
+export interface DigestItem {
+  email_id: number
+  subject: string
+  sender: string
+  date: string | null
+}
+
+export interface DigestNeedReply extends DigestItem {
+  reason: string
+  has_draft: boolean
+}
+
+export interface DigestImportant extends DigestItem {
+  category: string
+  importance: string
+  reason: string
+}
+
+export interface DigestData {
+  date: string
+  overview: {
+    new_today: number
+    unread: number
+    auto_archived: number
+    need_reply: number
+  }
+  by_category: Record<string, number>
+  trend: { day: string; count: number }[]
+  by_account: { email: string; color: string; count: number; unread: number }[]
+  need_reply: DigestNeedReply[]
+  important: DigestImportant[]
+  ai_overview: string
+}
+
+export interface DigestResp {
+  dates: string[]
+  digest: DigestData | null
 }
