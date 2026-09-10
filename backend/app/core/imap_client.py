@@ -135,19 +135,23 @@ def fetch_new(mb: MailBox, folder: str, last_uid: int, first_sync_days: int = 30
     """
     mb.folder.set(folder)
     if last_uid <= 0:
-        criteria = AND(since=datetime.now() - timedelta(days=first_sync_days))
+        # imap-tools 的 INTERNALDATE 条件参数是 date_gte（不是 IMAP 原生的 SINCE 关键字）
+        since_date = (datetime.now() - timedelta(days=first_sync_days)).date()
+        criteria = AND(date_gte=since_date)
     else:
         criteria = f"UID {last_uid + 1}:*"
 
     parsed: list[ParsedMessage] = []
     for msg in mb.fetch(criteria, mark_seen=False, bulk=True):
-        if msg.uid is None or msg.uid <= last_uid:
+        # 部分版本 imap-tools 返回 str 型 uid，统一转 int
+        uid = int(msg.uid) if msg.uid is not None else None
+        if uid is None or uid <= last_uid:
             continue
-        parsed.append(_parse_message(msg))
+        parsed.append(_parse_message(msg, uid))
     return parsed
 
 
-def _parse_message(msg) -> ParsedMessage:  # noqa: ANN001 — imap-tools MailMessage
+def _parse_message(msg, uid: int) -> ParsedMessage:  # noqa: ANN001 — imap-tools MailMessage
     sender_name, sender_email = email.utils.parseaddr(msg.from_ or "")
     attachments = [
         ParsedAttachment(
@@ -159,7 +163,7 @@ def _parse_message(msg) -> ParsedMessage:  # noqa: ANN001 — imap-tools MailMes
         for index, att in enumerate(msg.attachments)
     ]
     return ParsedMessage(
-        uid=msg.uid,
+        uid=uid,
         message_id=(msg.headers.get("message-id", [""])[0] if msg.headers else "") or "",
         subject=msg.subject or "",
         sender_name=sender_name or sender_email,
