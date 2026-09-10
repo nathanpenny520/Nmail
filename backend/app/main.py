@@ -14,9 +14,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api import api_router
 from app.config import APP_NAME, APP_VERSION
 from app.db.database import run_migrations
+from app.scheduler import MailScheduler
 
 ROOT = Path(__file__).resolve().parents[2]
 DIST_DIR = ROOT / "frontend" / "dist"
+
+scheduler = MailScheduler()
 
 
 class SPAStaticFiles(StaticFiles):
@@ -40,7 +43,9 @@ class SPAStaticFiles(StaticFiles):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     run_migrations()
+    scheduler.start()
     yield
+    scheduler.shutdown()
 
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)

@@ -13,6 +13,7 @@ frontend/dist/
 *.db-shm
 secrets.json
 .data/
+personal-data
 
 # 环境与 IDE
 .env

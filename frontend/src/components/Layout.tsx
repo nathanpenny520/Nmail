@@ -1,5 +1,6 @@
 import { Archive, BarChart3, FilePenLine, Inbox, Mail, Settings } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
+import NotificationBell from './NotificationBell'
 
 const navItems = [
   { to: '/', label: '收件箱', icon: Inbox },
@@ -36,8 +37,12 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-gray-200 p-3">
-          <NavLink to="/settings" className={({ isActive }) => navLinkClass(isActive)}>
+        <div className="flex items-center border-t border-gray-200 p-3">
+          <NotificationBell />
+          <NavLink
+            to="/settings"
+            className={({ isActive }) => `flex-1 ${navLinkClass(isActive)}`}
+          >
             <Settings className="h-4 w-4" />
             设置
           </NavLink>

@@ -1,4 +1,17 @@
-import type { AITestPayload, AITestResult, Settings, SettingsPayload } from '../types'
+import type {
+  AITestPayload,
+  AITestResult,
+  Account,
+  AccountAddPayload,
+  EmailDetail,
+  EmailListResp,
+  FolderInfo,
+  NotificationsResp,
+  ProvidersResp,
+  Settings,
+  SettingsPayload,
+  SyncResult,
+} from '../types'
 
 function detailToString(detail: unknown): string {
   if (typeof detail === 'string') return detail
@@ -30,10 +43,72 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export interface EmailQuery {
+  account_id?: number | null
+  folder?: string | null
+  q?: string
+  is_read?: boolean | null
+  starred?: boolean | null
+  archived?: boolean
+  limit?: number
+  offset?: number
+}
+
+function emailQueryString(query: EmailQuery): string {
+  const params = new URLSearchParams()
+  if (query.account_id != null) params.set('account_id', String(query.account_id))
+  if (query.folder) params.set('folder', query.folder)
+  if (query.q) params.set('q', query.q)
+  if (query.is_read != null) params.set('is_read', String(query.is_read))
+  if (query.starred != null) params.set('starred', String(query.starred))
+  if (query.archived) params.set('archived', 'true')
+  params.set('limit', String(query.limit ?? 50))
+  params.set('offset', String(query.offset ?? 0))
+  return params.toString()
+}
+
 export const api = {
+  // ── 设置与 AI ──
   getSettings: () => request<Settings>('/api/settings'),
   updateSettings: (payload: SettingsPayload) =>
     request<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(payload) }),
   testAI: (payload: AITestPayload) =>
     request<AITestResult>('/api/ai/test', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // ── 账号 ──
+  getProviders: () => request<ProvidersResp>('/api/providers'),
+  getAccounts: () => request<{ accounts: Account[] }>('/api/accounts'),
+  testAccount: (payload: AccountAddPayload) =>
+    request<{ ok: boolean; detail: string; provider: string | null }>('/api/accounts/test', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  addAccount: (payload: AccountAddPayload) =>
+    request<{ account: Account; sync: SyncResult }>('/api/accounts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  deleteAccount: (id: number) =>
+    request<{ ok: boolean }>(`/api/accounts/${id}`, { method: 'DELETE' }),
+  syncAccount: (id: number) =>
+    request<SyncResult>(`/api/accounts/${id}/sync`, { method: 'POST' }),
+  getFolders: (id: number) =>
+    request<{ folders: FolderInfo[] }>(`/api/accounts/${id}/folders`),
+
+  // ── 邮件 ──
+  getEmails: (query: EmailQuery) =>
+    request<EmailListResp>(`/api/emails?${emailQueryString(query)}`),
+  getEmail: (id: number, images: boolean) =>
+    request<EmailDetail>(`/api/emails/${id}?images=${images ? 1 : 0}`),
+  emailAction: (id: number, action: string, folder?: string) =>
+    request<{ ok: boolean }>(`/api/emails/${id}/action`, {
+      method: 'POST',
+      body: JSON.stringify({ action, folder }),
+    }),
+  sendEmail: (form: FormData) => request<{ ok: boolean }>('/api/emails/send', { method: 'POST', body: form }),
+
+  // ── 通知 ──
+  getNotifications: () => request<NotificationsResp>('/api/notifications'),
+  markNotificationsRead: () =>
+    request<{ ok: boolean }>('/api/notifications/read-all', { method: 'POST' }),
 }

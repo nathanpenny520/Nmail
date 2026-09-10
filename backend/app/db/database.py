@@ -35,6 +35,84 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        2,
+        """
+        CREATE TABLE IF NOT EXISTS accounts (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            email         TEXT NOT NULL UNIQUE,
+            provider_name TEXT NOT NULL DEFAULT '',
+            imap_server   TEXT NOT NULL,
+            imap_port     INTEGER NOT NULL DEFAULT 993,
+            smtp_server   TEXT NOT NULL DEFAULT '',
+            smtp_port     INTEGER NOT NULL DEFAULT 465,
+            color         TEXT NOT NULL DEFAULT '#6366f1',
+            status        TEXT NOT NULL DEFAULT 'never_synced',
+            status_detail TEXT,
+            last_sync_at  TEXT,
+            created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS emails (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id     INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            folder         TEXT NOT NULL DEFAULT 'INBOX',
+            uid            INTEGER NOT NULL,
+            message_id     TEXT NOT NULL DEFAULT '',
+            subject        TEXT NOT NULL DEFAULT '',
+            sender_name    TEXT NOT NULL DEFAULT '',
+            sender_email   TEXT NOT NULL DEFAULT '',
+            recipients     TEXT NOT NULL DEFAULT '[]',
+            cc             TEXT NOT NULL DEFAULT '[]',
+            date           TEXT,
+            snippet        TEXT NOT NULL DEFAULT '',
+            body_text      TEXT NOT NULL DEFAULT '',
+            body_html      TEXT NOT NULL DEFAULT '',
+            is_read        INTEGER NOT NULL DEFAULT 0,
+            starred        INTEGER NOT NULL DEFAULT 0,
+            archived_local INTEGER NOT NULL DEFAULT 0,
+            has_attachments INTEGER NOT NULL DEFAULT 0,
+            remote_img_count INTEGER NOT NULL DEFAULT 0,
+            created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(account_id, folder, uid)
+        );
+        CREATE INDEX IF NOT EXISTS idx_emails_list
+            ON emails(account_id, folder, date DESC);
+        CREATE INDEX IF NOT EXISTS idx_emails_archived
+            ON emails(archived_local, date DESC);
+
+        CREATE TABLE IF NOT EXISTS attachments (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_id INTEGER NOT NULL REFERENCES emails(id) ON DELETE CASCADE,
+            filename TEXT NOT NULL,
+            mime     TEXT NOT NULL DEFAULT '',
+            size     INTEGER NOT NULL DEFAULT 0,
+            path     TEXT NOT NULL,
+            cid      TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS sync_state (
+            account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            folder      TEXT NOT NULL,
+            last_uid    INTEGER NOT NULL DEFAULT 0,
+            uidvalidity INTEGER,
+            PRIMARY KEY (account_id, folder)
+        );
+
+        -- trigram 分词：中文按短子串可检索（<3 字符的查询由应用层回退 LIKE）
+        CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
+            subject, sender_text, body_text, tokenize='trigram'
+        );
+        CREATE TRIGGER IF NOT EXISTS emails_fts_ai AFTER INSERT ON emails BEGIN
+            INSERT INTO emails_fts(rowid, subject, sender_text, body_text)
+            VALUES (new.id, new.subject,
+                    new.sender_name || ' ' || new.sender_email, new.body_text);
+        END;
+        CREATE TRIGGER IF NOT EXISTS emails_fts_ad AFTER DELETE ON emails BEGIN
+            DELETE FROM emails_fts WHERE rowid = old.id;
+        END;
+        """,
+    ),
 ]
 
 
