@@ -95,6 +95,23 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   })
   const folders: FolderInfo[] = foldersQuery.data?.folders ?? []
 
+  // 切换文件夹 = 按需同步该文件夹（后台轮询只拉 INBOX），同步完成列表自动刷新
+  const [folderSyncing, setFolderSyncing] = useState(false)
+  const syncFolderThenList = async (target: string) => {
+    if (accountId == null) return
+    setFolderSyncing(true)
+    setSyncMessage(`正在同步文件夹 ${target}…`)
+    try {
+      await api.syncAccount(accountId, target)
+    } catch (err) {
+      setSyncMessage(`同步失败：${(err as Error).message}`)
+      setTimeout(() => setSyncMessage(null), 6000)
+    } finally {
+      setFolderSyncing(false)
+      invalidateMail()
+    }
+  }
+
   const listQueryKey = ['emails', { archived, accountId, folder, q, starredOnly, category, page }]
   const listQuery = useQuery({
     queryKey: listQueryKey,
@@ -328,6 +345,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
                   setFolder(e.target.value)
                   setPage(0)
                   setSelectedId(null)
+                  void syncFolderThenList(e.target.value)
                 }}
               >
                 {folders.map((f) => (
@@ -371,7 +389,8 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
           </div>
           <div className="flex items-center justify-between px-0.5 t-xs text-gray-400">
             <span>
-              {archived ? '已归档' : q ? `搜索「${q}」` : '收件箱'} · 共 {total} 封
+              {archived ? '已归档' : q ? `搜索「${q}」` : folder !== 'INBOX' ? folder : '收件箱'} · 共 {total} 封
+              {folderSyncing && ' · 同步中…'}
             </span>
             {syncMessage && <span className="text-indigo-500">{syncMessage}</span>}
           </div>

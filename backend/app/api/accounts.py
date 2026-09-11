@@ -268,13 +268,14 @@ def delete_account(account_id: int) -> dict:
 
 
 @router.post("/accounts/{account_id}/sync")
-def sync_account_now(account_id: int) -> dict:
+def sync_account_now(account_id: int, folder: str = "INBOX") -> dict:
     row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
     if not row:
         raise HTTPException(404, "账号不存在")
     return sync_engine.sync_account(
         {"id": row["id"], "email": row["email"],
-         "imap_server": row["imap_server"], "imap_port": row["imap_port"]}
+         "imap_server": row["imap_server"], "imap_port": row["imap_port"]},
+        folders=(folder,),
     )
 
 

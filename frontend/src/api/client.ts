@@ -135,8 +135,11 @@ export const api = {
     }),
   deleteAccount: (id: number) =>
     request<{ ok: boolean }>(`/api/accounts/${id}`, { method: 'DELETE' }),
-  syncAccount: (id: number) =>
-    request<SyncResult>(`/api/accounts/${id}/sync`, { method: 'POST' }),
+  syncAccount: (id: number, folder?: string) =>
+    request<SyncResult>(
+      `/api/accounts/${id}/sync${folder ? `?folder=${encodeURIComponent(folder)}` : ''}`,
+      { method: 'POST' },
+    ),
   getFolders: (id: number) =>
     request<{ folders: FolderInfo[] }>(`/api/accounts/${id}/folders`),
 

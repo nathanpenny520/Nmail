@@ -4,22 +4,22 @@
    紧凑（默认）对齐主流邮箱客户端密度；标准/大依次递增 */
 :root,
 [data-font="compact"] {
-  --fs-xs: 9px;
-  --fs-sm: 10.5px;
-  --fs-md: 11.5px;
-  --fs-lg: 13.5px;
+  --fs-xs: 8.5px;
+  --fs-sm: 10px;
+  --fs-md: 11px;
+  --fs-lg: 12.5px;
 }
 [data-font="standard"] {
-  --fs-xs: 10px;
-  --fs-sm: 11.5px;
-  --fs-md: 12.5px;
-  --fs-lg: 14.5px;
+  --fs-xs: 9.5px;
+  --fs-sm: 11px;
+  --fs-md: 12px;
+  --fs-lg: 13.5px;
 }
 [data-font="large"] {
-  --fs-xs: 11px;
-  --fs-sm: 12.5px;
-  --fs-md: 13.5px;
-  --fs-lg: 15.5px;
+  --fs-xs: 10.5px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 14.5px;
 }
 
 .t-xs { font-size: var(--fs-xs); }

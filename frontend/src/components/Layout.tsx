@@ -1,4 +1,4 @@
-import { Archive, BarChart3, FilePenLine, Inbox, Mail, Settings, Sparkles } from 'lucide-react'
+import { Archive, BarChart3, FilePenLine, Inbox, Settings, Sparkles } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import NotificationBell from './NotificationBell'
@@ -70,7 +70,8 @@ export default function Layout() {
         style={{ width: navWidth }}
       >
         <div className={`flex items-center py-4 ${iconOnly ? 'justify-center px-1' : 'gap-2 px-4'}`}>
-          <Mail className="h-[18px] w-[18px] shrink-0 text-indigo-600" />
+          {/* 应用专属图标（与浏览器标签页 favicon 同源） */}
+          <img src="/icon-192.png" alt="Nmail" className="h-[18px] w-[18px] shrink-0 rounded-[4px]" />
           {!iconOnly && <span className="truncate text-sm font-bold tracking-tight">Nmail</span>}
         </div>
         <nav className={`flex-1 space-y-0.5 ${iconOnly ? 'px-1.5' : 'px-2.5'}`}>
