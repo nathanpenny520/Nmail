@@ -32,7 +32,7 @@ function fmtSendAt(iso: string): string {
  * AI 写作对话框生成富文本直插正文。
  */
 export default function ComposeForm({ draft, accounts }: { draft: UserDraft; accounts: Account[] }) {
-  const { updateTab, requestClose, finishSent, cacheDraft } = useCompose()
+  const { updateTab, requestClose, finishSent, cacheDraft, patchDraft, registerFlush } = useCompose()
 
   const [accountId, setAccountId] = useState(draft.account_id)
   const [to, setTo] = useState(draft.to_addrs)
@@ -72,6 +72,9 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
     }),
   )
   const saveTimer = useRef<number | undefined>(undefined)
+  const retryTimer = useRef<number | undefined>(undefined)
+  const retriedRef = useRef(false) // 每轮失败只自动重试一次，避免 404 时无限循环
+  const deadRef = useRef(false)
 
   const doSave = useCallback(async () => {
     const p = payloadRef.current
@@ -80,15 +83,29 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
     try {
       await api.updateUserDraft(draft.id, p)
       savedRef.current = serialized
+      retriedRef.current = false
       setSaveError(false)
       setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }))
       updateTab(draft.id, { dirty: false })
+      patchDraft(draft.id, p) // 缓存同步，openNew 复用/settleClose 空稿判断才不会拿过期快照
     } catch {
       setSaveError(true) // 保持 dirty，后续改动会再次触发保存
+      // 失败自动重试一次（如后端瞬时不可用）；草稿已删除等情况由重试再次失败终止
+      if (!retriedRef.current && !deadRef.current) {
+        retriedRef.current = true
+        window.clearTimeout(retryTimer.current)
+        retryTimer.current = window.setTimeout(() => void doSaveRef.current(), 5000)
+      }
     }
-  }, [draft.id, updateTab])
+  }, [draft.id, updateTab, patchDraft])
   const doSaveRef = useRef(doSave)
   doSaveRef.current = doSave
+
+  // 关闭决策/发送/定时前，Provider 可调用 flush 冲掉防抖窗口里的未保存内容
+  useEffect(() => {
+    registerFlush(draft.id, () => doSaveRef.current())
+    return () => registerFlush(draft.id, null)
+  }, [draft.id, registerFlush])
 
   useEffect(() => {
     const serialized = JSON.stringify(payloadRef.current)
@@ -101,7 +118,9 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
   // 卸载兜底：切标签/收起工作台时把防抖窗口内的最后编辑同步上去
   useEffect(
     () => () => {
+      deadRef.current = true
       window.clearTimeout(saveTimer.current)
+      window.clearTimeout(retryTimer.current)
       void doSaveRef.current().catch(() => {})
     },
     [],

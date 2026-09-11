@@ -18,6 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0911-1440-保存机制调研修复 ✅
+- 目标: 调研草稿箱/写信台保存链路，修复发现的 bug（缓存过期误删草稿等）
+- 范围: frontend components/compose/ComposeContext.tsx、ComposeForm.tsx、pages/UserDraftsPage.tsx；docs
+- 产出: 见 CHANGELOG「草稿保存机制调研修复」条目（哈希回填见 git log）；机制全貌：点写信即建行 → 编辑 1s 防抖 PATCH + 回写缓存 → 发送/定时/关闭决策前 flush → 空稿在恢复/草稿箱/关闭三处即见即清
+- 遗留: 保留草稿确认时若最后 <1s 的输入尚未防抖落盘，flush 机制已覆盖（registerFlush）；仅极端并发双开浏览器标签场景可能互删空稿（单用户可忽略）
+- 时间: 2026-09-11 14:50 完成
+
 ### S-0911-1420-工作台标签化 ✅
 - 目标: 空草稿治理（恢复时清理+写信按钮复用空标签+保留空稿即删）+ 侧栏页面标签化（点一次开 tab、再点去已有 tab、可关闭、localStorage 记忆）
 - 范围: frontend components/Layout.tsx（WorkspaceTabs 重写）、components/compose/ComposeContext.tsx；docs
@@ -119,3 +126,9 @@
 - 产出: 待提交（TASK_LABELS 补 digest/tone_dna，tk→Tokens、k→万单位，任务名全中文）；npm build 通过
 - 遗留: 提交后回填 CHANGELOG 哈希
 - 时间: 2026-09-11 深夜
+
+### S-0911-2500-AI透明化与设置侧边栏
+- 目标: ①语气学习（Tone DNA）退役 → 每账号「文风提示词」（迁移 v10 转存旧数据）②AI 总开关（关闭=传统邮件模式，隐藏全部 AI 入口）③设置页改侧边栏分类（通用/邮箱账号/AI 配置/AI 用量/关于）
+- 范围: backend(db/ai/api) + frontend(types/client/SettingsPage重写/Layout/MailBrowser/EmailReader/ComposeForm小改/DigestPage/DraftsPage/ManagerPage) + docs
+- 协调: ComposeForm.tsx 等文件存在并行 WIP（工作台标签化会话），仅做一行级条件渲染小改；SettingsPage 含上一会话未提交的 AI 用量措辞改动（63d8db6 已代提交其 CHANGELOG 条目，代码仍在工作树），本会话重写时保留该措辞
+- 时间: 2026-09-11 深夜 进行中

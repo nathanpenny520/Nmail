@@ -27,6 +27,10 @@ interface ComposeContextValue {
   updateTab: (draftId: number, patch: Partial<ComposeTab>) => void
   /** 表单拿到服务端最新草稿（附件/定时状态变化）后回写缓存 */
   cacheDraft: (draft: UserDraft) => void
+  /** 自动保存成功后同步字段到缓存，保证 openNew 复用/settleClose 判断基于最新内容 */
+  patchDraft: (draftId: number, patch: Partial<UserDraft>) => void
+  /** 表单挂载时登记 flush（立即保存）入口，关闭决策前先冲掉防抖窗口里的未保存内容 */
+  registerFlush: (draftId: number, fn: (() => Promise<void>) | null) => void
   /** 关闭标签：有未保存改动时先弹确认，否则直接关闭（草稿已自动保存，保留在服务端） */
   requestClose: (draftId: number) => void
   /** 关闭确认弹窗里的草稿 id；null 表示无待确认 */
@@ -50,7 +54,7 @@ function tabTitle(d: Pick<UserDraft, 'subject' | 'to_addrs'>): string {
 }
 
 /** 空白草稿：各字段与正文（剥标签后）全空。空稿不值得保留，见 restore/openNew/settleClose。 */
-function isDraftEmpty(d: UserDraft): boolean {
+export function isDraftEmpty(d: UserDraft): boolean {
   const text = d.body_html
     .replace(/<[^>]*>/g, ' ')
     .replace(/&nbsp;/g, ' ')
@@ -160,6 +164,20 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     setDrafts((prev) => ({ ...prev, [draft.id]: draft }))
   }, [])
 
+  const patchDraft = useCallback((draftId: number, patch: Partial<UserDraft>) => {
+    setDrafts((prev) => {
+      const cur = prev[draftId]
+      if (!cur) return prev
+      return { ...prev, [draftId]: { ...cur, ...patch } }
+    })
+  }, [])
+
+  const flushMapRef = useRef<Map<number, () => Promise<void>>>(new Map())
+  const registerFlush = useCallback((draftId: number, fn: (() => Promise<void>) | null) => {
+    if (fn) flushMapRef.current.set(draftId, fn)
+    else flushMapRef.current.delete(draftId)
+  }, [])
+
   const openDraft = useCallback(
     (draft: UserDraft) => {
       setDrafts((prev) => ({ ...prev, [draft.id]: draft }))
@@ -200,9 +218,18 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 
   const settleClose = useCallback(
     async (draftId: number, discard: boolean) => {
-      // 保留空稿没有意义（草稿箱里只会多一行空白），按丢弃处理
-      const cached = draftsRef.current[draftId]
-      const isEmpty = !discard && cached ? isDraftEmpty(cached) : false
+      // 先冲掉防抖窗口内未保存的内容，再以服务端最新内容为准判断是否空稿
+      // （空稿「保留」没有意义，草稿箱里只会多一行空白，按丢弃处理）
+      await flushMapRef.current.get(draftId)?.().catch(() => {})
+      let isEmpty = false
+      if (!discard) {
+        try {
+          const { draft } = await api.getUserDraft(draftId)
+          isEmpty = isDraftEmpty(draft)
+        } catch {
+          // 草稿已不存在（他处删除），关标签即可
+        }
+      }
       if (discard || isEmpty) {
         try {
           await api.deleteUserDraft(draftId)
@@ -247,6 +274,8 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     openDraft,
     updateTab,
     cacheDraft,
+    patchDraft,
+    registerFlush,
     requestClose,
     pendingCloseId,
     settleClose,
