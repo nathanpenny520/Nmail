@@ -15,7 +15,7 @@ from email.message import EmailMessage
 from imap_tools import AND, MailBox, MailMessageFlags
 from imap_tools.errors import MailboxLoginError
 
-from app.core import oauth
+from app.core import netproxy, oauth
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,8 @@ class MailConfig:
     # OAuth2 账号（auth_type='oauth2'）：access_token 非空时走 XOAUTH2，
     # password 不参与认证（邮箱层已确保传入的是刚刷新过的有效令牌）
     access_token: str | None = None
+    # 账号级「走代理」：True 时 IMAP/SMTP 经全局代理地址（settings.network_proxy）建连
+    use_proxy: bool = False
 
 
 @dataclass
@@ -66,10 +68,24 @@ def _is_netease(server: str) -> bool:
     return any(host in server for host in NETEASE_HOSTS)
 
 
+class _MailBoxProxy(MailBox):
+    """imap_tools 没有注入点（直接 new imaplib.IMAP4_SSL），子类替换建连一环。"""
+
+    def __init__(self, imap4_cls: type, host: str, port: int, timeout: int) -> None:  # noqa: ANN001
+        self._imap4_cls = imap4_cls
+        super().__init__(host=host, port=port, timeout=timeout)
+
+    def _get_mailbox_client(self):  # noqa: ANN001 — 返回 imaplib.IMAP4_SSL（或其子类）
+        return self._imap4_cls(self._host, self._port,
+                               ssl_context=self._ssl_context, timeout=self._timeout)
+
+
 def connect_imap(cfg: MailConfig) -> MailBox:
     """建立已登录的 IMAP 连接，返回可作上下文管理器使用的 MailBox。"""
     # timeout=60：连接与读写都有上限，避免僵死连接永远挂着
-    mb = MailBox(cfg.imap_server, port=cfg.imap_port, timeout=60)
+    proxy = netproxy.resolve_proxy(cfg.use_proxy)
+    imap4_cls = netproxy.imap4_ssl_class(proxy)
+    mb = _MailBoxProxy(imap4_cls, cfg.imap_server, cfg.imap_port, 60)
     if cfg.access_token:
         mb.xoauth2(cfg.email, cfg.access_token)
     else:
@@ -298,9 +314,13 @@ def send_email(
         _attach_file(msg, path, path.replace("\\", "/").rsplit("/", 1)[-1])
 
     if cfg.smtp_port == 465:
-        server: smtplib.SMTP = smtplib.SMTP_SSL(cfg.smtp_server, cfg.smtp_port, timeout=30)
+        server: smtplib.SMTP = netproxy.smtp_class(
+            netproxy.resolve_proxy(cfg.use_proxy), ssl=True)(
+            cfg.smtp_server, cfg.smtp_port, timeout=30)
     else:
-        server = smtplib.SMTP(cfg.smtp_server, cfg.smtp_port, timeout=30)
+        server = netproxy.smtp_class(
+            netproxy.resolve_proxy(cfg.use_proxy), ssl=False)(
+            cfg.smtp_server, cfg.smtp_port, timeout=30)
     try:
         server.ehlo()
         if cfg.smtp_port != 465:

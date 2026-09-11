@@ -321,6 +321,14 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE accounts ADD COLUMN oauth_provider TEXT NOT NULL DEFAULT '';
         """,
     ),
+    (
+        14,
+        """
+        -- 账号级「走代理」开关：被墙服务商（Gmail/Outlook）的 IMAP/SMTP 经全局代理
+        -- 地址（settings.network_proxy）连接；地址本体只存一份，账号行只存开关
+        ALTER TABLE accounts ADD COLUMN use_proxy INTEGER NOT NULL DEFAULT 0;
+        """,
+    ),
 ]
 
 

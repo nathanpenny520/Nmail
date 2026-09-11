@@ -4,6 +4,7 @@ platformdirs>=4.0
 openai>=1.50
 httpx>=0.27
 imap-tools>=1.5
+PySocks>=1.7.1
 beautifulsoup4>=4.12
 markdown>=3.6
 nh3>=0.2

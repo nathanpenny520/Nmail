@@ -1160,6 +1160,8 @@ export interface components {
             ai_permission?: string | null;
             /** Style Prompt */
             style_prompt?: string | null;
+            /** Use Proxy */
+            use_proxy?: boolean | null;
         };
         /** BatchActionIn */
         BatchActionIn: {
@@ -1385,6 +1387,8 @@ export interface components {
             allow_remote_images?: boolean | null;
             /** Update Check Enabled */
             update_check_enabled?: boolean | null;
+            /** Network Proxy */
+            network_proxy?: string | null;
         };
         /** SignatureItem */
         SignatureItem: {

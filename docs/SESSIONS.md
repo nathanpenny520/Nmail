@@ -18,6 +18,11 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-HHMM-网络代理
+- 目标: 大陆直连 Gmail/Outlook IMAP/SMTP 被墙（实测 10054/10060，httpx 走代理环境变量所以 OAuth 能通而裸 socket 不通）——加「网络代理」：全局代理地址设置（PySocks）+ 账号级「走代理」开关，OAuth 令牌交换自动跟随全局代理
+- 范围: backend（core/netproxy.py 新增、迁移 v14、imap_client/mailbox/accounts/settings/oauth、requirements/pyproject）、frontend（SettingsPage/client/types）、docs
+- 开始: 2026-09-12
+
 ### S-0911-1756-OAuth2登录 ✅
 - 目标: 按 docs/自建邮箱客户端 Gmail+Outlook OAuth2 完整教程.md 落地 Gmail/Outlook OAuth2（XOAUTH2）账号授权登录——PKCE 授权码流程、令牌刷新与存储、IMAP/SMTP XOAUTH2 接入、添加账号走浏览器授权、设置页 OAuth 客户端配置
 - 范围: backend（db 迁移 v13、core/oauth.py 新增、imap_client/mailbox、api/oauth.py 新增、api/accounts、core/providers 文案）、frontend（types/client/AddAccountModal/SettingsPage/OauthSettings.tsx 新增）、docs（教程文档一并入库）

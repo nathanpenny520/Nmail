@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
 
 from app.ai import llm, profiles
+from app.core import netproxy
 from app.db.database import get_setting, set_setting
 
 router = APIRouter(prefix="/api", tags=["settings"])
@@ -20,6 +21,7 @@ DEFAULT_SETTINGS: dict[str, object] = {
     "body_font": "standard",  # small | standard | large
     "allow_remote_images": False,  # 全局放行邮件远程图片（默认拦截防追踪）
     "update_check_enabled": True,  # 应用内更新检查（匿名版本对比，可关）
+    "network_proxy": "",       # 全局代理地址（socks5://127.0.0.1:7890），空=直连
 }
 
 
@@ -30,6 +32,18 @@ class SettingsIn(BaseModel):
     body_font: str | None = None
     allow_remote_images: bool | None = None
     update_check_enabled: bool | None = None
+    network_proxy: str | None = Field(default=None, max_length=300)
+
+    @field_validator("network_proxy")
+    @classmethod
+    def _validate_network_proxy(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        try:
+            netproxy.parse_proxy_url(v)  # 空串=直连，合法；其余格式即时校验
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        return v
 
     @field_validator("digest_time")
     @classmethod
@@ -74,6 +88,9 @@ def read_settings() -> dict:
         "update_check_enabled": get_setting(
             "update_check_enabled", DEFAULT_SETTINGS["update_check_enabled"]
         ),
+        "network_proxy": get_setting(
+            "network_proxy", DEFAULT_SETTINGS["network_proxy"]
+        ),
     }
 
 
@@ -91,6 +108,8 @@ def update_settings(payload: SettingsIn) -> dict:
         set_setting("allow_remote_images", payload.allow_remote_images)
     if payload.update_check_enabled is not None:
         set_setting("update_check_enabled", payload.update_check_enabled)
+    if payload.network_proxy is not None:
+        set_setting("network_proxy", payload.network_proxy.strip())
     return read_settings()
 
 

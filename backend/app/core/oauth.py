@@ -28,6 +28,7 @@ from urllib.parse import urlencode
 
 import httpx
 
+from app.core import netproxy
 from app.security import get_secret, has_secret, set_secret
 
 CALLBACK_PATH = "/oauth/callback"
@@ -166,11 +167,16 @@ def build_auth_url(provider: OAuthProvider, *, client_id: str, redirect_uri: str
 
 
 def _token_request(provider: OAuthProvider, data: dict[str, str]) -> dict:
-    """POST token 端点；失败按错误码翻译为面向用户的文案。"""
+    """POST token 端点；失败按错误码翻译为面向用户的文案。
+
+    令牌交换无条件跟随全局代理设置——OAuth 服务商就是被墙的 Gmail/Outlook
+    （QQ/163 不走 OAuth），不存在"该不该代理"的歧义；显式传 proxy 同时
+    覆盖终端环境变量，行为与「开没开终端代理」解耦。
+    """
     try:
         resp = httpx.post(provider.token_url, data=data,
                           headers={"Content-Type": "application/x-www-form-urlencoded"},
-                          timeout=30)
+                          timeout=30, proxy=netproxy.httpx_proxy_arg())
     except (httpx.HTTPError, ImportError, OSError) as exc:
         # ImportError：终端设了 SOCKS 代理环境变量但未装 socksio（httpx 构建传输层时抛，
         # 不是 HTTPError 子类——不接住就会以裸 500 冒出来）

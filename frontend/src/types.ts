@@ -20,6 +20,8 @@ export interface Settings {
   body_font: 'small' | 'standard' | 'large'
   allow_remote_images: boolean
   update_check_enabled: boolean
+  /** 全局代理地址（socks5://127.0.0.1:7890 / http://...）；空=直连 */
+  network_proxy: string
 }
 
 export interface SettingsPayload {
@@ -29,6 +31,7 @@ export interface SettingsPayload {
   body_font?: 'small' | 'standard' | 'large'
   allow_remote_images?: boolean
   update_check_enabled?: boolean
+  network_proxy?: string
 }
 
 export interface UpdateCheckResp {
@@ -69,6 +72,8 @@ export interface Account {
   auth_type: 'password' | 'oauth2'
   /** OAuth 服务商标识：gmail | outlook | ''（密码账号） */
   oauth_provider: string
+  /** 该账号 IMAP/SMTP 是否经全局代理地址连接（被墙服务商用） */
+  use_proxy: boolean
   ai_permission: 'readonly' | 'draft_review'
   /** 文风提示词：AI 起草该账号回复时遵循，用户手写可编辑；null=未设置 */
   style_prompt: string | null

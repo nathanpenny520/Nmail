@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 网络代理：被墙服务商（Gmail/Outlook）的 IMAP/SMTP/OAuth 可走本机代理
+- 背景（用户真实实测）：大陆裸连 imap.gmail.com 全挂（10054 重置/10060 超时），QQ/163 正常；浏览器与 httpx 认代理环境变量所以授权能通，IMAP/SMTP 是裸 socket 直连撞墙。单封邮件操作同时 502 证明是连接层不通而非同步量过大
+- 用法：设置-通用 填「网络代理」地址（socks5://127.0.0.1:7890，支持 socks5h/socks4/http 与 user:pass@）→ 邮箱账号列表对被墙账号点「代理」开启；Gmail/Outlook OAuth 令牌交换无条件跟随全局代理（服务商本身就是被墙方，QQ/163 不走 OAuth）；本机回环地址（Proton Bridge 等）始终直连豁免
+- 实现：新增 `core/netproxy.py`——PySocks（纯 Python 新依赖）套接字 + 标准库注入点子类化（imaplib `IMAP4_SSL._create_socket` / smtplib `_get_socket`），不做全局 socket 替换（避免波及本地连接与并发线程串代理）；socks5 默认远端解析（rdns）规避 DNS 污染；代理地址坏配置时静默直连由 connection_error 兜底。迁移 v14（accounts.use_proxy）；设置 `network_proxy` 即时校验（422 人话文案）；IMAP/SMTP/OAuth 三处建连全部接管
+- 验证：pytest 80 例全绿（新增 10 例：URL 解析矩阵/本地豁免/开关×地址组合/坏配置降级/httpx 参数/类选择/建连配置捕获/设置往返与 422/账号开关往返）；ruff 通过；npm build 通过；隔离实例冒烟（设置往返、非法代理 422、账号开关 404 语义）；本机真实探测复证裸连 Gmail 超时而 QQ 0.06s
+- 说明：自动探测（autoconfig）未接代理——未收录域名的探测多为可达目标，需要时随触碰再接
+
 ## 304e4a4 — fix: OAuth 回调两处加固（真实用户首授权发现）
 - **OAuthError 缺 `.message` 属性**：回调捕获授权错误后取 `exc.message` 渲染错误页时抛 AttributeError，把可处理的业务错误（如 Google 拒绝换令牌）变成裸 500——报错本体贴不出来。补齐属性（对齐 MailError 形态）；mailbox.load_account 同链路一并受益
 - **回调绝不裸 500**：回调是浏览器直接导航的落地页，try 范围扩到换令牌→建号→首同步全程，任意意外异常渲染为 200 错误页（含异常类型+消息，截断 300 字）并落流程状态供前端展示

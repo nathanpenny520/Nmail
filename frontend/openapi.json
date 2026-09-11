@@ -3374,6 +3374,17 @@
               }
             ],
             "title": "Style Prompt"
+          },
+          "use_proxy": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Proxy"
           }
         },
         "type": "object",
@@ -4078,6 +4089,18 @@
               }
             ],
             "title": "Update Check Enabled"
+          },
+          "network_proxy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Network Proxy"
           }
         },
         "type": "object",
