@@ -28,6 +28,8 @@
 }
 body > #root {
   zoom: var(--app-zoom);
+  /* 100vh 是未缩放视口：除以 zoom 才能让应用铺满整个屏幕 */
+  height: calc(100vh / var(--app-zoom));
 }
 
 .t-xs { font-size: var(--fs-xs); }

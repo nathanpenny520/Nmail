@@ -66,7 +66,7 @@ export default function Layout() {
     }`
 
   return (
-    <div className="flex h-screen bg-gray-50 text-gray-900">
+    <div className="flex h-full bg-gray-50 text-gray-900">
       <aside
         className="relative flex shrink-0 flex-col border-r border-gray-200 bg-white"
         style={{ width: navWidth }}
