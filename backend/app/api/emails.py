@@ -1,17 +1,15 @@
-"""邮件 API：列表/搜索、详情（安全 HTML）、状态操作、发送、附件下载。"""
+"""邮件 API：列表/搜索、详情（安全 HTML）、状态操作、附件下载。"""
 from __future__ import annotations
 
 import json
-import shutil
-import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.core import imap_client
-from app.core.mail_html import markdown_to_email_html, sanitize_email_html
+from app.core.mail_html import sanitize_email_html
 from app.db.database import get_conn
 from app.security import get_secret
 
@@ -380,48 +378,6 @@ def email_action(email_id: int, payload: EmailActionIn) -> dict:
                 (payload.folder, new_uid, email_id),
             )
     conn.commit()
-    return {"ok": True}
-
-
-@router.post("/emails/send")
-async def send_email_endpoint(
-    account_id: int = Form(...),
-    to: str = Form(...),
-    cc: str = Form(""),
-    bcc: str = Form(""),
-    subject: str = Form(...),
-    body: str = Form(...),
-    files: list[UploadFile] = File(default=[]),
-) -> dict:
-    cfg, acct = _imap_for(account_id)
-    if not acct.get("smtp_server"):
-        raise HTTPException(400, "该账号未配置 SMTP 服务器")
-    to_list = [x.strip() for x in re_split(to)]
-    cc_list = [x.strip() for x in re_split(cc)] if cc else []
-    bcc_list = [x.strip() for x in re_split(bcc)] if bcc else []
-    if not to_list:
-        raise HTTPException(400, "收件人不能为空")
-
-    tmp_dir = Path(tempfile.mkdtemp(prefix="nmail-send-"))
-    paths: list[str] = []
-    try:
-        for f in files:
-            target = tmp_dir / f.filename
-            with open(target, "wb") as fh:
-                fh.write(await f.read())
-            paths.append(str(target))
-        html = markdown_to_email_html(body)
-        sent_message = imap_client.send_email(
-            cfg, to_list, cc_list, bcc_list, subject, body, html, paths
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"发送失败：{exc}") from exc
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
-    imap_client.append_sent(cfg, sent_message)
     return {"ok": True}
 
 

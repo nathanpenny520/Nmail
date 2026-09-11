@@ -174,7 +174,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ ids, action, ...(folder ? { folder } : {}) }),
     }),
-  sendEmail: (form: FormData) => request<{ ok: boolean }>('/api/emails/send', { method: 'POST', body: form }),
 
   // ── 写信工作台草稿 ──
   createUserDraft: (payload: Partial<UserDraft>) =>
