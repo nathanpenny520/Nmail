@@ -21,7 +21,7 @@
 ### S-0911-1350-写信台修补 ✅
 - 目标: 三个用户反馈修复——抄送/密送可收起、存草稿后草稿可寻（新增草稿箱页）、右侧下拉面板贴边裁切
 - 范围: frontend components/compose/ui.tsx、InsertDialogs.tsx、ComposeContext.tsx、ComposeForm.tsx、Layout.tsx、pages/UserDraftsPage.tsx（新增）、App.tsx；docs
-- 产出: 见 CHANGELOG「fix：写信台三处用户反馈修补」条目（哈希见 git log）；Dropdown 支持 align=right；Provider 增 openDraft + user-drafts 列表失效
+- 产出: 提交 63d8db6（见 CHANGELOG「fix：写信台三处用户反馈修补」条目）；Dropdown 支持 align=right；Provider 增 openDraft + user-drafts 列表失效
 - 遗留: 无；注意本会话 docs 提交代提交了「AI 用量面板全中文」会话的 CHANGELOG 条目（其 SettingsPage.tsx 改动仍留在工作树，由该会话提交）
 - 时间: 2026-09-11 14:00 完成
 
