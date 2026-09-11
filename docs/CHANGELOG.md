@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: OAuth 回调两处加固（真实用户首授权发现）
+## 304e4a4 — fix: OAuth 回调两处加固（真实用户首授权发现）
 - **OAuthError 缺 `.message` 属性**：回调捕获授权错误后取 `exc.message` 渲染错误页时抛 AttributeError，把可处理的业务错误（如 Google 拒绝换令牌）变成裸 500——报错本体贴不出来。补齐属性（对齐 MailError 形态）；mailbox.load_account 同链路一并受益
 - **回调绝不裸 500**：回调是浏览器直接导航的落地页，try 范围扩到换令牌→建号→首同步全程，任意意外异常渲染为 200 错误页（含异常类型+消息，截断 300 字）并落流程状态供前端展示
 - **错误翻译补齐**：Google 对 Web 型客户端缺 secret 只回 `error_description`（`client_secret is missing.`），翻译层现按描述文本识别并给出可操作指引（补填 client_secret 或改用桌面应用类型）；`_token_request` 另接住 SOCKS 代理环境变量缺 socksio 的 ImportError（非 HTTPError 子类，实测会裸 500）
