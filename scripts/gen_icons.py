@@ -7,7 +7,7 @@
     frontend/public/favicon.ico         16/32/48（浏览器标签页）
     frontend/public/icon-192.png        高分屏标签页/固定标签
     frontend/public/icon-512.png        同上 + 未来 PWA
-    frontend/public/apple-touch-icon.png  180 满幅不透明（Apple 自行裁圆角）
+    frontend/public/apple-touch-icon.png  180 满幅重排（渐变底+信封，Apple 自行裁圆角）
     assets/icon-master.png              1024 带透明角母版
     assets/nmail.ico                    16–256 多尺寸（Windows exe，nmail.spec 引用）
     assets/nmail.icns                   macOS 打包
@@ -41,6 +41,24 @@ def cutout(img: Image.Image) -> Image.Image:
     return rgba.crop(bbox)
 
 
+def apple_touch(master: Image.Image, size: int = 180, zoom: float = 1.06) -> Image.Image:
+    """按 Apple 规范生成 apple-touch-icon（图内不自带圆角与外阴影，HIG）。
+
+    母版放大 zoom 倍居中裁切：烘焙在图里的边缘光晕/暗边随之移出画布，系统蒙版
+    裁出的圆角外沿只剩纯渐变蓝。放大后四角会露出母版圆角外的透明月牙——用圆弧
+    内侧对角取样色铺双线性渐变补底，与周围渐变同色，肉眼不可见。
+    """
+    w, h = master.size
+    px = master.convert("RGB").load()
+    corners = [(int(w * fx), int(h * fy)) for fx, fy in ((0.06, 0.06), (0.94, 0.06), (0.06, 0.94), (0.94, 0.94))]
+    bg = Image.new("RGB", (2, 2))
+    bg.putdata([px[x, y] for x, y in corners])  # TL, TR, BL, BR
+    bg = bg.resize((w, h), Image.BILINEAR)
+    art = master.resize((round(w * zoom), round(h * zoom)), Image.LANCZOS)
+    bg.paste(art, (round(w * (1 - zoom) / 2), round(h * (1 - zoom) / 2)), art)
+    return bg.resize((size, size), Image.LANCZOS)
+
+
 def main() -> None:
     master = cutout(Image.open(SRC)).resize((1024, 1024), Image.LANCZOS)
     assets = ROOT / "assets"
@@ -67,13 +85,10 @@ def main() -> None:
     master.resize((192, 192), Image.LANCZOS).save(pub / "icon-192.png")
     master.resize((512, 512), Image.LANCZOS).save(pub / "icon-512.png")
 
-    # apple-touch-icon 满幅不透明：圆角透出的四角以图标主色（方块顶边中点取样）填充
-    edge = master.getpixel((512, 4))[:3]
-    bg = Image.new("RGB", master.size, edge)
-    bg.paste(master, mask=master.split()[3])
-    bg.resize((180, 180), Image.LANCZOS).save(pub / "apple-touch-icon.png")
+    # apple-touch-icon：满幅重排，圆角交给系统蒙版（见 apple_touch 文档串）
+    apple_touch(master).save(pub / "apple-touch-icon.png")
 
-    print("theme-color: #{:02x}{:02x}{:02x}".format(*edge))
+    print("theme-color: #{:02x}{:02x}{:02x}".format(*master.getpixel((512, 4))[:3]))
     for p in sorted((*assets.glob("nmail.*"), assets / "icon-master.png", *pub.iterdir())):
         print(f"  {p.relative_to(ROOT)}  {p.stat().st_size // 1024} KB")
 
