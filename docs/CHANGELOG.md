@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: SQLite 共享连接并发竞态（macOS 启动 500 根因）
+## 63dd644 — fix: SQLite 共享连接并发竞态（macOS 启动 500 根因）
 - 用户 macOS 冷启动首屏并发（/api/settings、/api/ai/profiles）报 `sqlite3.InterfaceError: bad parameter or other API misuse` 且间歇自愈——潜伏 bug 在所有平台都存在，Python 3.14 调度时序把它炸了出来
 - 根因（实测定位）：`get_conn()` 全局共享一条 sqlite3 连接，**Python sqlite3 层对同一连接的并发 execute 并不安全**——16 线程稳定复现 InterfaceError 与 `IndexError: tuple index out of range`，且只有带参数的语句中招（无参读/tx 写零错误）：语句缓存与参数绑定状态被并发重置；SQLite 序列化模式（threadsafety=3）只保护单次 C API 调用，兜不住 Python 层多步执行序列。原懒初始化还把半初始化连接（PRAGMA 未跑完）提前发布，属第二重竞态
 - 修复：`get_conn()` 改为**每线程独立连接**（threading.local，线程内复用；WAL 下多连接读写互不阻塞，写侧仍由 tx() 全局写锁串行）；新增 `close_thread_conn()`，同步一次性线程（`sync.start_sync` 每次 spawn daemon 线程）收尾时关闭防连接泄漏

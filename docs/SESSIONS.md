@@ -22,7 +22,7 @@
 - 目标: 用户 macOS 启动即 500（`sqlite3.InterfaceError: bad parameter or other API misuse`，/api/settings 与 /api/ai/profiles，间歇自愈）——定位根因并修复
 - 范围: backend/db/database.py（get_conn 每线程连接 + close_thread_conn）、core/sync.py（同步线程收尾关连接）、tests/test_database.py（2 例回归）、docs
 - 排障结论: 非本次 OAuth 改动引入。共享单连接下 Python sqlite3 并发 execute 本就不安全（16 线程稳定复现，带参数语句独中招——语句缓存/绑定状态竞态，SQLite 序列化模式兜不住 Python 层多步序列）；Windows 此前未炸属时序运气
-- 产出: 提交待回填（见 CHANGELOG「SQLite 共享连接并发竞态」条目）；并发锤归零 + pytest 90 全绿 + 冷启动 HTTP 突发 3×32 全 200
+- 产出: 提交 63dd644（见 CHANGELOG「SQLite 共享连接并发竞态」条目）；并发锤归零 + pytest 90 全绿 + 冷启动 HTTP 突发 3×32 全 200
 - 遗留: 用户重启进程生效；tests/ 既有 2-3 处 ruff 提示（F841/B017/SIM117，门禁只查 app/）仍待顺手清理
 - 时间: 2026-09-12 00:34 完成
 
