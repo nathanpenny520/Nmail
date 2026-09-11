@@ -6,6 +6,7 @@ import logging
 import re
 import smtplib
 import socket
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from email.message import EmailMessage
@@ -128,12 +129,13 @@ def find_sent_folder(mb: MailBox) -> str | None:
 
 
 def iter_new_mail(mb: MailBox, folder: str, last_uid: int,
-                  first_sync_days: int = 30, chunk_size: int = 100):
+                  first_sync_days: int = 30, chunk_size: int = 25):
     """按 UID 升序分块产出新增邮件（每块为 ≤chunk_size 封的 ParsedMessage 列表）。
 
-    先 SEARCH 拿 UID 清单（轻量，只传 ID），再逐块 `UID a:b` FETCH：
-    - 单块响应小，不再有整批巨型 FETCH 被服务商中途掐断（QQ 大邮箱报
-      `[Errno 22] Invalid argument` 的根源）；
+    先 SEARCH 拿 UID 清单（轻量，只传 ID），再逐块 FETCH：
+    - 块要小（~2s 拉完）：QQ 等服务商会随机掐断持续重负载的连接（实测重负载
+      ~8s 处被掐，Windows SSL 层报 `[Errno 22] Invalid argument`），块太大
+      会在提交断点前被掐，重试永远原地踏步；
     - 调用方每块入库并提交断点，中断后从断点续传，不会整批重放。
     首次同步（last_uid=0）只拉最近 N 天，避免大邮箱首翻过久；
     注意 IMAP 语义 `UID x:*` 在 x 大于最大 UID 时也会返回最后一封，
@@ -171,6 +173,7 @@ def iter_new_mail(mb: MailBox, folder: str, last_uid: int,
         else:
             for uid in window:
                 _fetch_one(f"UID {uid}")
+        time.sleep(0.2)  # 块间轻微节流，降低触发服务商频控的概率
         yield parsed
 
 
