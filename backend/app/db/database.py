@@ -291,6 +291,26 @@ MIGRATIONS: list[tuple[int, str]] = [
         DELETE FROM ai_logs WHERE task_type = 'tone_dna';
         """,
     ),
+    (
+        12,
+        """
+        -- 长任务执行器（IMPROVEMENT_PLAN §3.4）：AI 整理、批量 IMAP 动作等
+        -- 提交后立即返回 job_id，进度/结果入表，前端经 /api/jobs/* 轮询
+        CREATE TABLE IF NOT EXISTS jobs (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind        TEXT NOT NULL,               -- organize | imap_batch | ...
+            account_id  INTEGER,
+            status      TEXT NOT NULL DEFAULT 'running',  -- running | done | failed
+            progress    REAL NOT NULL DEFAULT 0,     -- 0..1
+            stage       TEXT NOT NULL DEFAULT '',    -- 阶段标识
+            detail      TEXT NOT NULL DEFAULT '',    -- 面向用户的阶段明细/错误文案
+            result_json TEXT,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_jobs_active ON jobs(status, updated_at DESC);
+        """,
+    ),
 ]
 
 
