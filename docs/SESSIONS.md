@@ -18,6 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0911-1420-工作台标签化 ✅
+- 目标: 空草稿治理（恢复时清理+写信按钮复用空标签+保留空稿即删）+ 侧栏页面标签化（点一次开 tab、再点去已有 tab、可关闭、localStorage 记忆）
+- 范围: frontend components/Layout.tsx（WorkspaceTabs 重写）、components/compose/ComposeContext.tsx；docs
+- 产出: 见 CHANGELOG「空草稿治理 + 侧栏页面标签化」条目（哈希回填见 git log）
+- 遗留: 无；页面标签切换仍是路由卸载/重挂（仅收件箱+写信台 keep-alive），页面滚动位置不保留——AI 会话/草稿列表等状态在库里，无实质损失
+- 时间: 2026-09-11 14:30 完成
+
 ### S-0911-1350-写信台修补 ✅
 - 目标: 三个用户反馈修复——抄送/密送可收起、存草稿后草稿可寻（新增草稿箱页）、右侧下拉面板贴边裁切
 - 范围: frontend components/compose/ui.tsx、InsertDialogs.tsx、ComposeContext.tsx、ComposeForm.tsx、Layout.tsx、pages/UserDraftsPage.tsx（新增）、App.tsx；docs

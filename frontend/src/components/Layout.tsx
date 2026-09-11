@@ -14,23 +14,51 @@ const navItems = [
   { to: '/assistant', label: 'AI 总管家', icon: Sparkles },
 ]
 
+/** 侧栏页面（收件箱除外）打开后以标签形式留在顶部，重复点击回到已有标签 */
+const PAGE_TABS: Record<string, { label: string; icon: typeof Inbox }> = {
+  '/drafts': { label: '待审草稿', icon: FilePenLine },
+  '/mydrafts': { label: '草稿箱', icon: FileText },
+  '/archived': { label: '已归档', icon: Archive },
+  '/digest': { label: '每日摘要', icon: BarChart3 },
+  '/assistant': { label: 'AI 总管家', icon: Sparkles },
+  '/settings': { label: '设置', icon: Settings },
+}
+
 const NAV_MIN = 96
 const NAV_MAX = 240
 const NAV_DEFAULT = 148
 const ICON_ONLY_BELOW = 132 // 窄于此宽度切换为纯图标模式
 
-/** 主区顶部的同层标签条：收件箱（固定）+ 各写信标签，一键互切（对齐网页邮箱）。 */
+/** 主区顶部的同层标签条：收件箱（固定）+ 已打开的侧栏页面 + 各写信标签，一键互切（对齐网页邮箱）。 */
 function WorkspaceTabs() {
   const { tabs, activeComposeId, setActiveCompose, openNew, requestClose } = useCompose()
   const location = useLocation()
   const navigate = useNavigate()
-  const onMailRoute = location.pathname === '/' || location.pathname === '/archived'
 
-  // 无写信标签且不在邮件页时不占位（设置/摘要/总管家保持干净）
-  if (tabs.length === 0 && !onMailRoute) return null
+  // 页面标签：打开过即留下，去重；记忆在 localStorage，刷新后仍在
+  const [pageTabs, setPageTabs] = useState<string[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem('nmail_page_tabs') ?? '[]')
+      return Array.isArray(saved) ? saved.filter((p): p is string => typeof p === 'string' && !!PAGE_TABS[p]) : []
+    } catch {
+      return []
+    }
+  })
+  useEffect(() => {
+    localStorage.setItem('nmail_page_tabs', JSON.stringify(pageTabs))
+  }, [pageTabs])
+  // 直接输 URL / 前进后退进入页面路由时也补一个标签
+  useEffect(() => {
+    const path = location.pathname
+    if (PAGE_TABS[path]) setPageTabs((prev) => (prev.includes(path) ? prev : [...prev, path]))
+  }, [location.pathname])
 
-  const inboxActive = activeComposeId === null && onMailRoute
-  const mailLabel = location.pathname === '/archived' ? '已归档' : '收件箱'
+  const closePageTab = (path: string) => {
+    setPageTabs((prev) => prev.filter((p) => p !== path))
+    if (location.pathname === path) navigate('/')
+  }
+
+  const inboxActive = activeComposeId === null && location.pathname === '/'
   const tabCls = (active: boolean) =>
     `flex min-w-0 shrink-0 items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 t-sm transition-colors ${
       active
@@ -43,13 +71,42 @@ function WorkspaceTabs() {
       <button
         className={tabCls(inboxActive)}
         onClick={() => {
-          if (!onMailRoute) navigate('/')
+          if (location.pathname !== '/') navigate('/')
           setActiveCompose(null)
         }}
       >
         <Inbox className="h-3.5 w-3.5 shrink-0" />
-        <span className="whitespace-nowrap">{mailLabel}</span>
+        <span className="whitespace-nowrap">收件箱</span>
       </button>
+      {pageTabs.map((path) => {
+        const meta = PAGE_TABS[path]
+        const Icon = meta.icon
+        const active = activeComposeId === null && location.pathname === path
+        return (
+          <div
+            key={path}
+            onClick={() => {
+              if (location.pathname !== path) navigate(path)
+              setActiveCompose(null)
+            }}
+            className={`${tabCls(active)} cursor-pointer group`}
+            title={meta.label}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">{meta.label}</span>
+            <button
+              className="shrink-0 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation()
+                closePageTab(path)
+              }}
+              title="关闭标签"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )
+      })}
       {tabs.map((tab) => (
         <div
           key={tab.draftId}

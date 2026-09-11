@@ -49,6 +49,17 @@ function tabTitle(d: Pick<UserDraft, 'subject' | 'to_addrs'>): string {
   return d.subject.trim() || d.to_addrs.split(',')[0]?.trim() || '新邮件'
 }
 
+/** 空白草稿：各字段与正文（剥标签后）全空。空稿不值得保留，见 restore/openNew/settleClose。 */
+function isDraftEmpty(d: UserDraft): boolean {
+  const text = d.body_html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .trim()
+  return (
+    !d.to_addrs.trim() && !d.cc_addrs.trim() && !d.bcc_addrs.trim() && !d.subject.trim() && !text
+  )
+}
+
 /**
  * 写信工作台状态中枢（挂 App 级）。写信不走路由：打开标签只是在
  * Layout 主区上方盖一层工作台，收件箱等页面保持挂载（keep-alive），
@@ -67,13 +78,17 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   const accountsRef = useRef(accounts)
   accountsRef.current = accounts
 
-  // 应用启动恢复：服务端 editing/scheduled 的草稿即未关完的标签
+  // 应用启动恢复：editing/scheduled 的草稿即未关完的标签；
+  // 空白草稿（点了写信没写任何内容）不恢复并顺手清掉，避免刷新后攒一排「新邮件」
   useEffect(() => {
     if (restoredRef.current) return
     restoredRef.current = true
     Promise.all([api.getUserDrafts('editing'), api.getUserDrafts('scheduled')])
       .then(([editing, scheduled]) => {
-        const list = [...editing.drafts, ...scheduled.drafts]
+        const junk = editing.drafts.filter(isDraftEmpty)
+        const keep = editing.drafts.filter((d) => !isDraftEmpty(d))
+        for (const d of junk) void api.deleteUserDraft(d.id).catch(() => {})
+        const list = [...scheduled.drafts, ...keep]
         setDrafts((prev) => {
           const next = { ...prev }
           for (const d of list) next[d.id] = d
@@ -92,10 +107,21 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 
   // 防连点：创建请求在途时忽略再次点击
   const creatingRef = useRef(false)
+  const draftsRef = useRef(drafts)
+  draftsRef.current = drafts
 
   const openNew = useCallback(async () => {
     const account = accountsRef.current[0]
     if (!account || creatingRef.current) return
+    // 已有空白草稿标签（点了写信还没写）→ 直接复用，避免连点攒出一排空标签
+    const emptyTab = tabsRef.current.find((t) => {
+      const d = draftsRef.current[t.draftId]
+      return d ? isDraftEmpty(d) : false
+    })
+    if (emptyTab) {
+      setActiveCompose(emptyTab.draftId)
+      return
+    }
     creatingRef.current = true
     try {
       const { draft } = await api.createUserDraft({ account_id: account.id, mode: 'new' })
@@ -174,7 +200,10 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 
   const settleClose = useCallback(
     async (draftId: number, discard: boolean) => {
-      if (discard) {
+      // 保留空稿没有意义（草稿箱里只会多一行空白），按丢弃处理
+      const cached = draftsRef.current[draftId]
+      const isEmpty = !discard && cached ? isDraftEmpty(cached) : false
+      if (discard || isEmpty) {
         try {
           await api.deleteUserDraft(draftId)
         } catch {
