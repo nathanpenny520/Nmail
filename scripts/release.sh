@@ -30,8 +30,8 @@ GH_BIN="$(command -v gh || true)"
 gh() { "$GH_BIN" "$@"; }
 
 # ── 0. 预检 ──
-git diff --quiet -- pyproject.toml backend/app/config.py \
-  || die "pyproject.toml / config.py 有未提交改动，先处理再发版"
+git diff --quiet -- pyproject.toml \
+  || die "pyproject.toml 有未提交改动，先处理再发版"
 git fetch origin main --quiet
 BEHIND=$(git rev-list --count main..origin/main)
 [ "$BEHIND" -eq 0 ] || die "本地 main 落后 origin $BEHIND 个提交，先 git pull --rebase origin main"
@@ -40,22 +40,21 @@ if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "refs/tags/$TAG"; then
 gh auth status >/dev/null 2>&1 || die "gh 未登录：gh auth login"
 info "预检通过：版本 $VERSION（$TAG）"
 
-# ── 1. 改版本号（两处必须同步）──
+# ── 1. 改版本号 ──
+# 版本唯一来源是 pyproject.toml；config.py 自 0.2.0 起 importlib.metadata 动态读取，无需改
 sed -i.bak "s/^version = \"[0-9][0-9.]*\"/version = \"$VERSION\"/" pyproject.toml
-sed -i.bak "s/^APP_VERSION = \"[0-9][0-9.]*\"/APP_VERSION = \"$VERSION\"/" backend/app/config.py
-rm -f pyproject.toml.bak backend/app/config.py.bak
+rm -f pyproject.toml.bak
 grep -q "version = \"$VERSION\"" pyproject.toml || die "pyproject.toml 版本号替换失败"
-grep -q "APP_VERSION = \"$VERSION\"" backend/app/config.py || die "config.py 版本号替换失败"
-info "版本号已更新：pyproject.toml + backend/app/config.py → $VERSION"
+info "版本号已更新：pyproject.toml → $VERSION"
 
 if [ "$DRY_RUN" = 1 ]; then
-  git checkout -- pyproject.toml backend/app/config.py
+  git checkout -- pyproject.toml
   info "dry-run 结束：版本号已还原，未提交/未推送。预检与替换逻辑均验证通过。"
   exit 0
 fi
 
 # ── 2. 提交 + tag + 推送 ──
-git add pyproject.toml backend/app/config.py
+git add pyproject.toml
 git commit -m "release: v$VERSION"
 git tag "$TAG"
 if ! git push origin main "$TAG"; then

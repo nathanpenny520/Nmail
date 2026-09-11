@@ -24,7 +24,7 @@ bash scripts/release.sh 0.2.0 --dry-run      # 演练：只验证预检与版本
 脚本自动完成（约 10–20 分钟，其中 CI 等待占大头）：
 
 1. **预检**：版本文件无未提交改动、本地 main 不落后 origin、tag 不存在、gh 已登录
-2. **改版本号**：`pyproject.toml` + `backend/app/config.py` 两处同步
+2. **改版本号**：`pyproject.toml`（唯一来源；`config.py` 自 0.2.0 起 `importlib.metadata` 动态读取，**不再需要手动改**）
 3. **提交 `release: vX.Y.Z` → 打 tag → 推送**
 4. **盯 CI**（release.yml）：前端构建 → wheel 发 PyPI；三平台 PyInstaller 单文件挂 GitHub Release；Homebrew tap 自动同步新版本与 SHA256
 5. **winget 版本 PR**：等 Release 资产 → 取 exe SHA256 → fork 建分支写三份 manifest → 提 PR 到 `microsoft/winget-pkgs`
