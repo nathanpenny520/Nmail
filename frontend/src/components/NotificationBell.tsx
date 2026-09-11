@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, BellRing } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
+import type { NotificationItem } from '../types'
 
 type NotifyPermission = 'default' | 'granted' | 'denied' | 'unsupported'
 
@@ -14,6 +16,7 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [perm, setPerm] = useState<NotifyPermission>(notifyPermission())
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { data } = useQuery({
     queryKey: ['notifications'],
     queryFn: api.getNotifications,
@@ -45,6 +48,26 @@ export default function NotificationBell() {
     mutationFn: api.markNotificationsRead,
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   })
+
+  const readOneMutation = useMutation({
+    mutationFn: (id: number) => api.markNotificationRead(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+
+  // 通知点击：按类型跳转到对应内容（草稿→原邮件，摘要→摘要页，账号异常→设置）
+  const openNotification = (n: NotificationItem) => {
+    if (!n.is_read) readOneMutation.mutate(n.id)
+    const ref = n.ref_id
+    let target: string | null = null
+    if (n.type === 'ai_draft' && ref) target = `/?focus=${ref}`
+    else if (n.type === 'ai_draft_summary') target = '/drafts'
+    else if (n.type === 'digest') target = '/digest'
+    else if (n.type === 'account_error') target = '/settings'
+    if (target) {
+      setOpen(false)
+      navigate(target)
+    }
+  }
 
   return (
     <div className="relative">
@@ -96,7 +119,13 @@ export default function NotificationBell() {
               {data?.items.map((n) => (
                 <div
                   key={n.id}
-                  className={`border-b border-gray-50 px-4 py-2.5 ${n.is_read ? '' : 'bg-indigo-50/50'}`}
+                  role="button"
+                  tabIndex={0}
+                  className={`cursor-pointer border-b border-gray-50 px-4 py-2.5 transition-colors hover:bg-violet-50/60 ${
+                    n.is_read ? '' : 'bg-indigo-50/50'
+                  }`}
+                  onClick={() => openNotification(n)}
+                  onKeyDown={(e) => e.key === 'Enter' && openNotification(n)}
                 >
                   <div className="flex items-start gap-2">
                     {!n.is_read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />}

@@ -12,6 +12,7 @@ import logging
 import re
 from datetime import datetime, timezone
 
+
 from imap_tools.errors import MailboxLoginError
 
 from app.core.imap_client import MailConfig, connect_imap, fetch_new, get_uidvalidity
@@ -75,12 +76,13 @@ def _upsert_email(account_id: int, folder: str, parsed) -> int:
     text = (parsed.body_text or "").strip()
     snippet = re.sub(r"\s+", " ", text)[:180]
     date_iso = parsed.date.isoformat(timespec="seconds") if parsed.date else None
+    date_sort = parsed.date.astimezone(timezone.utc).isoformat(timespec="seconds") if parsed.date else None
     conn = get_conn()
     conn.execute(
         "INSERT OR IGNORE INTO emails"
         " (account_id, folder, uid, message_id, subject, sender_name, sender_email,"
-        "  recipients, cc, date, snippet, body_text, body_html, remote_img_count)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "  recipients, cc, date, date_sort, snippet, body_text, body_html, remote_img_count)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             account_id,
             folder,
@@ -92,6 +94,7 @@ def _upsert_email(account_id: int, folder: str, parsed) -> int:
             json.dumps(parsed.recipients, ensure_ascii=False),
             json.dumps(parsed.cc, ensure_ascii=False),
             date_iso,
+            date_sort,
             snippet,
             text,
             parsed.body_html or "",

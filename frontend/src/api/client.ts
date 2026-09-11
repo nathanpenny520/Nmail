@@ -165,6 +165,8 @@ export const api = {
 
   // ── 通知 ──
   getNotifications: () => request<NotificationsResp>('/api/notifications'),
+  markNotificationRead: (id: number) =>
+    request<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: 'POST' }),
   markNotificationsRead: () =>
     request<{ ok: boolean }>('/api/notifications/read-all', { method: 'POST' }),
 

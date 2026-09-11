@@ -496,8 +496,12 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             <div
               key={item.id}
               onClick={() => selectEmail(item)}
-              className={`block w-full cursor-pointer border-b border-gray-50 px-3 py-1 text-left transition-colors hover:bg-gray-50 ${
-                selectedId === item.id ? 'bg-indigo-50' : item.is_read ? '' : 'bg-blue-50/40'
+              className={`block w-full cursor-pointer border-b border-l-2 border-gray-50 px-3 py-1 text-left transition-colors hover:bg-gray-50 ${
+                selectedId === item.id
+                  ? 'border-l-indigo-500 bg-indigo-50'
+                  : item.is_read
+                    ? 'border-l-transparent'
+                    : 'border-l-indigo-400 bg-blue-50/40'
               }`}
             >
               <div className="flex items-center gap-1.5">

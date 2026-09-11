@@ -1,7 +1,7 @@
 """应用内通知中心 API。"""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.db.database import get_conn
 
@@ -34,6 +34,17 @@ def list_notifications(unread_only: bool = False) -> dict:
             for r in items
         ],
     }
+
+
+@router.post("/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: int) -> dict:
+    conn = get_conn()
+    row = conn.execute("SELECT id FROM notifications WHERE id = ?", (notification_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "通知不存在")
+    conn.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (notification_id,))
+    conn.commit()
+    return {"ok": True}
 
 
 @router.post("/notifications/read-all")

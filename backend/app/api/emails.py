@@ -189,7 +189,7 @@ def list_emails(
     ).fetchone()["n"]
     rows = conn.execute(
         f"SELECT {LIST_COLUMNS} FROM emails e JOIN accounts a ON a.id = e.account_id"
-        f"{clause} ORDER BY e.date IS NULL, e.date DESC, e.uid DESC LIMIT ? OFFSET ?",
+        f"{clause} ORDER BY COALESCE(e.date_sort, e.date) IS NULL, COALESCE(e.date_sort, e.date) DESC, e.uid DESC LIMIT ? OFFSET ?",
         [*params, limit, offset],
     ).fetchall()
     return {"total": total, "items": [_summary(r) for r in rows]}

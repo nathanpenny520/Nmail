@@ -1,13 +1,15 @@
 """SQLite 连接、版本化迁移与 KV 设置存取。
 
 单用户本地应用：单连接 + 写锁即可；WAL 提升读写并发。
-迁移为有序 SQL 脚本，记录在 schema_migrations 表，启动时按版本号补跑。
+迁移为有序 SQL 脚本，记录在 schema_migrations 表，启动时按版本号补跑；
+个别迁移附带的 Python 回填逻辑放在 run_migrations 迁移循环之后（幂等）。
 """
 from __future__ import annotations
 
 import json
 import sqlite3
 import threading
+from datetime import datetime, timezone
 from typing import Any
 
 from app.config import get_db_path
@@ -215,6 +217,15 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE sender_lists_v6 RENAME TO sender_lists;
         """,
     ),
+    (
+        7,
+        """
+        -- 排序修复：原 date 列是混合时区的 ISO 字符串，字典序比较会错序；
+        -- date_sort 为统一转 UTC 后的 ISO 串，列表按它排序
+        ALTER TABLE emails ADD COLUMN date_sort TEXT;
+        CREATE INDEX IF NOT EXISTS idx_emails_date_sort ON emails(date_sort DESC);
+        """,
+    ),
 ]
 
 
@@ -242,6 +253,25 @@ def run_migrations() -> None:
                 continue
             conn.executescript(sql)
             conn.execute("INSERT INTO schema_migrations (version) VALUES (?)", (version,))
+        conn.commit()
+
+    # 迁移 v7 的 Python 回填：历史邮件的 date_sort（UTC 归一化，混合时区无法 SQL 转换）
+    pending = conn.execute(
+        "SELECT COUNT(*) AS n FROM emails WHERE date_sort IS NULL AND date IS NOT NULL"
+    ).fetchone()["n"]
+    if pending:
+        rows = conn.execute(
+            "SELECT id, date FROM emails WHERE date_sort IS NULL AND date IS NOT NULL"
+        ).fetchall()
+        for row in rows:
+            try:
+                dt = datetime.fromisoformat(row["date"])
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                sort_val = dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+            except ValueError:
+                continue
+            conn.execute("UPDATE emails SET date_sort = ? WHERE id = ?", (sort_val, row["id"]))
         conn.commit()
 
 
