@@ -3,14 +3,20 @@
 单用户本地应用：单连接 + 写锁即可；WAL 提升读写并发。
 迁移为有序 SQL 脚本，记录在 schema_migrations 表，启动时按版本号补跑；
 个别迁移附带的 Python 回填逻辑放在 run_migrations 迁移循环之后（幂等）。
+
+事务边界（IMPROVEMENT_PLAN §3.2）：连接为 autocommit（isolation_level=None），
+单条语句即生效；多语句原子性显式用 tx()——进程内全局写锁 + BEGIN IMMEDIATE，
+成功提交、异常回滚。存量 conn.commit() 在 autocommit 下为无害 no-op，
+随触碰逐步替换为 tx()。
 """
 from __future__ import annotations
 
 import json
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterator
 
 from app.config import get_db_path
 
@@ -284,11 +290,37 @@ MIGRATIONS: list[tuple[int, str]] = [
 def get_conn() -> sqlite3.Connection:
     global _conn
     if _conn is None:
-        _conn = sqlite3.connect(get_db_path(), check_same_thread=False)
+        _conn = sqlite3.connect(get_db_path(), check_same_thread=False, isolation_level=None)
         _conn.row_factory = sqlite3.Row
         _conn.execute("PRAGMA journal_mode=WAL")
+        _conn.execute("PRAGMA synchronous=NORMAL")  # WAL 推荐档：免逐提交 fsync，断电只丢最后事务不损库
         _conn.execute("PRAGMA foreign_keys=ON")
+        _conn.execute("PRAGMA busy_timeout=5000")  # 跨进程写冲突（如另开 CLI）兜底等待
     return _conn
+
+
+_write_lock = threading.Lock()
+
+
+@contextmanager
+def tx() -> Iterator[sqlite3.Connection]:
+    """写事务：进程内全局写锁 + BEGIN IMMEDIATE；成功提交、异常回滚。
+
+    多语句原子性的显式入口（autocommit 连接不会自动开事务）；
+    读操作照旧直接 get_conn()（WAL 下读写不互斥）。
+    """
+    with _write_lock:
+        conn = get_conn()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield conn
+            conn.execute("COMMIT")
+        except BaseException:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.OperationalError:
+                pass  # 事务已被 SQLite 自动回滚
+            raise
 
 
 def run_migrations() -> None:
