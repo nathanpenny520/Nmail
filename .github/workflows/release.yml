@@ -79,7 +79,7 @@ jobs:
   # ③ 同步 Homebrew tap（可选：在仓库 Secrets 配置 HOMEBREW_TAP_TOKEN——
   #    一个可写 nathanpenny520/homebrew-nmail 的 fine-grained PAT；未配置时此 job 直接跳过）
   homebrew-tap:
-    needs: python-package
+    needs: [python-package, binaries]  # 要下载 macOS 资产算 SHA256，必须等 binaries 全部挂完
     runs-on: ubuntu-latest
     env:
       TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -96,7 +96,8 @@ jobs:
           OLD=$(curl -fsSL -H "$AUTH" -H "Accept: application/vnd.github.raw" \
             "https://api.github.com/repos/nathanpenny520/homebrew-nmail/contents/Formula/nmail.rb?ref=main")
           BLOB_SHA=$(curl -fsSL -H "$AUTH" \
-            "https://api.github.com/repos/nathanpenny520/homebrew-nmail/contents/Formula/nmail.rb?ref=main" --jq '.sha')
+            "https://api.github.com/repos/nathanpenny520/homebrew-nmail/contents/Formula/nmail.rb?ref=main" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['sha'])")
           NEW=$(printf '%s' "$OLD" \
             | sed -e "s#releases/download/v[0-9][0-9.]*#releases/download/${TAG_REF}#" \
                   -e "s#sha256 \"[0-9a-f]*\"#sha256 \"${SHA}\"#" \

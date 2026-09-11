@@ -50,6 +50,17 @@ bash scripts/release.sh 0.2.0 --dry-run      # 演练：只验证预检与版本
 | PyPI "file already exists" | **版本号已被永久占用**（上传成功过哪怕部分失败）→ 只能 bump 新版本号，不能复用 |
 | tag 推错了想重来 | 仅当该版本**从未成功上传 PyPI** 时可重指：`git push origin :refs/tags/vX && git tag -d vX` → 改完重新打 tag 推送 |
 | CI 某平台失败 | `gh run view <run_id> --repo nathanpenny520/Nmail --log-failed`；homebrew-tap job 失败先查 `HOMEBREW_TAP_TOKEN` 是否过期 |
+| homebrew-tap 404 | 历史坑：曾因①只等 python-package 就开跑（macOS 资产还没挂上，下载 404）②curl 误用 gh 的 `--jq` 参数——均已修复（needs 含 binaries；指纹解析改 python3）。tap 更新失败时可用 gh 手动改 formula 兜底（见 RELEASE.md 作者会话记录） |
+
+### 发行验证清单（发完必查）
+```bash
+gh run view <run_id> --repo nathanpenny520/Nmail      # ① CI 全绿
+curl -s https://pypi.org/pypi/nmail-app/json | grep -o '"version":"[^"]*"' | head -1   # ② PyPI 版本
+gh release view vX.Y.Z --repo nathanpenny520/Nmail    # ③ 三平台资产挂齐
+gh api repos/nathanpenny520/homebrew-nmail/contents/Formula/nmail.rb --jq '.content' \
+  | base64 -d | grep "^version"                       # ④ tap 版本
+winget search nathanpenny520.Nmail                    # ⑤ 合并后可见（PR 合并前 winget search 查不到）
+```
 
 ### winget 专属坑（全部真实踩过）
 
