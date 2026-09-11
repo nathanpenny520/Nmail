@@ -28,6 +28,11 @@
 
 ## 已完成
 
+### S-0911-2300-UI密度与侧栏拖拽 ✅
+- 产出：d6dec7c（遮蔽修复见 CHANGELOG d6dec7c 条目，属高影响 bug）
+- 遗留：EmailReader 拦截横幅仍为固定 text-xs（微小，可并入下轮 UI 清理）
+- 提示：打包后务必跑 scripts/sync_frontend.sh 或删 backend/app/static，否则旧快照会遮蔽新构建（现已由解析顺序根治）
+
 ### S-0911-2330-设置保存UX
 - 目标: 设置页保存体验修复（后端版本守护提示、通用表单粘性保存栏、字号即选即存）
 - 范围: frontend/src/pages/SettingsPage.tsx
