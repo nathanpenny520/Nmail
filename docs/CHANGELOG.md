@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 2cd5e74 — 重构：发送通路归一——mailbox.send_message 唯一发送 + core/outbox 草稿发送，调度器脱离 API 层（解 A2/A8，删 _imap_for）
+- **唯一发送路径**：`core/mailbox.py` 新增 `send_message()`（SMTP 未配置校验→发送→归档 Sent）与 `split_addresses()`（原 emails.re_split 迁入）；新增 `core/outbox.py`——`send_user_draft()` 是写信台草稿发送的唯一实现（状态校验/地址解析/消毒+纯文本派生/In-Reply-To/标记 sent/清附件），失败一律抛 `MailError`（后台线程不再出现 HTTPException）
+- **A2 消除**：scheduler 定时派发改调 `core.outbox.send_user_draft`，`scheduler → app.api` 反向依赖归零（grep 验证 scheduler/core/ai 无 app.api 引用）
+- **API 薄壳化**：新增 `api/deps.py`（MailError→HTTP 统一翻译表）；user_drafts/emails(batch+单封)/drafts.approve/accounts(文件夹×2) 全部改走 `mailbox.load_account/open_imap/send_message`；`_imap_for` 删除
+- **MailConfig 构造 8→1**：全项目仅剩 `mailbox.load_account` 一处；accounts.py 两处（添加账号预检/改密预检）为文档化例外——密码来自请求而非凭据库
+- 验证：ruff 通过；隔离实例预置账号+草稿，端到端 6 项冒烟——无 SMTP 400/空收件人 400/草稿不存在 404/文件夹 404/health 正常/失败不污染草稿状态；**真实账号发信回归（user_draft + AI approve 串线与 Sent 归档）待用户重启后验证**
+
 ## 06f2da2 — fix/加固：AI 档案一致性——双写备份防丢 + 主值丢失自愈 + 孤儿密钥对账清除 + 保存回填所见即所存
 - 背景（接 8e8dd2f 排障结论）：`ai_profiles` 主值曾在 09-11 05:25–07:27 间被外力抹掉，`ensure_migrated` 把「读不到」误判为旧版升级，静默重建单档案——真实档案全部消失、密钥成孤儿、失效旧 key 复活成现役（401 事故闭环）。用户拍板三条硬要求：保存即所见=所存、删除即删干净、绝不刷新后丢失
 - **双写备份**：`save_profiles` 同步写 `ai_profiles_backup`（最后一份有效列表）；`ensure_migrated` 读不到主值（缺失/损坏/非列表）时先从备份完整恢复（active 失效则回落首个档案），有备份绝不走旧配置重建；无备份才回落全新安装/旧迁移路径
