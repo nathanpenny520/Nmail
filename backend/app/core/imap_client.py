@@ -151,12 +151,26 @@ def iter_new_mail(mb: MailBox, folder: str, last_uid: int,
     for start in range(0, len(pending), chunk_size):
         window = pending[start : start + chunk_size]
         parsed: list[ParsedMessage] = []
-        for msg in mb.fetch(f"UID {window[0]}:{window[-1]}", mark_seen=False, bulk=True):
-            # 部分版本 imap-tools 返回 str 型 uid，统一转 int
-            uid = int(msg.uid) if msg.uid is not None else None
-            if uid is None or uid <= last_uid:
-                continue
-            parsed.append(_parse_message(msg, uid))
+
+        def _fetch_one(criteria_str: str) -> None:
+            for msg in mb.fetch(criteria_str, mark_seen=False, bulk=True):
+                # 部分版本 imap-tools 返回 str 型 uid，统一转 int
+                uid = int(msg.uid) if msg.uid is not None else None
+                if uid is None or uid <= last_uid:
+                    continue
+                parsed.append(_parse_message(msg, uid))
+
+        # 稠密集合（如收件箱：UID 与日期同调）→ 区间 FETCH 一批拉回；
+        # 稀疏集合（如「已删除/已发送」：邮件为移入、日期与 UID 不单调）——
+        # 区间/逗号集合都会被服务器展开成 min:max 连续拉取（实测 42 个 UID
+        # 拉回 388 封、31s，大文件夹直接撞超时→Windows SSL 报 Errno 22），
+        # 只能逐 UID 精确拉取
+        span = window[-1] - window[0] + 1
+        if span <= len(window) * 2 + 5:
+            _fetch_one(f"UID {window[0]}:{window[-1]}")
+        else:
+            for uid in window:
+                _fetch_one(f"UID {uid}")
         yield parsed
 
 

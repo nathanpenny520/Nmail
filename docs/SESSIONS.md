@@ -159,6 +159,6 @@
 - 目标: 大批量邮件同步慢 + QQ 账号 [Errno 22] Invalid argument 根因修复（方案经用户确认：全做四步）
 - 范围: backend(core/sync.py, imap_client.py, scheduler.py, api/accounts.py) + frontend(types/client/SettingsPage/AddAccountModal/MailBrowser/NotificationBell) + docs；顺带处理用户反馈：模型拉取 405（后端未重启所致，口头解答）+ AI Key 刷新后不可见（改明文回显，与 S-0911-2530 同链路）
 - 产出: 提交 e8c0084；ruff + npm build 通过；隔离实例验证重试链路与 connection_error 标记（服务端视角）
-- 遗留: 大邮箱真实账号首翻与断点续传待用户重启后验证；跟进: 真机首验暴露 search→uids 误用已修复（见 CHANGELOG），两账号真机只读验证通过
+- 遗留: 大邮箱断点续传待用户重启后验证；跟进①真机首验暴露 search→uids 误用已修复②用户重启后 QQ「已删除」文件夹仍 Errno 22 → 稀疏 UID 集合被服务器按区间展开的真相，密度自适应修复（见 CHANGELOG）③账号/文件夹下拉选择持久化
 - 备注: 用户两把 DeepSeek key（****42b0/****71b2）经真实验证均被平台判无效（42b0 当日早些时候曾成功，后于平台侧失效），已引导重新生成，非程序问题
 - 时间: 2026-09-12 凌晨 完成

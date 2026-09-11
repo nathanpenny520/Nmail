@@ -27,8 +27,12 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   const compose = useCompose()
   const aiEnabled = useAIEnabled()
 
-  const [accountId, setAccountId] = useState<number | null>(null)
-  const [folder, setFolder] = useState('INBOX')
+  // 账号/文件夹选择持久化：刷新或切标签页回来不重置（对齐分屏宽度等本地记忆）
+  const [accountId, setAccountId] = useState<number | null>(() => {
+    const v = Number(localStorage.getItem('nmail_sel_account'))
+    return Number.isFinite(v) && v > 0 ? v : null
+  })
+  const [folder, setFolder] = useState(() => localStorage.getItem('nmail_sel_folder') || 'INBOX')
   const [q, setQ] = useState('')
   const [qInput, setQInput] = useState('')
   const [starredOnly, setStarredOnly] = useState(false)
@@ -95,6 +99,18 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   })
   const accounts = accountsQuery.data?.accounts ?? []
   const hasAccounts = accounts.length > 0
+
+  // 持久化选择；持久化的账号已被删除时回落「全部邮箱」
+  useEffect(() => {
+    localStorage.setItem('nmail_sel_account', accountId === null ? '' : String(accountId))
+    localStorage.setItem('nmail_sel_folder', folder)
+  }, [accountId, folder])
+  useEffect(() => {
+    if (accountsQuery.data && accountId !== null && !accounts.some((a) => a.id === accountId)) {
+      setAccountId(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountsQuery.data, accountId])
   const prevSyncing = useRef<Set<number>>(new Set())
   useEffect(() => {
     const now = new Set(accounts.filter((a) => a.status === 'syncing').map((a) => a.id))
