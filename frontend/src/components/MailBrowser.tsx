@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ChevronLeft, ChevronRight, Inbox, Paperclip, Pencil, RefreshCw, Search, Sparkles, Star,
+  ChevronLeft, ChevronRight, Inbox, Loader2, Paperclip, Pencil, RefreshCw, Search, Sparkles, Star,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -93,6 +93,16 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
     void queryClient.invalidateQueries({ queryKey: ['email'] })
     void queryClient.invalidateQueries({ queryKey: ['notifications'] })
   }
+
+  // 全文模式下 Esc 返回列表
+  useEffect(() => {
+    if (selectedId == null) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedId])
 
   const actionMutation = useMutation({
     mutationFn: ({ id, action, folder: dest }: { id: number; action: string; folder?: string }) =>
@@ -196,16 +206,52 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
     )
   }
 
+  // 全文阅读模式：邮件占满主区域（Gmail 式），返回按钮 / Esc 回列表
+  if (selectedId != null) {
+    return (
+      <div className="flex h-full flex-col bg-white">
+        {detail ? (
+          <EmailReader
+            detail={detail}
+            archived={archived}
+            actionBusy={actionBusy}
+            onAction={(action, dest) =>
+              actionMutation.mutate({ id: detail.id, action, folder: dest })
+            }
+            onCompose={openCompose}
+            onShowImages={() => setShowImages(true)}
+            onBack={() => setSelectedId(null)}
+          />
+        ) : (
+          <div className="flex flex-1 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
+          </div>
+        )}
+        {compose && (
+          <ComposeModal
+            accounts={accounts}
+            init={compose}
+            onClose={() => setCompose(null)}
+            onSent={() => {
+              setCompose(null)
+              invalidateMail()
+            }}
+          />
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full">
-      {/* 邮件列表列 */}
-      <section className="flex w-[400px] shrink-0 flex-col border-r border-gray-200 bg-white">
-        <div className="space-y-2 border-b border-gray-100 p-3">
+      {/* 邮件列表（占满主区域） */}
+      <section className="flex min-w-0 flex-1 flex-col bg-white">
+        <div className="space-y-2 border-b border-gray-100 p-2.5">
           <div className="flex items-center gap-2">
-            <div className="relative flex-1">
+            <div className="relative max-w-xl flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
               <input
-                className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-2 text-[13px] outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 placeholder="搜索邮件，回车确认（覆盖所有文件夹）"
                 value={qInput}
                 onChange={(e) => setQInput(e.target.value)}
@@ -221,6 +267,17 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               <RefreshCw className={`mr-1 h-3.5 w-3.5 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
               收信
             </button>
+            {!archived && (
+              <button
+                className="inline-flex items-center rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+                onClick={() => organizeMutation.mutate()}
+                disabled={organizeMutation.isPending}
+                title="让 AI 为收件箱中未分类的邮件补跑分类，营销邮件自动归档"
+              >
+                <Sparkles className={`mr-1 h-3.5 w-3.5 ${organizeMutation.isPending ? 'animate-pulse' : ''}`} />
+                {organizeMutation.isPending ? '整理中…' : 'AI 整理'}
+              </button>
+            )}
             <button
               className="inline-flex items-center rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
               onClick={() => setCompose({ mode: 'new' })}
@@ -294,17 +351,6 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               ))}
             </select>
           </div>
-          {!archived && (
-            <button
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
-              onClick={() => organizeMutation.mutate()}
-              disabled={organizeMutation.isPending}
-              title="让 AI 为收件箱中未分类的邮件补跑分类，营销邮件自动归档"
-            >
-              <Sparkles className={`h-3.5 w-3.5 ${organizeMutation.isPending ? 'animate-pulse' : ''}`} />
-              {organizeMutation.isPending ? 'AI 整理中…' : 'AI 整理收件箱'}
-            </button>
-          )}
           <div className="flex items-center justify-between px-0.5 text-[11px] text-gray-400">
             <span>
               {archived ? '已归档' : q ? `搜索「${q}」` : '收件箱'} · 共 {total} 封
@@ -324,25 +370,23 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             <button
               key={item.id}
               onClick={() => selectEmail(item)}
-              className={`block w-full border-b border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50 ${
-                selectedId === item.id ? 'bg-indigo-50' : item.is_read ? '' : 'bg-blue-50/40'
+              className={`block w-full border-b border-gray-50 px-4 py-2 text-left transition-colors hover:bg-gray-50 ${
+                item.is_read ? '' : 'bg-blue-50/40'
               }`}
             >
-              <div className="flex items-center gap-2">
+              <div className="mx-auto flex max-w-5xl items-center gap-2">
                 <span
                   className="h-2 w-2 shrink-0 rounded-full"
                   style={{ backgroundColor: item.account_color }}
                   title={item.account_email}
                 />
-                <span className={`flex-1 truncate text-sm ${item.is_read ? 'text-gray-600' : 'font-semibold text-gray-900'}`}>
+                <span className={`w-44 shrink-0 truncate text-[13px] ${item.is_read ? 'text-gray-600' : 'font-semibold text-gray-900'}`}>
                   {item.sender_name || item.sender_email}
                 </span>
-                <span className="shrink-0 text-[11px] text-gray-400">{shortDate(item.date)}</span>
-              </div>
-              <div className={`mt-0.5 truncate text-sm ${item.is_read ? 'text-gray-700' : 'font-medium text-gray-900'}`}>
-                {item.subject || '（无主题）'}
-              </div>
-              <div className="mt-0.5 flex items-center gap-1.5">
+                <span className={`min-w-0 flex-1 truncate text-[13px] ${item.is_read ? 'text-gray-700' : 'font-medium text-gray-900'}`}>
+                  {item.subject || '（无主题）'}
+                  <span className="ml-2 font-normal text-gray-400">{item.snippet}</span>
+                </span>
                 {item.category && CATEGORY_META[item.category] && (
                   <span
                     className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${CATEGORY_META[item.category].cls}`}
@@ -350,9 +394,11 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
                     {CATEGORY_META[item.category].label}
                   </span>
                 )}
-                <span className="flex-1 truncate text-xs text-gray-400">{item.snippet}</span>
                 {item.has_attachments && <Paperclip className="h-3 w-3 shrink-0 text-gray-400" />}
                 {item.starred && <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />}
+                <span className="w-12 shrink-0 text-right text-[11px] text-gray-400">
+                  {shortDate(item.date)}
+                </span>
               </div>
             </button>
           ))}
@@ -378,26 +424,6 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             </div>
           )}
         </div>
-      </section>
-
-      {/* 阅读区 */}
-      <section className="min-w-0 flex-1 bg-gray-50">
-        {detail ? (
-          <EmailReader
-            detail={detail}
-            archived={archived}
-            actionBusy={actionBusy}
-            onAction={(action, dest) =>
-              actionMutation.mutate({ id: detail.id, action, folder: dest })
-            }
-            onCompose={openCompose}
-            onShowImages={() => setShowImages(true)}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm text-gray-300">
-            选择一封邮件阅读
-          </div>
-        )}
       </section>
 
       {compose && (

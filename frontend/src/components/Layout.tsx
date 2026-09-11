@@ -10,7 +10,7 @@ const navItems = [
 ]
 
 const navLinkClass = (isActive: boolean) =>
-  `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+  `flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
     isActive
       ? 'bg-indigo-50 font-medium text-indigo-700'
       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -19,10 +19,10 @@ const navLinkClass = (isActive: boolean) =>
 export default function Layout() {
   return (
     <div className="flex h-screen bg-gray-50 text-gray-900">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-gray-200 bg-white">
-        <div className="flex items-center gap-2 px-5 py-5">
-          <Mail className="h-6 w-6 text-indigo-600" />
-          <span className="text-lg font-bold tracking-tight">Nmail</span>
+      <aside className="flex w-44 shrink-0 flex-col border-r border-gray-200 bg-white">
+        <div className="flex items-center gap-2 px-4 py-4">
+          <Mail className="h-5 w-5 text-indigo-600" />
+          <span className="text-[15px] font-bold tracking-tight">Nmail</span>
         </div>
         <nav className="flex-1 space-y-1 px-3">
           {navItems.map(({ to, label, icon: Icon }) => (
