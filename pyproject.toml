@@ -39,6 +39,11 @@ where = ["backend"]
 [tool.setuptools.package-data]
 app = ["static/**/*"]
 
+# ── pytest（T1：纯函数层优先，零覆盖率指标）──────────────────────
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+
 # ── 分层规则（IMPROVEMENT_PLAN T4）────────────────────────────────
 # 禁止 core/scheduler/ai/db 反向依赖 API 层；检查命令见 CLAUDE.md：
 #   ruff check app --select F,TID251
