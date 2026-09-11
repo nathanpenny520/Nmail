@@ -339,13 +339,15 @@ def _smtp_auth(server: smtplib.SMTP, cfg: MailConfig) -> None:
 
     微软不推荐但允许的 465 与 Gmail 465 均广播 AUTH=XOAUTH2；个别服务器不广播
     却支持时回退到裸 docmd（初始响应直接拼在 AUTH 命令后）。
+    注意 smtplib 契约：authobject 先被**无参**调用取初始响应，服务器回 334
+    挑战时才带参调用——XOAUTH2 的错误挑战约定回空串（让服务器给出最终错误）。
     """
     if not cfg.access_token:
         server.login(cfg.email, cfg.password)
         return
     auth_str = oauth.xoauth2_string(cfg.email, cfg.access_token)
     try:
-        server.auth("XOAUTH2", lambda _challenge: auth_str)
+        server.auth("XOAUTH2", lambda _challenge=None: auth_str if _challenge is None else "")
     except smtplib.SMTPNotSupportedError:
         b64 = base64.b64encode(auth_str.encode("ascii")).decode("ascii")
         code, resp = server.docmd("AUTH", f"XOAUTH2 {b64}")

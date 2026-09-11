@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: SMTP XOAUTH2 认证回调契约（Gmail 发信必败修复）
+- 用户真实发信首测即中：smtplib.auth 的 authobject **首次是无参调用**（取 SASL 初始响应），lambda 带一个必选参数直接 TypeError（`_smtp_auth.<locals>.<lambda>() missing 1 required positional argument`）——Gmail OAuth 发信 100% 失败
+- 修正回调签名：`lambda _challenge=None: auth_str if _challenge is None else ""`——无参调用回初始响应串；服务器 334 挑战（XOAUTH2 错误应答约定）回空串让服务器给出最终错误。IMAP 侧不受影响（imaplib 的 authenticate 恒带参调用）
+- 该报错同时佐证用户代理链路已通：连接与 EHLO 均成功，仅认证步骤崩
+- 验证：pytest 84 例全绿（新增回调契约回归：无参初始响应=完整 XOAUTH2 串、挑战应答=空串）；ruff 通过
+
 ## f74dfdb — fix: OAuth 换令牌代理降级——代理不可达自动直连（Outlook 误伤修复）
 - 用户实测：Outlook 授权在大陆直连可达，但换令牌被"无条件跟随全局代理"设计拦死（代理端口没开 → WinError 10061 拒绝）——原设计假设"OAuth 服务商都是被墙方"不成立
 - 修正：全局代理非空时优先走代理；**建连类失败**（transport 标记：拒绝/超时/ImportError）自动降级直连重试一次；**业务拒绝**（invalid_client 等）不重试（直连结果相同）；未配置代理行为不变（httpx trust_env 仍生效）。Gmail 直连必死场景如实报错，文案不变

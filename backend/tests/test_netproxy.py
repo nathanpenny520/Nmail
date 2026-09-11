@@ -217,6 +217,27 @@ def test_token_exchange_no_proxy_stays_direct(monkeypatch):
     assert tokens["access_token"] == "at" and calls == [None]
 
 
+# ── SMTP XOAUTH2 回调契约（回归：smtplib 首次无参调用曾致发信必败）──
+
+def test_smtp_auth_callback_accepts_initial_and_challenge():
+    """smtplib.auth 先无参调用取初始响应、334 挑战时带参调用（XOAUTH2 回空串）。"""
+    cfg = imap_client.MailConfig(
+        email="x@gmail.com", password="", imap_server="imap.gmail.com",
+        smtp_server="smtp.gmail.com", access_token="tok123")
+    captured: dict = {}
+
+    class FakeServer:
+        def auth(self, mechanism, authobject, *, initial_response_ok=True):
+            captured["mech"] = mechanism
+            captured["initial"] = authobject()          # 无参：初始响应
+            captured["challenge"] = authobject(b"err")  # 334 挑战：应回空串
+
+    imap_client._smtp_auth(FakeServer(), cfg)
+    assert captured["mech"] == "XOAUTH2"
+    assert captured["initial"] == oauth.xoauth2_string("x@gmail.com", "tok123")
+    assert captured["challenge"] == ""
+
+
 # ── 设置 API 与账号开关 API ──────────────────────────────────
 
 def test_settings_network_proxy_roundtrip():
