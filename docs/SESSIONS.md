@@ -45,7 +45,7 @@
 ### S-0911-1028-apple-touch-icon ✅
 - 目标: apple-touch-icon 按 Apple 规范重排（去掉自带圆角/阴影导致的「图标套图标」问题）
 - 范围: scripts/gen_icons.py、frontend/public/apple-touch-icon.png、docs/CHANGELOG.md、backend/app/static（仅同步产物）
-- 产出: gen_icons.py apple_touch() 改为放大 6% 裁切+四角弧内取样渐变补底（待提交）；npm build 通过；dist 与 backend/app/static 均已同步
+- 产出: 提交 f8e00d4（gen_icons.py apple_touch() 改为放大 6% 裁切+四角弧内取样渐变补底，由后续会话代提交）；npm build 通过；dist 与 backend/app/static 均已同步（哈希核对一致）
 - 遗留: 无（favicon/exe 图标无需跟进，浏览器不套蒙版不受此问题影响）
 - 时间: 2026-09-11 上午 完成
 
