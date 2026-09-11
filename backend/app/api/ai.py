@@ -12,8 +12,8 @@ from pydantic import BaseModel
 from app.ai import profiles, tasks
 from app.api.chats import append_message, require_session
 from app.api.deps import ai_config_or_400, ai_result_or_http
+from app.core import jobs
 from app.core.mail_html import markdown_body_html, sanitize_outgoing_html
-from app.core.pipeline import classify_missing
 from app.db.database import get_conn
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -240,19 +240,14 @@ def write(payload: WriteIn) -> dict:
 
 @router.post("/organize")
 def organize(payload: OrganizeIn) -> dict:
-    """为未分类邮件补跑分类（「AI 整理」按钮）。"""
-    conn = get_conn()
-    if payload.account_id is not None:
-        account_ids = [payload.account_id]
-    else:
-        account_ids = [int(r["id"]) for r in conn.execute("SELECT id FROM accounts").fetchall()]
-    total = {"classified": 0, "archived": 0, "drafts": 0, "skipped_no_ai": False}
-    for aid in account_ids:
-        result = classify_missing(aid, payload.folder, payload.limit)
-        total["classified"] += result["classified"]
-        total["archived"] += result["archived"]
-        total["skipped_no_ai"] = total["skipped_no_ai"] or result["skipped_no_ai"]
-    return total
+    """为未分类邮件补跑分类（「AI 整理」按钮）——异步任务。
+
+    立即返回 {job_id}；进度/结果经 GET /api/jobs/{id} 轮询（前端 useJob）。
+    同账号重复点击去重复用同一任务。
+    """
+    job_id = jobs.submit("organize", account_id=payload.account_id, dedupe=True,
+                         folder=payload.folder, limit=payload.limit)
+    return {"job_id": job_id}
 
 
 @router.get("/usage")

@@ -6,9 +6,10 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, type EmailQuery } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
+import { useJob } from '../api/useJob'
 import { categoryBadgeMap, useCategories } from '../api/useMeta'
 import {
-  type EmailDetail, type EmailSummary, type FolderInfo,
+  type EmailDetail, type EmailSummary, type FolderInfo, type OrganizeResult,
 } from '../types'
 import { useCompose } from './compose/ComposeContext'
 import EmailReader from './EmailReader'
@@ -267,24 +268,34 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
     onError: (error: Error) => setSyncMessage(`同步触发失败：${error.message}`),
   })
 
+  // AI 整理：提交后台 job（HTTP 立即返回），轮询进度，终态展示结果
+  const { job: organizeJob, start: startOrganizeJob } = useJob((finished) => {
+    if (finished.status === 'failed') {
+      setSyncMessage(`AI 整理失败：${finished.detail || '未知错误'}`)
+      setTimeout(() => setSyncMessage(null), 6000)
+      return
+    }
+    const result = (finished.result ?? {}) as Partial<OrganizeResult>
+    invalidateMail()
+    if (result.skipped_no_ai) {
+      setSyncMessage('AI 未配置或已停用，请到设置 - AI 配置检查')
+    } else {
+      setSyncMessage(
+        `AI 整理完成：分类 ${result.classified ?? 0} 封${(result.archived ?? 0) > 0 ? `，归档营销 ${result.archived} 封` : ''}`,
+      )
+    }
+    setTimeout(() => setSyncMessage(null), 6000)
+  })
+
   const organizeMutation = useMutation({
     mutationFn: () => api.aiOrganize({ account_id: accountId ?? undefined, folder: 'INBOX', limit: 200 }),
-    onSuccess: (result) => {
-      invalidateMail()
-      if (result.skipped_no_ai) {
-        setSyncMessage('AI 未配置或已停用，请到设置 - AI 配置检查')
-      } else {
-        setSyncMessage(
-          `AI 整理完成：分类 ${result.classified} 封${result.archived > 0 ? `，归档营销 ${result.archived} 封` : ''}`,
-        )
-      }
-      setTimeout(() => setSyncMessage(null), 6000)
-    },
+    onSuccess: ({ job_id }) => startOrganizeJob(job_id),
     onError: (error: Error) => {
-      setSyncMessage(`AI 整理失败：${error.message}`)
+      setSyncMessage(`AI 整理提交失败：${error.message}`)
       setTimeout(() => setSyncMessage(null), 6000)
     },
   })
+  const organizing = organizeMutation.isPending || organizeJob?.status === 'running'
 
   const selectEmail = (item: EmailSummary) => {
     setSelectedId(item.id)
@@ -384,11 +395,11 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             <button
               className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 t-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
               onClick={() => organizeMutation.mutate()}
-              disabled={organizeMutation.isPending}
+              disabled={organizing}
               title="让 AI 为收件箱中未分类的邮件补跑分类，营销邮件自动归档"
             >
-              <Sparkles className={`mr-1 h-3.5 w-3.5 ${organizeMutation.isPending ? 'animate-pulse' : ''}`} />
-              {organizeMutation.isPending ? '整理中…' : 'AI 整理'}
+              <Sparkles className={`mr-1 h-3.5 w-3.5 ${organizing ? 'animate-pulse' : ''}`} />
+              {organizing ? '整理中…' : 'AI 整理'}
             </button>
           )}
           <button
@@ -570,6 +581,19 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               {folderSyncing && ' · 同步中…'}
             </span>
             {syncMessage && <span className="text-indigo-500">{syncMessage}</span>}
+            {organizeJob && organizeJob.status === 'running' && (
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-28 overflow-hidden rounded-full bg-indigo-100">
+                  <span
+                    className="block h-full rounded-full bg-indigo-500 transition-all duration-500"
+                    style={{ width: `${Math.max(5, Math.round(organizeJob.progress * 100))}%` }}
+                  />
+                </span>
+                <span className="t-xs text-indigo-500">
+                  AI 整理 {Math.round(organizeJob.progress * 100)}%{organizeJob.detail ? ` · ${organizeJob.detail}` : ''}
+                </span>
+              </span>
+            )}
           </div>
         </div>
 

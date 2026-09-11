@@ -268,6 +268,17 @@ export interface OrganizeResult {
   skipped_no_ai: boolean
 }
 
+export interface JobInfo {
+  id: number
+  kind: string
+  account_id: number | null
+  status: 'running' | 'done' | 'failed'
+  progress: number
+  stage: string
+  detail: string
+  result: Record<string, unknown> | null
+}
+
 export interface UsageStats {
   calls: number
   prompt_tokens: number

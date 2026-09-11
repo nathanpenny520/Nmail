@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 
 from app.ai import tasks
 from app.ai.categories import AUTO_ARCHIVE_CATEGORIES
+from app.core import jobs
 from app.core.sync import add_notification
 from app.db.database import get_conn
 
@@ -246,3 +247,26 @@ def classify_missing(account_id: int, folder: str = "INBOX", limit: int = 200) -
         classified += len(results)
         archived += arch
     return {"classified": classified, "archived": archived, "drafts": 0, "skipped_no_ai": False}
+
+
+@jobs.runner("organize")
+def organize_job(job_id: int, account_id: int | None = None, folder: str = "INBOX",
+                 limit: int = 200) -> dict:
+    """「AI 整理」任务体（IMPROVEMENT_PLAN §3.4）：逐账号补跑分类并上报进度。
+
+    account_id=None 表示全部账号；结果结构与原同步端点一致，写入 result_json。
+    """
+    if account_id is not None:
+        ids = [account_id]
+    else:
+        ids = [int(r["id"]) for r in get_conn().execute("SELECT id FROM accounts").fetchall()]
+    total = {"classified": 0, "archived": 0, "drafts": 0, "skipped_no_ai": False}
+    for index, aid in enumerate(ids):
+        result = classify_missing(aid, folder, limit)
+        total["classified"] += result["classified"]
+        total["archived"] += result["archived"]
+        total["drafts"] += result["drafts"]
+        total["skipped_no_ai"] = total["skipped_no_ai"] or result["skipped_no_ai"]
+        jobs.report(job_id, stage="classifying", progress=(index + 1) / max(1, len(ids)),
+                    detail=f"账号 {index + 1}/{len(ids)}")
+    return total

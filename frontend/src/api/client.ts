@@ -13,8 +13,8 @@ import type {
   EmailDetail,
   EmailListResp,
   FolderInfo,
+  JobInfo,
   NotificationsResp,
-  OrganizeResult,
   ProbeResult,
   ProvidersResp,
   SenderListEntry,
@@ -269,11 +269,15 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   aiOrganize: (payload: { account_id?: number; folder?: string; limit?: number }) =>
-    request<OrganizeResult>('/api/ai/organize', {
+    request<{ job_id: number }>('/api/ai/organize', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
   aiUsage: () => request<UsageStats>('/api/ai/usage'),
+
+  // ── 后台任务 ──
+  getJob: (id: number) => request<JobInfo>(`/api/jobs/${id}`),
+  getActiveJobs: () => request<{ jobs: JobInfo[] }>('/api/jobs/active'),
 
   // ── AI 会话历史 ──
   getChats: () => request<{ sessions: ChatSession[] }>('/api/ai/chats'),

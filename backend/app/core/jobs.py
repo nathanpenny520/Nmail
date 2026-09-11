@@ -34,8 +34,10 @@ def submit(kind: str, *, account_id: int | None = None, dedupe: bool = False,
     """登记 job 并提交线程池，立即返回 job_id。
 
     dedupe=True 时同 kind + 同 account_scope 的 running 任务直接复用
-    （防双击重复提交，如「AI 整理」）。
+    （防双击重复提交，如「AI 整理」）。account_id 既作去重作用域也并入
+    payload，执行体可按需取用。
     """
+    payload.setdefault("account_id", account_id)
     with tx() as conn:
         if dedupe:
             row = conn.execute(
