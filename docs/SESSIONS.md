@@ -21,7 +21,7 @@
 ### S-0911-1530-空草稿懒持久化
 - 目标: 尊重"空邮件也能存草稿"的用户行为——点写信不再立即落库（懒持久化，首编辑/显式保存才建行），撤销全部空稿自动清理；标签引入稳定 tabId 支持创建后换绑真实 id
 - 范围: frontend components/compose/ComposeContext.tsx、ComposeForm.tsx、ComposeWorkbench.tsx、components/Layout.tsx、pages/UserDraftsPage.tsx；docs（此前已代提交 S-0911-2500 成果 9480351）
-- 产出: 见 CHANGELOG「空邮件可存草稿（懒持久化）」条目（哈希回填见 git log）
+- 产出: 提交 2b73d32（见 CHANGELOG「空邮件可存草稿（懒持久化）」条目）
 - 遗留: 上一版遗留的库内空稿不会被自动删（用户关标签选丢弃手动清）；刷新时未保存的 ephemeral 标签内容会丢（有 beforeunload 拦截提示）
 - 时间: 2026-09-11 15:45 完成
 - 目标: 调研草稿箱/写信台保存链路，修复发现的 bug（缓存过期误删草稿等）
@@ -139,3 +139,8 @@
 - 协调: 与草稿保存会话并行无冲突（ComposeForm 新鲜重读后仅加条件渲染）；期间误向真实库插入过测试账号 t@t.com，已当场清理（id=3，无关联数据），真实账号未受影响
 - 遗留: 提交后回填 CHANGELOG 哈希；后端改动需重启 python run.py 生效；AI 总开关与文风提示词待用户真实账号验证
 - 时间: 2026-09-11 深夜 完成
+
+### S-0911-2530-AI配置体验修补
+- 目标: ①Base URL 填完自动拉取模型列表（免手动按钮、免先保存）②API Key 输入框默认明文可见（带显隐切换）③取消「默认」档案概念——全新安装不预建档案、旧迁移档案按模型名命名、历史自动生成的「默认」档案一次性按模型名重命名
+- 范围: backend(ai/profiles.py, api/profiles.py) + frontend(client.ts, SettingsPage, ManagerPage 切换器标签) + docs
+- 时间: 2026-09-11 深夜 进行中
