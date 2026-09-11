@@ -3,6 +3,10 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix：同步分块误用 MailBox.search → uids（真机首翻即 AttributeError）
+- e8c0084 的 `iter_new_mail` 调用了不存在的 `MailBox.search`（imap-tools 正确方法为 `uids`）——隔离冒烟未接真实 IMAP 未暴露，真机一同步两账号全报 `'MailBox' object has no attribute 'search'` 连接异常
+- 修复并真机只读验证（不落库）：QQ 账号最近 30 天 167 封、自定义账号 11 封，分块拉取链路（uids SEARCH → 逐块 FETCH → 解析）全部通过
+
 ## e8c0084 — 功能/UX：同步引擎四步优化（分块断点/批量入库/超时重试/后台化进度） + AI Key 明文回显
 - **同步慢+报错根因**：`bulk=True` 整批一条 FETCH（大邮箱首翻=巨型响应，QQ 中途掐断，Windows SSL 层报 `[Errno 22] Invalid argument`）+ 每封一提交（5000 封=5000 次 fsync）+ 同步阻塞请求线程/调度 tick；且失败时 last_uid 未落库，下次原地重放同一巨型请求，反复失败
 - **分块断点续拉**：`fetch_new` 重做为 `iter_new_mail` 生成器——先轻量 SEARCH UID 清单，按 ~100 封/块升序 `UID a:b` FETCH；每块「入库+断点」同一事务提交，中断/失败从断点续传，不再整批重放

@@ -147,7 +147,7 @@ def iter_new_mail(mb: MailBox, folder: str, last_uid: int,
     else:
         criteria = f"UID {last_uid + 1}:*"
 
-    pending = sorted(int(u) for u in mb.search(criteria) if int(u) > last_uid)
+    pending = sorted(int(u) for u in mb.uids(criteria) if int(u) > last_uid)
     for start in range(0, len(pending), chunk_size):
         window = pending[start : start + chunk_size]
         parsed: list[ParsedMessage] = []
