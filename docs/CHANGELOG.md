@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — OAuth 回调路径按客户端可配置（loopback 根路径兼容）
+## 2135257 — OAuth 回调路径按客户端可配置（loopback 根路径兼容）
 - 背景：用户拟内置公开桌面客户端凭据实现一键授权（方案文档含凭据值，审核后仅存本机不入库）。经审核：**凭据值不入仓库**（TB 源码明文禁止复用——"Don't copy these values for your own application"；公开仓库即分发，Google/Mozilla 均扫描公开代码），只采纳其技术基座——回调路径可配置；凭据由用户在各机设置页自行粘贴（secrets.json 随数据目录持久化，双机各配一次）
 - 后端：`oauth_client:{provider}` 存储新增 `redirect_path`（缺省 `/oauth/callback`，坏值兜底回退默认；默认值不落盘保持旧配置结构不变）；授权 URL 与令牌交换按客户端路径拼装回调地址；`GET /` 新增根路径回调——按 state 参数与 SPA 首页分流（授权重定向必带 state），api_router 先于 SPA 挂载注册故仅拦截精确 `/`；`DIST_DIR` 解析从 main.py 移至 config.py（api 层需读取，避免循环导入）
 - 前端：回调地址下沉到各服务商行内（地址随登记路径变化，带复制按钮），编辑面板新增「回调路径」输入；`/api/oauth/status` 响应移除顶层 `redirect_uri`、改为逐服务商 `redirect_path` + `redirect_uri`（**接口变更**，openapi.json 快照与 schema.d.ts 已同步再生成）

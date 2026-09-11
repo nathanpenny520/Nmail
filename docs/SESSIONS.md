@@ -18,11 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-### S-0911-2351-OAuth回调路径
+### S-0911-2351-OAuth回调路径 ✅
 - 目标: OAuth 回调路径按客户端可配置（`redirect_path` 字段）——兼容登记为 loopback 根路径 `/` 的公开桌面客户端（自用粘贴 TB 凭据场景，**凭据值不进仓库**）；根路径回调与 SPA 首页共存（按 state 参数分流）
-- 范围: backend(config.py 移入 DIST_DIR、main.py、core/oauth.py、api/oauth.py)、frontend(types/client/OauthSettings)、backend/tests/test_oauth.py、docs（ARCHITECTURE/CHANGELOG/OAuth2 使用指南/内置凭据方案审核结论）
-- 备注: 方案文档《内置公开OAuth凭证一键授权方案.md》经审核只采纳 redirect_path 基座部分；内置凭据因 TB 源码明文禁止复用（"Don't copy these values"）且公开仓库即分发，凭据由用户在各机设置页自行粘贴
-- 开工: 2026-09-11 23:51
+- 范围: backend(config.py 移入 DIST_DIR、main.py、core/oauth.py、api/oauth.py)、frontend(types/client/OauthSettings/openapi/schema)、backend/tests/test_oauth.py、docs（ARCHITECTURE/CHANGELOG/OAuth2 使用指南/.gitignore）
+- 产出: 提交 2135257（见 CHANGELOG「OAuth 回调路径按客户端可配置」条目）；pytest 88 例全绿 + ruff（app 门禁）+ npm build + 隔离实例冒烟（根路径无 state 出 SPA/带 state 出回调页/子路由不受影响/未构建 404）；方案文档审核结论写入其附录 B（该文件含凭据值，已加 .gitignore 永不入库）
+- 接口变更: `/api/oauth/status` 移除顶层 `redirect_uri`，逐服务商返回 `redirect_path` + `redirect_uri`（openapi 快照已按新流程再生成，压缩格式一次性 churn −4332 行）
+- 遗留: 用户双机（Windows/macOS）各在设置页粘贴凭据+回调路径填 `/` 后做真实端到端授权；tests/ 目录 3 处既有 ruff 提示（官方门禁只查 app/）不属本变更；本机烟测时发现 8721 端口另有一个 Nmail 实例在跑（PID 34356，非本会话启动，未触碰）
+- 时间: 2026-09-12 00:20 完成
 
 ### S-0912-2230-OAuth使用指南 ✅
 - 目标: 用户单日踩完全部 OAuth 坑后要求总结——写面向使用者的实操手册
