@@ -296,3 +296,37 @@ def list_account_folders(account_id: int) -> dict:
             return {"folders": imap_client.list_folders(mb)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"获取文件夹失败：{exc}") from exc
+
+
+class FolderCreateIn(BaseModel):
+    name: str
+
+
+@router.post("/accounts/{account_id}/folders")
+def create_folder(account_id: int, payload: FolderCreateIn) -> dict:
+    """在服务器上创建自定义文件夹（VSCode 资源管理器式）。"""
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(400, "文件夹名不能为空")
+    row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "账号不存在")
+    password = get_secret(f"account_pwd:{account_id}")
+    if not password:
+        raise HTTPException(400, "缺少密码凭证")
+    cfg = imap_client.MailConfig(
+        email=row["email"], password=password,
+        imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
+    )
+    try:
+        with imap_client.connect_imap(cfg) as mb:
+            existing = {f.name for f in mb.folder.list()}
+            if name in existing or name.upper() == "INBOX":
+                raise HTTPException(400, f"文件夹「{name}」已存在")
+            if not mb.folder.create(name):
+                raise HTTPException(502, "服务器拒绝创建文件夹")
+            return {"ok": True, "name": name}
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"创建文件夹失败：{exc}") from exc

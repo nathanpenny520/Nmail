@@ -32,6 +32,11 @@ body > #root {
   height: calc(100vh / var(--app-zoom));
 }
 
+/* 局部再紧凑：导航侧栏与页眉在全局缩放之上再缩 */
+.zoom-compact {
+  zoom: 0.75;
+}
+
 .t-xs { font-size: var(--fs-xs); }
 .t-sm { font-size: var(--fs-sm); }
 .t-md { font-size: var(--fs-md); }

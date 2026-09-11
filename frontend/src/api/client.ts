@@ -145,6 +145,11 @@ export const api = {
     ),
   getFolders: (id: number) =>
     request<{ folders: FolderInfo[] }>(`/api/accounts/${id}/folders`),
+  createFolder: (id: number, name: string) =>
+    request<{ ok: boolean; name: string }>(`/api/accounts/${id}/folders`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
 
   // ── 邮件 ──
   getEmails: (query: EmailQuery) =>

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ChevronLeft, ChevronRight, Inbox, Loader2, Paperclip, Pencil, RefreshCw, Search, Sparkles, Star,
+  ChevronLeft, ChevronRight, Inbox, Loader2, Paperclip, Pencil, Plus, RefreshCw, Search, Sparkles, Star,
 } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -117,6 +117,26 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
       invalidateMail()
     }
   }
+
+  // 自建文件夹（VSCode 资源管理器式）
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const createFolderMutation = useMutation({
+    mutationFn: () => api.createFolder(accountId!, newFolderName.trim()),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['folders', accountId] })
+      setFolder(result.name)
+      setPage(0)
+      setSelectedId(null)
+      setCreatingFolder(false)
+      setNewFolderName('')
+      void syncFolderThenList(result.name)
+    },
+    onError: (error: Error) => {
+      setSyncMessage(`创建失败：${error.message}`)
+      setTimeout(() => setSyncMessage(null), 6000)
+    },
+  })
 
   const listQueryKey = ['emails', { archived, accountId, folder, q, starredOnly, category, page }]
   const listQuery = useQuery({
@@ -310,7 +330,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
     <div className="flex h-full flex-col">
       {/* 页眉：全局搜索 + 收信 / AI 整理 / 写信（全屏阅读时隐藏） */}
       {!inFullRead && (
-        <header className="flex shrink-0 items-center gap-1.5 border-b border-gray-200 bg-white px-3 py-2">
+        <header className="zoom-compact flex shrink-0 items-center gap-1.5 border-b border-gray-200 bg-white px-3 py-2">
           <div className="relative min-w-0 max-w-2xl flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
@@ -374,22 +394,31 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               ))}
             </select>
             {!archived && !q && accountId != null && (
-              <select
-                className="min-w-0 flex-1 rounded-lg border border-gray-300 px-1.5 py-1 t-sm outline-none focus:border-indigo-500"
-                value={folder}
-                onChange={(e) => {
-                  setFolder(e.target.value)
-                  setPage(0)
-                  setSelectedId(null)
-                  void syncFolderThenList(e.target.value)
-                }}
-              >
-                {folders.map((f) => (
-                  <option key={f.name} value={f.name}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-1.5 py-1 t-sm outline-none focus:border-indigo-500"
+                  value={folder}
+                  onChange={(e) => {
+                    setFolder(e.target.value)
+                    setPage(0)
+                    setSelectedId(null)
+                    void syncFolderThenList(e.target.value)
+                  }}
+                >
+                  {folders.map((f) => (
+                    <option key={f.name} value={f.name}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="inline-flex shrink-0 items-center rounded-md border border-gray-300 p-1 t-sm text-gray-500 hover:border-indigo-400 hover:text-indigo-600"
+                  title="在服务器上新建文件夹"
+                  onClick={() => setCreatingFolder((v) => !v)}
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </>
             )}
             <button
               className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border px-1.5 py-1 t-sm ${
@@ -423,6 +452,36 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               ))}
             </select>
           </div>
+          {/* 新建文件夹输入行 */}
+          {creatingFolder && accountId != null && (
+            <div className="flex items-center gap-1.5">
+              <input
+                className="min-w-0 flex-1 rounded-lg border border-indigo-300 px-2 py-1 t-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                placeholder="新文件夹名称，回车创建"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newFolderName.trim()) createFolderMutation.mutate()
+                  if (e.key === 'Escape') setCreatingFolder(false)
+                }}
+                autoFocus
+              />
+              <button
+                className="shrink-0 rounded-lg bg-indigo-600 px-2 py-1 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                onClick={() => createFolderMutation.mutate()}
+                disabled={!newFolderName.trim() || createFolderMutation.isPending}
+              >
+                {createFolderMutation.isPending ? '创建中…' : '创建'}
+              </button>
+              <button
+                className="shrink-0 rounded-lg border border-gray-300 px-2 py-1 t-sm text-gray-500 hover:bg-gray-50"
+                onClick={() => setCreatingFolder(false)}
+              >
+                取消
+              </button>
+            </div>
+          )}
+
           {/* 批量操作栏：勾选后浮现 */}
           {selectedIds.length > 0 && (
             <div className="flex flex-wrap items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50/70 px-2 py-1.5">

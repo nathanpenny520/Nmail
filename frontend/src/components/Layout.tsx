@@ -35,9 +35,9 @@ export default function Layout() {
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current) return
-      // 全局 zoom 会缩放视觉坐标，换算回布局 px
-      const zoom = Number(getComputedStyle(document.documentElement).getPropertyValue('--app-zoom')) || 1
-      const w = Math.min(NAV_MAX, Math.max(NAV_MIN, e.clientX / zoom))
+      // 全局 zoom 与侧栏局部 zoom 叠加，视觉坐标需除以两者乘积换算回布局 px
+      const appZoom = Number(getComputedStyle(document.documentElement).getPropertyValue('--app-zoom')) || 1
+      const w = Math.min(NAV_MAX, Math.max(NAV_MIN, e.clientX / (appZoom * 0.75)))
       widthRef.current = w
       setNavWidth(w)
     }
@@ -68,7 +68,7 @@ export default function Layout() {
   return (
     <div className="flex h-full bg-gray-50 text-gray-900">
       <aside
-        className="relative flex shrink-0 flex-col border-r border-gray-200 bg-white"
+        className="zoom-compact relative flex shrink-0 flex-col border-r border-gray-200 bg-white"
         style={{ width: navWidth }}
       >
         <div className={`flex items-center py-4 ${iconOnly ? 'justify-center px-1' : 'gap-2 px-4'}`}>
