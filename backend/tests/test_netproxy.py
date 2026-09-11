@@ -9,7 +9,7 @@ from contextlib import suppress
 
 from fastapi.testclient import TestClient
 
-from app.core import imap_client, netproxy
+from app.core import imap_client, netproxy, oauth
 from app.db import database
 from app.main import app
 from app.security import set_secret
@@ -148,6 +148,73 @@ def test_connect_imap_uses_proxied_class_when_flagged(monkeypatch):
     with suppress(Exception):  # 登录在假客户端上必然报错，只验建连装配
         imap_client.connect_imap(cfg)
     assert calls == [("imap.gmail.com", 993, 60)]
+
+
+# ── OAuth 换令牌通道降级（Outlook 不该被坏代理配置误伤）──────
+
+def _token_response(payload: dict, status: int = 200):
+    import httpx as _httpx
+    return _httpx.Response(status, json=payload)
+
+
+def test_token_exchange_proxy_dead_falls_back_to_direct(monkeypatch):
+    """代理端口拒绝（10061 类）：自动降级直连再试一次——Outlook 直连可达。"""
+    import httpx as httpx_mod
+
+    calls: list = []
+
+    def fake_post(url, data, headers=None, timeout=None, proxy=None):
+        calls.append(proxy)
+        if proxy is not None:
+            raise httpx_mod.ConnectError("[WinError 10061] 由于目标计算机积极拒绝，无法连接。")
+        return _token_response({"access_token": "at", "refresh_token": "rt", "expires_in": 3600})
+
+    monkeypatch.setattr(oauth.httpx, "post", fake_post)
+    database.set_setting(netproxy.PROXY_SETTING_KEY, "socks5://127.0.0.1:7890")
+    try:
+        tokens = oauth.exchange_code(oauth.PROVIDERS["outlook"], client_id="c", code="x",
+                                     code_verifier="v", redirect_uri="http://localhost/cb")
+        assert tokens["access_token"] == "at"
+        assert calls[0] == "socks5://127.0.0.1:7890"  # 先走代理
+        assert calls[1] is None                        # 代理拒绝后直连兜底
+    finally:
+        database.set_setting(netproxy.PROXY_SETTING_KEY, "")
+
+
+def test_token_exchange_business_error_no_direct_retry(monkeypatch):
+    """代理通但业务拒绝（invalid_client）：直连结果相同，不浪费一次重试。"""
+    calls: list = []
+
+    def fake_post(url, data, headers=None, timeout=None, proxy=None):
+        calls.append(proxy)
+        return _token_response({"error": "invalid_client"}, status=401)
+
+    monkeypatch.setattr(oauth.httpx, "post", fake_post)
+    database.set_setting(netproxy.PROXY_SETTING_KEY, "socks5://127.0.0.1:7890")
+    try:
+        import pytest
+        # invalid_client 被翻译为人话提示，见 _translate_token_error
+        with pytest.raises(oauth.OAuthError, match="不正确"):
+            oauth.exchange_code(oauth.PROVIDERS["outlook"], client_id="c", code="x",
+                                code_verifier="v", redirect_uri="http://localhost/cb")
+        assert calls == ["socks5://127.0.0.1:7890"]  # 只试了代理一次
+    finally:
+        database.set_setting(netproxy.PROXY_SETTING_KEY, "")
+
+
+def test_token_exchange_no_proxy_stays_direct(monkeypatch):
+    """未配置代理：只直连一次（环境变量仍由 httpx trust_env 生效），不折腾。"""
+    calls: list = []
+
+    def fake_post(url, data, headers=None, timeout=None, proxy=None):
+        calls.append(proxy)
+        return _token_response({"access_token": "at", "expires_in": 3600})
+
+    monkeypatch.setattr(oauth.httpx, "post", fake_post)
+    database.set_setting(netproxy.PROXY_SETTING_KEY, "")
+    tokens = oauth.exchange_code(oauth.PROVIDERS["gmail"], client_id="c", code="x",
+                                 code_verifier="v", redirect_uri="http://localhost/cb")
+    assert tokens["access_token"] == "at" and calls == [None]
 
 
 # ── 设置 API 与账号开关 API ──────────────────────────────────

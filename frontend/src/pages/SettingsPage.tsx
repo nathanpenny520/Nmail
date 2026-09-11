@@ -331,8 +331,8 @@ export default function SettingsPage() {
                 spellCheck={false}
               />
               <span className="mt-1 block t-sm leading-relaxed text-gray-400">
-                保存后在「邮箱账号」里给需要的账号点「代理」开启；Gmail/Outlook 授权登录自动走此代理，
-                本机地址（127.0.0.1 / localhost，如 Proton Bridge）始终直连。
+                保存后在「邮箱账号」里给需要的账号点「代理」开启；Gmail/Outlook 授权登录优先走此代理、
+                代理不可达自动直连；本机地址（127.0.0.1 / localhost，如 Proton Bridge）始终直连。
               </span>
             </label>
           </section>

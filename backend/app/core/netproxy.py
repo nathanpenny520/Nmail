@@ -6,8 +6,8 @@ httpx 能通是因为它们认代理，而 IMAP/SMTP 是裸 socket。本模块�
 - 全局代理地址设置（settings KV 键 `network_proxy`），形如
   socks5://127.0.0.1:7890（也支持 socks5h/socks4/http，可带 user:pass@）
 - 账号级「走代理」开关（accounts.use_proxy）：只对勾选的账号生效，免得国内
-  账号被硬塞进代理；OAuth 令牌交换无条件跟随全局代理（OAuth 服务商本身
-  就是被墙的 Gmail/Outlook，QQ/163 不走 OAuth）
+  账号被硬塞进代理；OAuth 令牌交换优先走全局代理、代理建连失败自动直连
+  兜底（Outlook 直连可达，不因代理配置错误被误伤；Gmail 直连必死则如实报错）
 
 实现取舍：不全局替换 socket.socket（会波及 Proton Bridge 等本地回环连接，
 且并发线程互相串代理）；改为子类注入——imaplib.IMAP4_SSL 覆盖

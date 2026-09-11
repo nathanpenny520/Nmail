@@ -46,9 +46,12 @@ _TOKEN_ERR_HINT = {
 class OAuthError(Exception):
     """面向用户的 OAuth 错误（消息不含令牌内容）。"""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str, *, transport: bool = False):
         super().__init__(message)
         self.message = message
+        # transport=True 表示建连失败（代理/网络不可达），调用方可换通道重试；
+        # 业务拒绝（invalid_client 等）重试无意义
+        self.transport = transport
 
 
 @dataclass(frozen=True)
@@ -169,22 +172,35 @@ def build_auth_url(provider: OAuthProvider, *, client_id: str, redirect_uri: str
 def _token_request(provider: OAuthProvider, data: dict[str, str]) -> dict:
     """POST token 端点；失败按错误码翻译为面向用户的文案。
 
-    令牌交换无条件跟随全局代理设置——OAuth 服务商就是被墙的 Gmail/Outlook
-    （QQ/163 不走 OAuth），不存在"该不该代理"的歧义；显式传 proxy 同时
-    覆盖终端环境变量，行为与「开没开终端代理」解耦。
+    代理策略：全局代理地址非空时优先走代理（大陆直连 Gmail 必死）；代理建连
+    失败（工具没开/端口填错，典型 10061 拒绝）自动降级**直连**兜底——Outlook
+    等直连可达的服务商不受代理配置错误影响，Gmail 则把错误如实报出来。
+    显式传 proxy 同时覆盖终端环境变量，行为与「开没开终端代理」解耦。
     """
+    proxy = netproxy.httpx_proxy_arg()
+    if proxy is not None:
+        try:
+            return _request_via(provider, data, proxy)
+        except OAuthError as exc:
+            if not exc.transport:
+                raise  # 业务拒绝（secret 错等）：直连也一样被拒，不重试
+    return _request_via(provider, data, None)
+
+
+def _request_via(provider: OAuthProvider, data: dict[str, str], proxy: str | None) -> dict:
     try:
         resp = httpx.post(provider.token_url, data=data,
                           headers={"Content-Type": "application/x-www-form-urlencoded"},
-                          timeout=30, proxy=netproxy.httpx_proxy_arg())
+                          timeout=30, proxy=proxy)
     except (httpx.HTTPError, ImportError, OSError) as exc:
         # ImportError：终端设了 SOCKS 代理环境变量但未装 socksio（httpx 构建传输层时抛，
         # 不是 HTTPError 子类——不接住就会以裸 500 冒出来）
-        raise OAuthError(f"无法连接 {provider.name} 令牌服务：{exc}") from exc
+        raise OAuthError(f"无法连接 {provider.name} 令牌服务：{exc}", transport=True) from exc
     try:
         payload = resp.json()
     except ValueError as exc:
-        raise OAuthError(f"{provider.name} 令牌服务返回异常（HTTP {resp.status_code}）") from exc
+        raise OAuthError(f"{provider.name} 令牌服务返回异常（HTTP {resp.status_code}）",
+                         transport=False) from exc
     if resp.status_code != 200 or "access_token" not in payload:
         raise OAuthError(f"{provider.name} 授权失败：{_translate_token_error(payload)}")
     return payload
