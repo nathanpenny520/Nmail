@@ -21,7 +21,7 @@
 ### S-0911-1440-保存机制调研修复 ✅
 - 目标: 调研草稿箱/写信台保存链路，修复发现的 bug（缓存过期误删草稿等）
 - 范围: frontend components/compose/ComposeContext.tsx、ComposeForm.tsx、pages/UserDraftsPage.tsx；docs
-- 产出: 见 CHANGELOG「草稿保存机制调研修复」条目（哈希回填见 git log）；机制全貌：点写信即建行 → 编辑 1s 防抖 PATCH + 回写缓存 → 发送/定时/关闭决策前 flush → 空稿在恢复/草稿箱/关闭三处即见即清
+- 产出: 提交 1c57697（见 CHANGELOG「草稿保存机制调研修复」条目）；机制全貌：点写信即建行 → 编辑 1s 防抖 PATCH + 回写缓存 → 发送/定时/关闭决策前 flush → 空稿在恢复/草稿箱/关闭三处即见即清
 - 遗留: 保留草稿确认时若最后 <1s 的输入尚未防抖落盘，flush 机制已覆盖（registerFlush）；仅极端并发双开浏览器标签场景可能互删空稿（单用户可忽略）
 - 时间: 2026-09-11 14:50 完成
 
