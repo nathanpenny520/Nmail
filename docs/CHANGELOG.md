@@ -3,6 +3,10 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix：move 邮件拿不到新 UID 时旧 uid 写进新文件夹（撞 UNIQUE + 增量跳过）→ 删行交增量重建
+- 批量与单封 move 此前 `uid = COALESCE(?, uid)`：服务器未回目标文件夹新 UID 时，旧 uid 原样写进新文件夹——与源文件夹同 uid 的行撞 `(account_id, folder, uid)` UNIQUE 报错，即使侥幸写入，下次增量同步从新文件夹 last_uid 起步也永远扫不到它，信"消失"
+- 修复（[IMPROVEMENT_PLAN](IMPROVEMENT_PLAN.md) R2）：批量 `batch-action` 与单封 `action` 两处一致——拿不到新 UID 即删除本地行，交下次增量同步按服务器真实状态重建；不再有中间态脏行
+
 ## 待提交 — docs：IMPROVEMENT_PLAN 修订（对齐代码现状）
 - 逐条对照当前代码核实提升计划：R1（IMAP 超时）、R10/3.5（分块拉取）、A9 同步侧（后台化+进度）、T6（.gitignore）确认已由同步引擎系列提交（e8c0084…28ef2df）解决，移出待办；M3 缩窄为「AI 整理/批量动作异步化」；修正前端文件路径（src/types.ts、components/MailBrowser.tsx）与通知横幅规模（flash ×8 + syncMessage ×19）；A4→A5 编号笔误、MailConfig ×8 等其余断言经核实成立
 

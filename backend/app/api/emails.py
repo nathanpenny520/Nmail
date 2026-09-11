@@ -113,10 +113,16 @@ def batch_action(payload: BatchActionIn) -> dict:
                 elif action == "move":
                     for r in account_rows:
                         new_uid = imap_client.move_email(mb, r["folder"], r["uid"], payload.folder or "")
-                        conn.execute(
-                            "UPDATE emails SET folder = ?, uid = COALESCE(?, uid) WHERE id = ?",
-                            (payload.folder, new_uid, r["id"]),
-                        )
+                        if new_uid is None:
+                            # 服务器未回新 UID 时不能把旧 uid 带进新文件夹：
+                            # 撞 (account, folder, uid) UNIQUE 且增量同步会跳过它——
+                            # 删除本地行，交下次增量同步按服务器状态重建
+                            conn.execute("DELETE FROM emails WHERE id = ?", (r["id"],))
+                        else:
+                            conn.execute(
+                                "UPDATE emails SET folder = ?, uid = ? WHERE id = ?",
+                                (payload.folder, new_uid, r["id"]),
+                            )
             updated += len(account_rows)
         except Exception:  # noqa: BLE001 — 单账号失败不影响其他账号
             failed += len(account_rows)
@@ -365,10 +371,14 @@ def email_action(email_id: int, payload: EmailActionIn) -> dict:
     elif action == "trash":
         conn.execute("DELETE FROM emails WHERE id = ?", (email_id,))
     elif action == "move":
-        conn.execute(
-            "UPDATE emails SET folder = ?, uid = COALESCE(?, uid) WHERE id = ?",
-            (payload.folder, new_uid, email_id),
-        )
+        if new_uid is None:
+            # 拿不到新 UID 时旧 uid 写进新文件夹会撞 UNIQUE 且被增量跳过——删行重建
+            conn.execute("DELETE FROM emails WHERE id = ?", (email_id,))
+        else:
+            conn.execute(
+                "UPDATE emails SET folder = ?, uid = ? WHERE id = ?",
+                (payload.folder, new_uid, email_id),
+            )
     conn.commit()
     return {"ok": True}
 
