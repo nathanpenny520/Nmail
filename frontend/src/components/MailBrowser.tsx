@@ -13,6 +13,9 @@ import EmailReader from './EmailReader'
 
 const PAGE_SIZE = 50
 
+const batchBtn =
+  'rounded-md border border-indigo-200 bg-white px-1.5 py-0.5 t-sm text-gray-600 transition-colors hover:text-indigo-700 disabled:opacity-50'
+
 export interface ComposeContext {
   mode: 'reply' | 'replyAll' | 'forward' | 'new'
   base?: EmailDetail | null
@@ -34,6 +37,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   const [category, setCategory] = useState('')
   const [page, setPage] = useState(0)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [showImages, setShowImages] = useState(false)
   const [compose, setCompose] = useState<ComposeInit | null>(null)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
@@ -158,6 +162,11 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
     void queryClient.invalidateQueries({ queryKey: ['notifications'] })
   }
 
+  // 筛选/翻页变化时清空批量选择
+  useEffect(() => {
+    setSelectedIds([])
+  }, [archived, accountId, folder, q, starredOnly, category, page])
+
   // 全文模式下 Esc 返回列表
   useEffect(() => {
     if (selectedId == null) return
@@ -248,6 +257,31 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   }
 
   const actionBusy = actionMutation.isPending
+
+  // ── 批量选择与操作 ──
+  const toggleRow = (id: number) =>
+    setSelectedIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
+  const allSelected = items.length > 0 && items.every((i) => selectedIds.includes(i.id))
+  const toggleAll = () =>
+    setSelectedIds(allSelected ? [] : [...new Set([...selectedIds, ...items.map((i) => i.id)])])
+
+  const batchMutation = useMutation({
+    mutationFn: ({ action, folder: dest }: { action: string; folder?: string }) =>
+      api.batchAction(selectedIds, action, dest),
+    onSuccess: (result) => {
+      invalidateMail()
+      setSelectedIds([])
+      const failedNote = result.failed > 0 ? `，${result.failed} 封失败` : ''
+      setSyncMessage(`批量操作完成：${result.updated} 封${failedNote}`)
+      setTimeout(() => setSyncMessage(null), 5000)
+    },
+    onError: (error: Error) => {
+      setSyncMessage(`批量操作失败：${error.message}`)
+      setTimeout(() => setSyncMessage(null), 6000)
+    },
+  })
+  const runBatch = (action: string, folder?: string) =>
+    batchMutation.mutate({ action, folder })
 
   // ── 空账号引导 ──
   if (!accountsQuery.isLoading && !hasAccounts) {
@@ -389,7 +423,60 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               ))}
             </select>
           </div>
+          {/* 批量操作栏：勾选后浮现 */}
+          {selectedIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50/70 px-2 py-1.5">
+              <span className="t-sm font-medium text-indigo-700">已选 {selectedIds.length} 封</span>
+              <span className="flex-1" />
+              <button className={batchBtn} onClick={() => runBatch('read')} disabled={batchMutation.isPending}>已读</button>
+              <button className={batchBtn} onClick={() => runBatch('unread')} disabled={batchMutation.isPending}>未读</button>
+              <button className={batchBtn} onClick={() => runBatch('star')} disabled={batchMutation.isPending}>星标</button>
+              {!archived && (
+                <button className={batchBtn} onClick={() => runBatch('archive')} disabled={batchMutation.isPending}>归档</button>
+              )}
+              {archived && (
+                <button className={batchBtn} onClick={() => runBatch('unarchive')} disabled={batchMutation.isPending}>恢复</button>
+              )}
+              {accountId != null && (
+                <select
+                  className="rounded-md border border-gray-300 bg-white px-1.5 py-1 t-sm text-gray-600 outline-none focus:border-indigo-400 disabled:opacity-50"
+                  value=""
+                  onChange={(e) => e.target.value && runBatch('move', e.target.value)}
+                  disabled={batchMutation.isPending}
+                  title="移动到文件夹"
+                >
+                  <option value="">移动到…</option>
+                  {folders.map((f) => (
+                    <option key={f.name} value={f.name}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                className={`${batchBtn} hover:text-red-600`}
+                onClick={() => runBatch('trash')}
+                disabled={batchMutation.isPending}
+              >
+                删除
+              </button>
+              <button className={batchBtn} onClick={() => setSelectedIds([])} disabled={batchMutation.isPending}>
+                取消
+              </button>
+              {batchMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500" />}
+            </div>
+          )}
           <div className="flex items-center justify-between px-0.5 t-xs text-gray-400">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                className="accent-indigo-600"
+                checked={allSelected}
+                onChange={toggleAll}
+                title="全选本页"
+              />
+              全选本页
+            </label>
             <span>
               {archived ? '已归档' : q ? `搜索「${q}」` : folder !== 'INBOX' ? folder : '收件箱'} · 共 {total} 封
               {folderSyncing && ' · 同步中…'}
@@ -406,14 +493,21 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             </div>
           )}
           {items.map((item) => (
-            <button
+            <div
               key={item.id}
               onClick={() => selectEmail(item)}
-              className={`block w-full border-b border-gray-50 px-3 py-1 text-left transition-colors hover:bg-gray-50 ${
+              className={`block w-full cursor-pointer border-b border-gray-50 px-3 py-1 text-left transition-colors hover:bg-gray-50 ${
                 selectedId === item.id ? 'bg-indigo-50' : item.is_read ? '' : 'bg-blue-50/40'
               }`}
             >
               <div className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  className="shrink-0 accent-indigo-600"
+                  checked={selectedIds.includes(item.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => toggleRow(item.id)}
+                />
                 <span
                   className="h-1.5 w-1.5 shrink-0 rounded-full"
                   style={{ backgroundColor: item.account_color }}
@@ -439,7 +533,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
                   {shortDate(item.date)}
                 </span>
               </div>
-            </button>
+            </div>
           ))}
           {items.length < total && (
             <div className="flex items-center justify-center gap-3 p-3">

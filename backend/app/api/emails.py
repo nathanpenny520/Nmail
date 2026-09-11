@@ -25,6 +25,105 @@ LIST_COLUMNS = (
 )
 
 
+class BatchActionIn(BaseModel):
+    ids: list[int]
+    action: str  # read|unread|star|unstar|archive|unarchive|trash|move
+    folder: str | None = None  # action=move 的目标文件夹
+
+
+@router.post("/emails/batch-action")
+def batch_action(payload: BatchActionIn) -> dict:
+    """批量操作：归档类纯本地；IMAP 类按账号分组共用连接，文件夹内合并打标。"""
+    if not payload.ids:
+        raise HTTPException(400, "ids 为空")
+    ids = list(dict.fromkeys(payload.ids))
+    action = payload.action
+    if action not in ("read", "unread", "star", "unstar", "archive", "unarchive", "trash", "move"):
+        raise HTTPException(400, f"未知操作：{action}")
+    if action == "move" and not payload.folder:
+        raise HTTPException(400, "move 需要目标文件夹")
+
+    conn = get_conn()
+    placeholders = ",".join("?" for _ in ids)
+    rows = conn.execute(
+        f"SELECT e.id, e.account_id, e.folder, e.uid, a.email AS account_email,"
+        f" a.imap_server, a.imap_port FROM emails e"
+        f" JOIN accounts a ON a.id = e.account_id WHERE e.id IN ({placeholders})",
+        ids,
+    ).fetchall()
+
+    # 归档类：仅本地标记
+    if action in ("archive", "unarchive"):
+        value = 1 if action == "archive" else 0
+        conn.execute(
+            f"UPDATE emails SET archived_local = ? WHERE id IN ({placeholders})",
+            (value, *ids),
+        )
+        conn.commit()
+        return {"ok": True, "updated": len(rows), "failed": 0}
+
+    # IMAP 类：按账号分组，每账号一条连接
+    by_account: dict[int, list] = {}
+    for r in rows:
+        by_account.setdefault(r["account_id"], []).append(r)
+
+    flag_map = {
+        "read": (imap_client.SEEN_FLAG, True),
+        "unread": (imap_client.SEEN_FLAG, False),
+        "star": (imap_client.FLAGGED_FLAG, True),
+        "unstar": (imap_client.FLAGGED_FLAG, False),
+    }
+
+    updated = 0
+    failed = 0
+    for account_id, account_rows in by_account.items():
+        first = account_rows[0]
+        password = get_secret(f"account_pwd:{account_id}")
+        if not password:
+            failed += len(account_rows)
+            continue
+        cfg = imap_client.MailConfig(
+            email=first["account_email"], password=password,
+            imap_server=first["imap_server"], imap_port=int(first["imap_port"]),
+        )
+        try:
+            with imap_client.connect_imap(cfg) as mb:
+                if action in flag_map:
+                    flag, value = flag_map[action]
+                    by_folder: dict[str, list[str]] = {}
+                    for r in account_rows:
+                        by_folder.setdefault(r["folder"], []).append(str(r["uid"]))
+                    for folder, uid_list in by_folder.items():
+                        mb.folder.set(folder)
+                        mb.flag(uid_list, [flag], value)
+                    id_list = [r["id"] for r in account_rows]
+                    col = "is_read" if action in ("read", "unread") else "starred"
+                    val = 1 if action in ("read", "star") else 0
+                    ph = ",".join("?" for _ in id_list)
+                    conn.execute(
+                        f"UPDATE emails SET {col} = ? WHERE id IN ({ph})",
+                        (val, *id_list),
+                    )
+                elif action == "trash":
+                    for r in account_rows:
+                        imap_client.trash_email(mb, r["folder"], r["uid"])
+                    id_list = [r["id"] for r in account_rows]
+                    ph = ",".join("?" for _ in id_list)
+                    conn.execute(f"DELETE FROM emails WHERE id IN ({ph})", id_list)
+                elif action == "move":
+                    for r in account_rows:
+                        new_uid = imap_client.move_email(mb, r["folder"], r["uid"], payload.folder or "")
+                        conn.execute(
+                            "UPDATE emails SET folder = ?, uid = COALESCE(?, uid) WHERE id = ?",
+                            (payload.folder, new_uid, r["id"]),
+                        )
+            updated += len(account_rows)
+        except Exception:  # noqa: BLE001 — 单账号失败不影响其他账号
+            failed += len(account_rows)
+    conn.commit()
+    return {"ok": failed == 0, "updated": updated, "failed": failed}
+
+
 class EmailActionIn(BaseModel):
     action: str  # read|unread|star|unstar|archive|unarchive|trash|move
     folder: str | None = None  # action=move 时的目标文件夹
