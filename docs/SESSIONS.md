@@ -16,12 +16,6 @@
 
 ## 进行中
 
-### S-0911-1224-外链与正文高度
-- 目标: 修复邮件内 http(s) 外链在沙箱 iframe 内导航被目标站拒绝嵌入（「拒绝连接」）+ 正文高度测量滞后导致显示不全
-- 范围: backend/app/core/mail_html.py、frontend/src/components/HtmlMail.tsx、docs
-- 开始: 2026-09-11 12:24
-- 状态: 进行中
-
 <!-- 有新会话开工时按下方模板登记 -->
 
 ```markdown
@@ -33,6 +27,13 @@
 ```
 
 ## 已完成
+
+### S-0911-1224-外链与正文高度 ✅
+- 目标: 修复邮件内 http(s) 外链在沙箱 iframe 内导航被目标站拒绝嵌入（「拒绝连接」）+ 正文高度测量滞后导致显示不全
+- 范围: backend/app/core/mail_html.py、frontend/src/components/HtmlMail.tsx、docs
+- 产出: 提交 42a0a4c——消毒时 http(s) 链接强制 target="_blank"（rel=noopener 原有）+ 前端 sandbox 加 allow-popups(-to-escape-sandbox)；HtmlMail 高度改 ResizeObserver 即时复测（定时复测降兜底）。ruff + npm build 通过；恶意输入无（消毒未放宽）
+- 遗留: 后端进程需重启生效（run.py）；真实账号验证外链点击与长图邮件高度。注：CHANGELOG 条目因并行会话同时提交被 8a7c179 一并带入历史（非本会话提交）
+- 时间: 2026-09-11 中午 完成
 
 ### S-0911-1040-更新机制
 - 目标: 应用内更新检查 + 包管理器分发渠道（winget / Homebrew）
