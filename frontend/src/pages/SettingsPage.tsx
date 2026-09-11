@@ -6,7 +6,7 @@ import AddAccountModal from '../components/AddAccountModal'
 import type { Account, AITestResult, AIProfile, Settings } from '../types'
 
 const inputClass =
-  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
+  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 t-md outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
 
 const STATUS_META: Record<Account['status'], { label: string; dot: string; text: string }> = {
   ok: { label: '正常', dot: 'bg-emerald-500', text: 'text-emerald-600' },
@@ -128,15 +128,15 @@ export default function SettingsPage() {
   })
 
   if (isLoading) {
-    return <div className="p-8 text-sm text-gray-400">加载设置中…</div>
+    return <div className="p-8 t-md text-gray-400">加载设置中…</div>
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-8">
-      <h1 className="text-xl font-semibold">设置</h1>
+      <h1 className="t-lg font-semibold">设置</h1>
 
       {settingsError && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 t-md text-amber-800">
           ⚠ {settingsError}
         </div>
       )}
@@ -144,9 +144,9 @@ export default function SettingsPage() {
       {/* 邮箱账号 */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">邮箱账号</h2>
+          <h2 className="t-lg font-semibold">邮箱账号</h2>
           <button
-            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700"
             onClick={() => setShowAddAccount(true)}
           >
             <MailPlus className="h-3.5 w-3.5" /> 添加账号
@@ -154,9 +154,9 @@ export default function SettingsPage() {
         </div>
 
         <div className="mt-4 space-y-2">
-          {accountsQuery.isLoading && <div className="text-sm text-gray-400">加载中…</div>}
+          {accountsQuery.isLoading && <div className="t-md text-gray-400">加载中…</div>}
           {!accountsQuery.isLoading && accounts.length === 0 && (
-            <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-400">
+            <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center t-md text-gray-400">
               还没有添加邮箱。填入邮箱和授权码即可聚合收发。
             </div>
           )}
@@ -169,8 +169,8 @@ export default function SettingsPage() {
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: account.color }} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-gray-800">{account.email}</div>
-                  <div className="mt-0.5 text-xs">
+                  <div className="truncate t-md font-medium text-gray-800">{account.email}</div>
+                  <div className="mt-0.5 t-sm">
                     <span className={`inline-flex items-center gap-1 ${meta.text}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
                       {meta.label}
@@ -182,12 +182,12 @@ export default function SettingsPage() {
                         : ''}
                     </span>
                     {account.status_detail && (
-                      <div className="mt-0.5 text-[11px] text-red-400/90">{account.status_detail}</div>
+                      <div className="mt-0.5 t-xs text-red-400/90">{account.status_detail}</div>
                     )}
                   </div>
                 </div>
                 <select
-                  className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 outline-none focus:border-indigo-400"
+                  className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 t-sm text-gray-600 outline-none focus:border-indigo-400"
                   value={account.ai_permission || 'draft_review'}
                   onChange={(e) =>
                     permissionMutation.mutate({ id: account.id, ai_permission: e.target.value })
@@ -198,7 +198,7 @@ export default function SettingsPage() {
                   <option value="readonly">AI：只读摘要</option>
                 </select>
                 <button
-                  className={`rounded-lg border px-2 py-1.5 text-xs disabled:opacity-40 ${
+                  className={`rounded-lg border px-2 py-1.5 t-sm disabled:opacity-40 ${
                     account.has_tone_dna
                       ? 'border-violet-200 bg-violet-50 text-violet-600'
                       : 'border-gray-200 text-gray-500 hover:bg-white hover:text-violet-600'
@@ -235,10 +235,10 @@ export default function SettingsPage() {
             )
           })}
           {accountMessage && (
-            <div className="rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">{accountMessage}</div>
+            <div className="rounded-lg bg-indigo-50 px-3 py-2 t-sm text-indigo-700">{accountMessage}</div>
           )}
           {accounts.some((a) => a.status === 'auth_error') && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 t-sm leading-relaxed text-red-700">
               有账号授权码失效：登录对应邮箱网页版 → 设置 → 开启 IMAP/SMTP 并重新生成授权码，
               然后删除账号重新添加（或更新授权码）。
             </div>
@@ -261,7 +261,7 @@ export default function SettingsPage() {
       )}
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 t-md text-red-700">
           设置加载失败：{(error as Error).message}
         </div>
       )}
@@ -269,23 +269,23 @@ export default function SettingsPage() {
       {/* AI 配置档案 */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">AI 配置（OpenAI 兼容）</h2>
+          <h2 className="t-lg font-semibold">AI 配置（OpenAI 兼容）</h2>
           <button
-            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-violet-700"
             onClick={() => setShowNewProfile((v) => !v)}
           >
             <Plus className="h-3.5 w-3.5" /> 新增配置
           </button>
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-gray-500">
+        <p className="mt-1 t-sm leading-relaxed text-gray-500">
           可保存多套端点配置（如 DeepSeek 快速、强模型写草稿、本地 Ollama），标「使用中」的配置供所有
           AI 功能默认使用；对话界面可临时切换。云端端点会收到邮件正文，本地端点则 0 外发。
         </p>
 
         <div className="mt-4 space-y-3">
-          {profilesQuery.isLoading && <div className="text-sm text-gray-400">加载中…</div>}
+          {profilesQuery.isLoading && <div className="t-md text-gray-400">加载中…</div>}
           {!profilesQuery.isLoading && profiles.length === 0 && !showNewProfile && (
-            <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-400">
+            <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center t-md text-gray-400">
               还没有 AI 配置。点「新增配置」填入 Base URL + API Key + 模型名。
             </div>
           )}
@@ -296,7 +296,7 @@ export default function SettingsPage() {
             <NewProfileCard onDone={() => setShowNewProfile(false)} />
           )}
           {profilesQuery.isError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 t-sm text-red-600">
               加载失败：{(profilesQuery.error as Error).message}
             </div>
           )}
@@ -305,11 +305,11 @@ export default function SettingsPage() {
 
       {/* 通用 */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="font-semibold">通用</h2>
+        <h2 className="t-lg font-semibold">通用</h2>
         <div className="mt-4 grid grid-cols-2 gap-4">
           <label className="block">
-            <span className="mb-1 block text-sm text-gray-600">
-              轮询间隔（分钟）<span className="ml-1 text-xs text-gray-400">立即生效</span>
+            <span className="mb-1 block t-md text-gray-600">
+              轮询间隔（分钟）<span className="ml-1 t-sm text-gray-400">立即生效</span>
             </span>
             <input
               className={inputClass}
@@ -321,8 +321,8 @@ export default function SettingsPage() {
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm text-gray-600">
-              每日摘要时间<span className="ml-1 text-xs text-gray-400">每天到点自动生成并提醒</span>
+            <span className="mb-1 block t-md text-gray-600">
+              每日摘要时间<span className="ml-1 t-sm text-gray-400">每天到点自动生成并提醒</span>
             </span>
             <input
               className={inputClass}
@@ -334,9 +334,9 @@ export default function SettingsPage() {
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4">
           <label className="block">
-            <span className="mb-1 block text-sm text-gray-600">
+            <span className="mb-1 block t-md text-gray-600">
               界面字号
-              <span className="ml-1 text-xs text-gray-400">
+              <span className="ml-1 t-sm text-gray-400">
                 {fontMutation.isPending ? '保存中…' : '选择即生效'}
               </span>
             </span>
@@ -351,8 +351,8 @@ export default function SettingsPage() {
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm text-gray-600">
-              邮件正文字号<span className="ml-1 text-xs text-gray-400">选择即生效，只影响邮件内容</span>
+            <span className="mb-1 block t-md text-gray-600">
+              邮件正文字号<span className="ml-1 t-sm text-gray-400">选择即生效，只影响邮件内容</span>
             </span>
             <select
               className={inputClass}
@@ -369,23 +369,23 @@ export default function SettingsPage() {
 
       {/* AI 用量 */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="font-semibold">AI 用量</h2>
+        <h2 className="t-lg font-semibold">AI 用量</h2>
         {usageQuery.data ? (
           <>
             <div className="mt-3 grid grid-cols-3 gap-3 text-center">
               <div className="rounded-xl bg-gray-50 px-3 py-3">
-                <div className="text-lg font-semibold text-gray-800">{usageQuery.data.calls}</div>
-                <div className="text-[11px] text-gray-400">总调用</div>
+                <div className="t-lg font-semibold text-gray-800">{usageQuery.data.calls}</div>
+                <div className="t-xs text-gray-400">总调用</div>
               </div>
               <div className="rounded-xl bg-gray-50 px-3 py-3">
-                <div className="text-lg font-semibold text-gray-800">
+                <div className="t-lg font-semibold text-gray-800">
                   {((usageQuery.data.prompt_tokens + usageQuery.data.completion_tokens) / 1000).toFixed(1)}k
                 </div>
-                <div className="text-[11px] text-gray-400">总 tokens</div>
+                <div className="t-xs text-gray-400">总 tokens</div>
               </div>
               <div className="rounded-xl bg-gray-50 px-3 py-3">
-                <div className="text-lg font-semibold text-gray-800">{usageQuery.data.failures}</div>
-                <div className="text-[11px] text-gray-400">失败</div>
+                <div className="t-lg font-semibold text-gray-800">{usageQuery.data.failures}</div>
+                <div className="t-xs text-gray-400">失败</div>
               </div>
             </div>
             {usageQuery.data.by_task.length > 0 && (
@@ -395,7 +395,7 @@ export default function SettingsPage() {
                     classify: '分类', draft: '草稿', chat: '对话', write: '写作辅助',
                   }
                   return (
-                    <div key={t.task_type} className="flex items-center gap-2 text-xs">
+                    <div key={t.task_type} className="flex items-center gap-2 t-sm">
                       <span className="w-16 text-gray-500">{labels[t.task_type] ?? t.task_type}</span>
                       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
                         <div
@@ -415,7 +415,7 @@ export default function SettingsPage() {
             )}
           </>
         ) : (
-          <p className="mt-2 text-xs text-gray-400">加载用量中…</p>
+          <p className="mt-2 t-sm text-gray-400">加载用量中…</p>
         )}
       </section>
 
@@ -452,16 +452,16 @@ export default function SettingsPage() {
 function TestResult({ result }: { result: AITestResult }) {
   if (result.ok) {
     return (
-      <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+      <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 t-md text-emerald-700">
         连接成功 · 模型 <b>{result.model}</b> · 延迟 {result.latency_ms} ms
         {result.reply && <> · 回复「{result.reply}」</>}
       </div>
     )
   }
   return (
-    <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 t-md text-red-700">
       <p className="font-medium">连接失败</p>
-      <p className="mt-1 break-all text-xs">{result.error}</p>
+      <p className="mt-1 break-all t-sm">{result.error}</p>
     </div>
   )
 }
@@ -484,7 +484,7 @@ function ProfileFields(props: {
     <>
       <div className="grid grid-cols-[1fr_2fr] gap-3">
         <label className="block">
-          <span className="mb-1 block text-xs text-gray-500">名称</span>
+          <span className="mb-1 block t-sm text-gray-500">名称</span>
           <input
             className={inputClass}
             value={props.name}
@@ -493,7 +493,7 @@ function ProfileFields(props: {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs text-gray-500">Base URL</span>
+          <span className="mb-1 block t-sm text-gray-500">Base URL</span>
           <input
             className={inputClass}
             value={props.baseUrl}
@@ -504,7 +504,7 @@ function ProfileFields(props: {
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <label className="block">
-          <span className="mb-1 block text-xs text-gray-500">模型名</span>
+          <span className="mb-1 block t-sm text-gray-500">模型名</span>
           <input
             className={inputClass}
             value={props.model}
@@ -513,7 +513,7 @@ function ProfileFields(props: {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs text-gray-500">
+          <span className="mb-1 block t-sm text-gray-500">
             API Key{' '}
             {props.apiKeySet && (
               <span className="ml-1 text-emerald-600">已保存（留空不变）</span>
@@ -534,7 +534,7 @@ function ProfileFields(props: {
           {props.models.map((m) => (
             <button
               key={m}
-              className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-700"
+              className="rounded-full border border-gray-200 bg-white px-2 py-0.5 t-xs text-gray-600 hover:border-violet-300 hover:text-violet-700"
               onClick={() => props.onModel(m)}
             >
               {m}
@@ -543,7 +543,7 @@ function ProfileFields(props: {
         </div>
       )}
       {props.modelsError && (
-        <p className="mt-2 break-all text-[11px] text-red-500">{props.modelsError}</p>
+        <p className="mt-2 break-all t-xs text-red-500">{props.modelsError}</p>
       )}
     </>
   )
@@ -610,12 +610,12 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
     >
       <div className="mb-3 flex items-center gap-2">
         {isActive ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-violet-600 px-2 py-0.5 text-[11px] font-medium text-white">
+          <span className="inline-flex items-center gap-1 rounded-full bg-violet-600 px-2 py-0.5 t-xs font-medium text-white">
             <BadgeCheck className="h-3 w-3" /> 使用中
           </span>
         ) : (
           <button
-            className="rounded-full border border-violet-200 bg-white px-2.5 py-0.5 text-[11px] text-violet-600 hover:bg-violet-50 disabled:opacity-40"
+            className="rounded-full border border-violet-200 bg-white px-2.5 py-0.5 t-xs text-violet-600 hover:bg-violet-50 disabled:opacity-40"
             onClick={() => activateMutation.mutate()}
             disabled={activateMutation.isPending}
           >
@@ -653,14 +653,14 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
-          className="rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+          className="rounded-lg bg-violet-600 px-4 py-1.5 t-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
           onClick={() => saveMutation.mutate()}
           disabled={saveMutation.isPending}
         >
           {saveMutation.isPending ? '保存中…' : '保存'}
         </button>
         <button
-          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 t-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           onClick={() =>
             testMutation.mutate({
               base_url: baseUrl,
@@ -679,7 +679,7 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
           )}
         </button>
         <button
-          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 t-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           onClick={() => void fetchModels()}
           title="按已保存的 Base URL / 密钥拉取可用模型列表"
         >
@@ -687,7 +687,7 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
         </button>
         {profile.api_key_set && (
           <button
-            className="text-xs text-gray-400 underline-offset-2 hover:text-red-500 hover:underline"
+            className="t-sm text-gray-400 underline-offset-2 hover:text-red-500 hover:underline"
             onClick={() => clearKeyMutation.mutate()}
             disabled={clearKeyMutation.isPending}
           >
@@ -695,10 +695,10 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
           </button>
         )}
         {saveMutation.isSuccess && !saveMutation.isPending && (
-          <span className="text-xs text-emerald-600">已保存</span>
+          <span className="t-sm text-emerald-600">已保存</span>
         )}
         {(saveMutation.isError || deleteMutation.isError || activateMutation.isError) && (
-          <span className="text-xs text-red-600">
+          <span className="t-sm text-red-600">
             操作失败：
             {((saveMutation.error ?? deleteMutation.error ?? activateMutation.error) as Error).message}
           </span>
@@ -735,7 +735,7 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/30 p-4">
-      <div className="mb-3 text-xs font-medium text-violet-700">新增 AI 配置</div>
+      <div className="mb-3 t-sm font-medium text-violet-700">新增 AI 配置</div>
       <ProfileFields
         name={name}
         baseUrl={baseUrl}
@@ -751,21 +751,21 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
       />
       <div className="mt-4 flex items-center gap-3">
         <button
-          className="rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+          className="rounded-lg bg-violet-600 px-4 py-1.5 t-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
           onClick={() => createMutation.mutate()}
           disabled={!canCreate || createMutation.isPending}
         >
           {createMutation.isPending ? '创建中…' : '创建'}
         </button>
         <button
-          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 t-sm font-medium text-gray-600 hover:bg-gray-50"
           onClick={onDone}
         >
           取消
         </button>
-        {!canCreate && <span className="text-[11px] text-gray-400">名称、Base URL、模型名必填</span>}
+        {!canCreate && <span className="t-xs text-gray-400">名称、Base URL、模型名必填</span>}
         {createMutation.isError && (
-          <span className="text-xs text-red-600">创建失败：{(createMutation.error as Error).message}</span>
+          <span className="t-sm text-red-600">创建失败：{(createMutation.error as Error).message}</span>
         )}
       </div>
     </div>

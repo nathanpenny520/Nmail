@@ -109,7 +109,8 @@ export default function Layout() {
           title="拖拽调整侧栏宽度（双击复位）"
         />
       </aside>
-      <main className="min-w-0 flex-1 overflow-hidden">
+      {/* 文档流页面（设置/摘要/总管家）依赖此滚动；邮件页自身 h-full 自管滚动 */}
+      <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
         <Outlet />
       </main>
     </div>
