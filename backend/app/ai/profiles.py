@@ -1,7 +1,7 @@
 """AI 配置档案（多模型 / 多 API Key）。
 
 档案存 settings 表（JSON 数组），密钥存 secrets.json（ai_profile_key:{id}）；
-密钥永不回传前端，接口只返回 api_key_set 布尔值。
+本地单用户应用，接口回显 api_key 明文供界面所见即所存。
 不预建任何档案：全新安装为空列表，由用户按需创建；旧版单配置
 （ai_base_url / ai_model / ai_api_key）首次读取时迁为一个以模型名命名的档案，
 历史密钥原样搬运；历史版本自动生成的「默认」档案一次性按模型名重命名。

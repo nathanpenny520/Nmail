@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from app.core.sync import sync_account
+from app.core.sync import start_sync
 from app.db.database import get_conn, get_setting
 
 logger = logging.getLogger(__name__)
@@ -94,14 +94,15 @@ def poll_due_accounts() -> None:
         if last is not None and now - last < timedelta(minutes=interval_minutes):
             continue
         try:
-            result = sync_account({
+            # 后台线程执行：长同步（如首翻大邮箱）不再阻塞调度 tick
+            result = start_sync({
                 "id": row["id"],
                 "email": row["email"],
                 "imap_server": row["imap_server"],
                 "imap_port": row["imap_port"],
             })
-            if not result["ok"]:
-                logger.info("poll sync failed for %s: %s", row["email"], result.get("error"))
+            if not result["started"] and result.get("reason") != "syncing":
+                logger.info("poll sync not started for %s: %s", row["email"], result.get("reason"))
         except Exception:  # noqa: BLE001 — 单账号失败不影响其他账号
             logger.exception("poll sync crashed for %s", row["email"])
 

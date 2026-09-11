@@ -1,7 +1,8 @@
 """AI 配置档案 CRUD 与模型列表代理。
 
 密钥语义：请求里 api_key 省略 = 保持不变；空字符串 = 清除；非空 = 覆盖。
-响应永远不含密钥本体，只有 api_key_set 布尔值。
+本地单用户应用（仅绑定 127.0.0.1，密钥本就存于本机 secrets.json），
+响应回显 api_key 明文供界面所见即所存——用户要求可见可核对。
 """
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.ai import llm
 from app.ai import profiles as profiles_mod
-from app.security import get_secret, has_secret, set_secret
+from app.security import get_secret, set_secret
 
 router = APIRouter(prefix="/api/ai", tags=["ai-profiles"])
 
@@ -23,7 +24,7 @@ def _profile_dict(p: dict) -> dict:
         "name": p.get("name", ""),
         "base_url": p.get("base_url", ""),
         "model": p.get("model", ""),
-        "api_key_set": has_secret(profiles_mod.secret_key(p["id"])),
+        "api_key": get_secret(profiles_mod.secret_key(p["id"])) or "",
     }
 
 

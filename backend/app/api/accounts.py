@@ -158,9 +158,10 @@ def add_account(payload: AccountIn) -> dict:
     set_secret(f"account_pwd:{account_id}", payload.password)
 
     account = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
-    sync_result = sync_engine.sync_account({"id": account_id, **{k: account[k] for k in
+    # 首屏同步转后台：接口立即返回，进度经账号 status/status_detail 轮询可见
+    sync_engine.start_sync({"id": account_id, **{k: account[k] for k in
                                             ("email", "imap_server", "imap_port")}})
-    return {"account": _account_dict(account), "sync": sync_result}
+    return {"account": _account_dict(account)}
 
 
 @router.get("/accounts")
@@ -226,10 +227,11 @@ def delete_account(account_id: int) -> dict:
 
 @router.post("/accounts/{account_id}/sync")
 def sync_account_now(account_id: int, folder: str = "INBOX") -> dict:
+    """触发后台同步，立即返回；进度与结果经账号状态与通知中心呈现。"""
     row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
     if not row:
         raise HTTPException(404, "账号不存在")
-    return sync_engine.sync_account(
+    return sync_engine.start_sync(
         {"id": row["id"], "email": row["email"],
          "imap_server": row["imap_server"], "imap_port": row["imap_port"]},
         folders=(folder,),

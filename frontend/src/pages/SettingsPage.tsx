@@ -13,6 +13,7 @@ const STATUS_META: Record<Account['status'], { label: string; dot: string; text:
   auth_error: { label: '授权码可能已过期', dot: 'bg-red-500', text: 'text-red-600' },
   connection_error: { label: '连接异常', dot: 'bg-amber-500', text: 'text-amber-600' },
   never_synced: { label: '未同步', dot: 'bg-gray-300', text: 'text-gray-400' },
+  syncing: { label: '同步中', dot: 'bg-sky-400 animate-pulse', text: 'text-sky-600' },
 }
 
 // tone_dna 仅剩历史用量日志，保留映射供展示
@@ -148,20 +149,29 @@ export default function SettingsPage() {
   })
 
   // ── 账号管理 ──
-  const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
+  // 同步为后台任务：有账号在同步时 2s 轮询状态（进度显示在账号行），全部结束即停
+  const accountsQuery = useQuery({
+    queryKey: ['accounts'],
+    queryFn: api.getAccounts,
+    refetchInterval: (query) =>
+      query.state.data?.accounts.some((a) => a.status === 'syncing') ? 2000 : false,
+  })
   const accounts = accountsQuery.data?.accounts ?? []
 
   const syncOneMutation = useMutation({
     mutationFn: (id: number) => api.syncAccount(id),
     onSuccess: (result, id) => {
-      const newCount = result.folders?.reduce((s, f) => s + f.new_count, 0) ?? 0
       const email = accounts.find((a) => a.id === id)?.email ?? id
       setAccountMessage(
-        result.ok
-          ? `${email} 同步完成${newCount > 0 ? `，新邮件 ${newCount} 封` : '，暂无新邮件'}`
-          : `${email} 同步失败：${result.error}`,
+        result.started
+          ? `${email} 正在后台同步，完成后会通知；进度见账号状态`
+          : `${email} 已在同步中，请稍候`,
       )
       void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      setTimeout(() => setAccountMessage(null), 6000)
+    },
+    onError: (err: Error) => {
+      setAccountMessage(`同步触发失败：${err.message}`)
       setTimeout(() => setAccountMessage(null), 6000)
     },
   })
@@ -319,7 +329,7 @@ export default function SettingsPage() {
                 </div>
               )}
               {accounts.map((account) => {
-                const meta = STATUS_META[account.status]
+                const meta = STATUS_META[account.status] ?? STATUS_META.never_synced
                 return (
                   <div
                     key={account.id}
@@ -341,7 +351,9 @@ export default function SettingsPage() {
                               : ''}
                           </span>
                           {account.status_detail && (
-                            <div className="mt-0.5 t-xs text-red-400/90">{account.status_detail}</div>
+                            <div className={`mt-0.5 t-xs ${account.status === 'syncing' ? 'text-sky-500' : 'text-red-400/90'}`}>
+                              {account.status_detail}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -410,12 +422,10 @@ export default function SettingsPage() {
         {showAddAccount && (
           <AddAccountModal
             onClose={() => setShowAddAccount(false)}
-            onAdded={(email, newCount) => {
+            onAdded={(email) => {
               setShowAddAccount(false)
               void queryClient.invalidateQueries({ queryKey: ['accounts'] })
-              setAccountMessage(
-                `${email} 已添加${newCount > 0 ? `，首次同步到 ${newCount} 封邮件` : '，首次同步完成'}`,
-              )
+              setAccountMessage(`${email} 已添加，正在后台同步首屏邮件（最近 30 天）…`)
               setTimeout(() => setAccountMessage(null), 8000)
             }}
           />
@@ -729,7 +739,6 @@ function ProfileFields(props: {
   baseUrl: string
   model: string
   apiKey: string
-  apiKeySet: boolean
   models: string[] | null
   modelsError: string
   modelsLoading: boolean
@@ -773,19 +782,14 @@ function ProfileFields(props: {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block t-sm text-gray-500">
-            API Key{' '}
-            {props.apiKeySet && (
-              <span className="ml-1 text-emerald-600">已保存（留空不变）</span>
-            )}
-          </span>
+          <span className="mb-1 block t-sm text-gray-500">API Key</span>
           <div className="relative">
             <input
               className={`${inputClass} pr-9`}
               type={keyVisible ? 'text' : 'password'}
               value={props.apiKey}
               onChange={(e) => props.onApiKey(e.target.value)}
-              placeholder={props.apiKeySet ? '留空 = 不改动已存密钥' : 'sk-…（本地模型可留空）'}
+              placeholder="sk-…（本地模型可留空）"
               autoComplete="off"
               spellCheck={false}
             />
@@ -829,8 +833,9 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
   const [name, setName] = useState(profile.name)
   const [baseUrl, setBaseUrl] = useState(profile.base_url)
   const [model, setModel] = useState(profile.model)
-  const [apiKey, setApiKey] = useState('')
-  // Base URL/API Key 变化后自动拉取模型列表（密钥留空时后端回退已存密钥）
+  // 密钥明文回显（后端返回 api_key）：所见即所存，清空保存即清除
+  const [apiKey, setApiKey] = useState(profile.api_key)
+  // Base URL/API Key 变化后自动拉取模型列表
   const { models, error: modelsError, loading: modelsLoading } =
     useModelFetcher(baseUrl, apiKey, profile.id)
 
@@ -842,15 +847,8 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
         name,
         base_url: baseUrl,
         model,
-        ...(apiKey ? { api_key: apiKey } : {}), // 留空 = 不改动已存密钥
+        api_key: apiKey, // 全量保存：与输入框一致（清空=清除）
       }),
-    onSuccess: () => {
-      setApiKey('')
-      invalidate()
-    },
-  })
-  const clearKeyMutation = useMutation({
-    mutationFn: () => api.updateAIProfile(profile.id, { api_key: '' }),
     onSuccess: invalidate,
   })
   const activateMutation = useMutation({
@@ -903,7 +901,6 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
         baseUrl={baseUrl}
         model={model}
         apiKey={apiKey}
-        apiKeySet={profile.api_key_set}
         models={models}
         modelsError={modelsError}
         modelsLoading={modelsLoading}
@@ -940,15 +937,6 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
             '测试连接'
           )}
         </button>
-        {profile.api_key_set && (
-          <button
-            className="t-sm text-gray-400 underline-offset-2 hover:text-red-500 hover:underline"
-            onClick={() => clearKeyMutation.mutate()}
-            disabled={clearKeyMutation.isPending}
-          >
-            清除已存密钥
-          </button>
-        )}
         {saveMutation.isSuccess && !saveMutation.isPending && (
           <span className="t-sm text-emerald-600">已保存</span>
         )}
@@ -998,7 +986,6 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
         baseUrl={baseUrl}
         model={model}
         apiKey={apiKey}
-        apiKeySet={false}
         models={models}
         modelsError={modelsError}
         modelsLoading={modelsLoading}

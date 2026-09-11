@@ -18,6 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0911-1416-全面提升计划
+- 目标: 全量代码审核（架构/扩展性/质量/鲁棒性）复查后沉淀为可执行提升计划——以降耦合、降开发难度为主线，保留鲁棒性/安全/测试洞察
+- 范围: docs/IMPROVEMENT_PLAN.md（新增）、docs/SESSIONS.md；**不改任何代码**
+- 产出: docs/IMPROVEMENT_PLAN.md 已落盘（含 A/R/S/Q/T 编号项与 M1–M4 里程碑，供后续会话按编号认领）；提交后回填哈希
+- 遗留: 计划本身待用户取舍排期；M1 各项为小步快修可直接认领
+- 时间: 2026-09-11 14:20 完成
+
 ### S-0911-1530-空草稿懒持久化
 - 目标: 尊重"空邮件也能存草稿"的用户行为——点写信不再立即落库（懒持久化，首编辑/显式保存才建行），撤销全部空稿自动清理；标签引入稳定 tabId 支持创建后换绑真实 id
 - 范围: frontend components/compose/ComposeContext.tsx、ComposeForm.tsx、ComposeWorkbench.tsx、components/Layout.tsx、pages/UserDraftsPage.tsx；docs（此前已代提交 S-0911-2500 成果 9480351）
@@ -147,3 +154,10 @@
 - 遗留: 自动拉取需用户真实 Key 验证（3c 已真实打到 DeepSeek 得 401 证明链路通）；后端改动需重启
 - 备注: 用户明确规范「谁改动谁提交」——本会话起完成即自行 commit，不再留待提交（已增补 CLAUDE.md 规范 10）
 - 时间: 2026-09-11 深夜 完成
+
+### S-0912-0010-同步性能与Errno22 ✅
+- 目标: 大批量邮件同步慢 + QQ 账号 [Errno 22] Invalid argument 根因修复（方案经用户确认：全做四步）
+- 范围: backend(core/sync.py, imap_client.py, scheduler.py, api/accounts.py) + frontend(types/client/SettingsPage/AddAccountModal/MailBrowser/NotificationBell) + docs；顺带处理用户反馈：模型拉取 405（后端未重启所致，口头解答）+ AI Key 刷新后不可见（改明文回显，与 S-0911-2530 同链路）
+- 产出: 待提交（条目见 CHANGELOG 置顶）；ruff + npm build 通过；隔离实例验证重试链路与 connection_error 标记（服务端视角）
+- 遗留: 大邮箱真实账号首翻与断点续传待用户重启后验证；提交后回填 CHANGELOG 哈希
+- 时间: 2026-09-12 凌晨 完成

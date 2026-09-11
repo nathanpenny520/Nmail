@@ -7,7 +7,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api, type EmailQuery } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
 import {
-  CATEGORY_META, type EmailDetail, type EmailSummary, type FolderInfo, type SyncResult,
+  CATEGORY_META, type EmailDetail, type EmailSummary, type FolderInfo,
 } from '../types'
 import { useCompose } from './compose/ComposeContext'
 import EmailReader from './EmailReader'
@@ -86,9 +86,25 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
     })
   }
 
-  const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
+  const accountsQuery = useQuery({
+    queryKey: ['accounts'],
+    queryFn: api.getAccounts,
+    // 后台同步进行中时轮询账号状态；检测到某账号从同步中恢复即刷新邮件列表
+    refetchInterval: (query) =>
+      query.state.data?.accounts.some((a) => a.status === 'syncing') ? 2000 : false,
+  })
   const accounts = accountsQuery.data?.accounts ?? []
   const hasAccounts = accounts.length > 0
+  const prevSyncing = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    const now = new Set(accounts.filter((a) => a.status === 'syncing').map((a) => a.id))
+    let finished = false
+    for (const id of prevSyncing.current) {
+      if (!now.has(id)) finished = true
+    }
+    prevSyncing.current = now
+    if (finished) invalidateMail()
+  })
 
   const foldersQuery = useQuery({
     queryKey: ['folders', accountId],
@@ -209,30 +225,28 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   })
 
   const syncMutation = useMutation({
-    mutationFn: async (): Promise<SyncResult[]> => {
-      if (accountId != null) return [await api.syncAccount(accountId)]
-      const results: SyncResult[] = []
-      for (const account of accounts) {
-        results.push(await api.syncAccount(account.id))
+    // 同步为后台任务：触发即返回，新邮件经通知/轮询自动刷新列表
+    mutationFn: async () => {
+      const targets = accountId != null ? [accountId] : accounts.map((a) => a.id)
+      let started = 0
+      for (const id of targets) {
+        const r = await api.syncAccount(id)
+        if (r.started) started += 1
       }
-      return results
+      return { targets: targets.length, started }
     },
-    onSuccess: (results) => {
-      invalidateMail()
-      const newCount = results.reduce(
-        (sum, r) => sum + (r.folders?.reduce((s, f) => s + f.new_count, 0) ?? 0), 0,
+    onSuccess: ({ targets, started }) => {
+      void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      setSyncMessage(
+        started === 0
+          ? '同步已在进行中，请稍候'
+          : targets > 1
+            ? `已在后台开始同步 ${started} 个账号，新邮件到达后会自动刷新`
+            : '已在后台开始同步，新邮件到达后会自动刷新',
       )
-      const failed = results.filter((r) => !r.ok)
-      if (failed.length > 0) {
-        setSyncMessage(`同步失败：${failed[0].error ?? '未知错误'}`)
-      } else if (newCount > 0) {
-        setSyncMessage(`同步完成，新邮件 ${newCount} 封`)
-      } else {
-        setSyncMessage('同步完成，暂无新邮件')
-      }
       setTimeout(() => setSyncMessage(null), 5000)
     },
-    onError: (error: Error) => setSyncMessage(`同步失败：${error.message}`),
+    onError: (error: Error) => setSyncMessage(`同步触发失败：${error.message}`),
   })
 
   const organizeMutation = useMutation({

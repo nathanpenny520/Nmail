@@ -19,7 +19,6 @@ import type {
   SenderListEntry,
   Settings,
   SettingsPayload,
-  SyncResult,
   UpdateCheckResp,
   UsageStats,
   UserDraft,
@@ -140,14 +139,15 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   addAccount: (payload: AccountAddPayload) =>
-    request<{ account: Account; sync: SyncResult }>('/api/accounts', {
+    request<{ account: Account }>('/api/accounts', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
   deleteAccount: (id: number) =>
     request<{ ok: boolean }>(`/api/accounts/${id}`, { method: 'DELETE' }),
+  /** 触发后台同步，立即返回；进度经账号 status/status_detail 轮询呈现 */
   syncAccount: (id: number, folder?: string) =>
-    request<SyncResult>(
+    request<{ started: boolean; reason?: string }>(
       `/api/accounts/${id}/sync${folder ? `?folder=${encodeURIComponent(folder)}` : ''}`,
       { method: 'POST' },
     ),

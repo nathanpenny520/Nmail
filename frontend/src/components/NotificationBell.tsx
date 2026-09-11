@@ -29,9 +29,13 @@ export default function NotificationBell() {
   useEffect(() => {
     if (!data) return
     const ids = new Set(data.items.map((i) => i.id))
-    if (prevIds.current !== null && notifyPermission() === 'granted') {
+    let refreshMail = false
+    if (prevIds.current !== null) {
       for (const item of data.items) {
-        if (!prevIds.current.has(item.id) && !item.is_read) {
+        if (prevIds.current.has(item.id) || item.is_read) continue
+        // 新邮件/账号异常通知到达 → 刷新邮件列表与账号状态（后台同步完成的主要感知途径）
+        if (item.type === 'new_mail' || item.type === 'account_error') refreshMail = true
+        if (notifyPermission() === 'granted') {
           try {
             const n = new Notification(item.title, { body: item.body ?? '', tag: `nmail-${item.id}` })
             n.onclick = () => window.focus()
@@ -41,8 +45,13 @@ export default function NotificationBell() {
         }
       }
     }
+    if (refreshMail) {
+      void queryClient.invalidateQueries({ queryKey: ['emails'] })
+      void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      void queryClient.invalidateQueries({ queryKey: ['drafts'] })
+    }
     prevIds.current = ids
-  }, [data])
+  }, [data, queryClient])
 
   const readAllMutation = useMutation({
     mutationFn: api.markNotificationsRead,

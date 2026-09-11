@@ -1,21 +1,25 @@
 """UID 增量同步引擎。
 
-- 首次同步只拉最近 N 天（见 imap_client.fetch_new）；
+- 分块断点续拉：UID 升序每 ~100 封一块，每块入库即提交断点（见 imap_client.iter_new_mail），
+  中断/失败后从断点续传，不再整批重放；
+- 同步在后台线程执行（start_sync），进度写账号 status/status_detail，前端轮询可见；
 - UIDVALIDITY 变化时清空该文件夹本地数据并重新首次同步；
 - 附件落盘到数据目录，元数据入库；
-- 登录失败标记账号 auth_error 并发一次通知（授权码失效提醒）。
+- 登录失败标记账号 auth_error 并发一次通知（授权码失效提醒）；
+- 网络类瞬时错误自动重试一次（断点已在，重试成本仅为剩余部分）。
 """
 from __future__ import annotations
 
 import json
 import logging
 import re
+import threading
 from datetime import datetime, timezone
 
 
 from imap_tools.errors import MailboxLoginError
 
-from app.core.imap_client import MailConfig, connect_imap, fetch_new, get_uidvalidity
+from app.core.imap_client import MailConfig, connect_imap, get_uidvalidity, iter_new_mail
 from app.core.mail_html import count_remote_images
 from app.config import get_data_dir
 from app.db.database import get_conn
@@ -26,6 +30,10 @@ logger = logging.getLogger(__name__)
 FIRST_SYNC_DAYS = 30
 
 Account = dict  # accounts 表行（sqlite3.Row 转 dict）
+
+# 进行中的同步账号（进程内防重入：调度器轮询与手动同步可能并发触发同一账号）
+_SYNCING: set[int] = set()
+_SYNC_LOCK = threading.Lock()
 
 
 def add_notification(n_type: str, title: str, body: str = "", ref_id: str | None = None) -> None:
@@ -46,7 +54,7 @@ def _safe_filename(name: str, index: int) -> str:
 
 
 def _save_attachments(account_id: int, email_id: int, parsed) -> bool:
-    """保存附件文件并写元数据行，返回是否有附件。"""
+    """保存附件文件并写元数据行，返回是否有附件（事务由调用方按块提交）。"""
     base = get_data_dir() / "accounts" / str(account_id) / "attachments" / str(email_id)
     conn = get_conn()
     has_any = False
@@ -67,18 +75,17 @@ def _save_attachments(account_id: int, email_id: int, parsed) -> bool:
             " VALUES (?, ?, ?, ?, ?, ?)",
             (email_id, filename, att.content_type, len(att.payload), str(target), att.cid),
         )
-    conn.commit()
     return has_any
 
 
 def _upsert_email(account_id: int, folder: str, parsed) -> int:
-    """插入（或忽略重复）邮件行，返回行 id。"""
+    """插入（或忽略重复）邮件行，返回行 id（不提交，事务由调用方按块管理）。"""
     text = (parsed.body_text or "").strip()
     snippet = re.sub(r"\s+", " ", text)[:180]
     date_iso = parsed.date.isoformat(timespec="seconds") if parsed.date else None
     date_sort = parsed.date.astimezone(timezone.utc).isoformat(timespec="seconds") if parsed.date else None
     conn = get_conn()
-    conn.execute(
+    cur = conn.execute(
         "INSERT OR IGNORE INTO emails"
         " (account_id, folder, uid, message_id, subject, sender_name, sender_email,"
         "  recipients, cc, date, date_sort, snippet, body_text, body_html, remote_img_count)"
@@ -101,12 +108,13 @@ def _upsert_email(account_id: int, folder: str, parsed) -> int:
             count_remote_images(parsed.body_html or ""),
         ),
     )
-    conn.commit()
-    row = conn.execute(
-        "SELECT id FROM emails WHERE account_id = ? AND folder = ? AND uid = ?",
-        (account_id, folder, parsed.uid),
-    ).fetchone()
-    return int(row["id"])
+    if cur.rowcount == 0:  # 重复邮件（上次中断前已入库）：回查既有行
+        row = conn.execute(
+            "SELECT id FROM emails WHERE account_id = ? AND folder = ? AND uid = ?",
+            (account_id, folder, parsed.uid),
+        ).fetchone()
+        return int(row["id"])
+    return int(cur.lastrowid)
 
 
 def _set_account_status(account_id: int, status: str, detail: str | None = None) -> None:
@@ -132,7 +140,11 @@ def _set_account_status(account_id: int, status: str, detail: str | None = None)
 
 
 def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dict:
-    """同步单个账号的指定文件夹，返回 {ok, folders: [...], error}。"""
+    """同步单个账号的指定文件夹，返回 {ok, folders: [...], error}。
+
+    网络类异常（含 QQ 大响应中途掐断导致的 Errno 22）自动重试一次：
+    断点已按块落库，重试只补剩余部分。登录失败不重试（结果可预期）。
+    """
     account_id = int(account["id"])
     password = get_secret(f"account_pwd:{account_id}")
     if not password:
@@ -145,18 +157,28 @@ def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dic
         imap_port=int(account["imap_port"]),
     )
     results: list[dict] = []
-    try:
-        with connect_imap(cfg) as mb:
-            for folder in folders:
-                results.append(_sync_folder(mb, account_id, folder))
-    except MailboxLoginError:
-        detail = "IMAP 登录被拒绝，授权码可能已过期或被修改"
-        _set_account_status(account_id, "auth_error", detail)
-        return {"ok": False, "folders": results, "error": detail}
-    except Exception as exc:  # noqa: BLE001 — 网络/服务器错误统一为 connection_error
-        logger.warning("sync failed for %s: %s", account["email"], exc)
-        _set_account_status(account_id, "connection_error", str(exc)[:300])
-        return {"ok": False, "folders": results, "error": str(exc)}
+    last_error: Exception | None = None
+    for attempt in (1, 2):
+        try:
+            with connect_imap(cfg) as mb:
+                results = []
+                for folder in folders:
+                    results.append(_sync_folder(mb, account_id, folder))
+            last_error = None
+            break
+        except MailboxLoginError:
+            detail = "IMAP 登录被拒绝，授权码可能已过期或被修改"
+            _set_account_status(account_id, "auth_error", detail)
+            return {"ok": False, "folders": results, "error": detail}
+        except Exception as exc:  # noqa: BLE001 — 网络/服务器错误统一为 connection_error
+            last_error = exc
+            logger.warning("sync failed for %s (attempt %d): %s", account["email"], attempt, exc)
+            if attempt == 1:
+                continue  # 断点已落库，重连只补剩余部分
+
+    if last_error is not None:
+        _set_account_status(account_id, "connection_error", str(last_error)[:300])
+        return {"ok": False, "folders": results, "error": str(last_error)}
 
     _set_account_status(account_id, "ok")
     conn = get_conn()
@@ -189,6 +211,43 @@ def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dic
     return {"ok": True, "folders": results, "error": None}
 
 
+def start_sync(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dict:
+    """在后台线程执行同步，立即返回 {started, reason?}。
+
+    手动同步、添加账号、调度器轮询都走这里：长同步不再阻塞请求与调度 tick。
+    进度经账号 status/status_detail 呈现，完成后发通知。
+    """
+    account_id = int(account["id"])
+    with _SYNC_LOCK:
+        if account_id in _SYNCING:
+            return {"started": False, "reason": "syncing"}
+        if not get_secret(f"account_pwd:{account_id}"):
+            return {"started": False, "reason": "no_credentials"}
+        _SYNCING.add(account_id)
+
+    def _run() -> None:
+        try:
+            sync_account(account, folders)
+        except Exception:  # noqa: BLE001 — sync_account 内部已兜底，这里防御线程带异常退出
+            logger.exception("background sync crashed for account %s", account_id)
+        finally:
+            with _SYNC_LOCK:
+                _SYNCING.discard(account_id)
+
+    threading.Thread(target=_run, name=f"sync-{account_id}", daemon=True).start()
+    return {"started": True}
+
+
+def _save_sync_state(conn, account_id: int, folder: str,
+                     last_uid: int, uidvalidity: int | None) -> None:  # noqa: ANN001
+    conn.execute(
+        "INSERT INTO sync_state (account_id, folder, last_uid, uidvalidity) VALUES (?, ?, ?, ?)"
+        " ON CONFLICT(account_id, folder) DO UPDATE SET"
+        " last_uid = excluded.last_uid, uidvalidity = excluded.uidvalidity",
+        (account_id, folder, last_uid, uidvalidity),
+    )
+
+
 def _sync_folder(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001
     conn = get_conn()
     state = conn.execute(
@@ -210,20 +269,24 @@ def _sync_folder(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001
     new_count = 0
     latest_subject = ""
     new_email_ids: list[int] = []
-    for parsed in fetch_new(mb, folder, last_uid, first_sync_days=FIRST_SYNC_DAYS):
-        email_id = _upsert_email(account_id, folder, parsed)
-        _save_attachments(account_id, email_id, parsed)
-        last_uid = max(last_uid, parsed.uid)
-        new_count += 1
-        new_email_ids.append(email_id)
-        latest_subject = latest_subject or parsed.subject
+    for chunk in iter_new_mail(mb, folder, last_uid, first_sync_days=FIRST_SYNC_DAYS):
+        if not chunk:
+            continue
+        chunk_ids: list[int] = []
+        for parsed_msg in chunk:
+            email_id = _upsert_email(account_id, folder, parsed_msg)
+            _save_attachments(account_id, email_id, parsed_msg)
+            chunk_ids.append(email_id)
+            last_uid = max(last_uid, parsed_msg.uid)
+            new_count += 1
+            latest_subject = latest_subject or parsed_msg.subject
+        new_email_ids.extend(chunk_ids)
+        # 块级断点：入库与断点同一事务提交，中断后从断点续传
+        _save_sync_state(conn, account_id, folder, last_uid, uidvalidity or stored_uidv)
+        conn.commit()
+        _set_account_status(account_id, "syncing", f"同步中：已收 {new_count} 封")
 
-    conn.execute(
-        "INSERT INTO sync_state (account_id, folder, last_uid, uidvalidity) VALUES (?, ?, ?, ?)"
-        " ON CONFLICT(account_id, folder) DO UPDATE SET"
-        " last_uid = excluded.last_uid, uidvalidity = excluded.uidvalidity",
-        (account_id, folder, last_uid, uidvalidity or stored_uidv),
-    )
+    _save_sync_state(conn, account_id, folder, last_uid, uidvalidity or stored_uidv)
     conn.commit()
     return {
         "folder": folder,

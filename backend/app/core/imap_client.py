@@ -61,7 +61,8 @@ def _is_netease(server: str) -> bool:
 
 def connect_imap(cfg: MailConfig) -> MailBox:
     """建立已登录的 IMAP 连接，返回可作上下文管理器使用的 MailBox。"""
-    mb = MailBox(cfg.imap_server, port=cfg.imap_port)
+    # timeout=60：连接与读写都有上限，避免僵死连接永远挂着
+    mb = MailBox(cfg.imap_server, port=cfg.imap_port, timeout=60)
     mb.login(cfg.email, cfg.password)
     if _is_netease(cfg.imap_server):
         try:
@@ -126,12 +127,17 @@ def find_sent_folder(mb: MailBox) -> str | None:
     return _find_special_folder(mb, "\\sent", ("sent", "已发送"))
 
 
-def fetch_new(mb: MailBox, folder: str, last_uid: int, first_sync_days: int = 30) -> list[ParsedMessage]:
-    """拉取 folder 中 uid > last_uid 的邮件。
+def iter_new_mail(mb: MailBox, folder: str, last_uid: int,
+                  first_sync_days: int = 30, chunk_size: int = 100):
+    """按 UID 升序分块产出新增邮件（每块为 ≤chunk_size 封的 ParsedMessage 列表）。
 
+    先 SEARCH 拿 UID 清单（轻量，只传 ID），再逐块 `UID a:b` FETCH：
+    - 单块响应小，不再有整批巨型 FETCH 被服务商中途掐断（QQ 大邮箱报
+      `[Errno 22] Invalid argument` 的根源）；
+    - 调用方每块入库并提交断点，中断后从断点续传，不会整批重放。
     首次同步（last_uid=0）只拉最近 N 天，避免大邮箱首翻过久；
     注意 IMAP 语义 `UID x:*` 在 x 大于最大 UID 时也会返回最后一封，
-    因此调用方必须按 uid > last_uid 再过滤一次。
+    因此仍按 uid > last_uid 过滤一次。
     """
     mb.folder.set(folder)
     if last_uid <= 0:
@@ -141,14 +147,17 @@ def fetch_new(mb: MailBox, folder: str, last_uid: int, first_sync_days: int = 30
     else:
         criteria = f"UID {last_uid + 1}:*"
 
-    parsed: list[ParsedMessage] = []
-    for msg in mb.fetch(criteria, mark_seen=False, bulk=True):
-        # 部分版本 imap-tools 返回 str 型 uid，统一转 int
-        uid = int(msg.uid) if msg.uid is not None else None
-        if uid is None or uid <= last_uid:
-            continue
-        parsed.append(_parse_message(msg, uid))
-    return parsed
+    pending = sorted(int(u) for u in mb.search(criteria) if int(u) > last_uid)
+    for start in range(0, len(pending), chunk_size):
+        window = pending[start : start + chunk_size]
+        parsed: list[ParsedMessage] = []
+        for msg in mb.fetch(f"UID {window[0]}:{window[-1]}", mark_seen=False, bulk=True):
+            # 部分版本 imap-tools 返回 str 型 uid，统一转 int
+            uid = int(msg.uid) if msg.uid is not None else None
+            if uid is None or uid <= last_uid:
+                continue
+            parsed.append(_parse_message(msg, uid))
+        yield parsed
 
 
 def _parse_message(msg, uid: int) -> ParsedMessage:  # noqa: ANN001 — imap-tools MailMessage

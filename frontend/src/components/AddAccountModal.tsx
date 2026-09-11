@@ -6,7 +6,7 @@ import type { AccountAddPayload, ProviderPreset } from '../types'
 
 interface AddAccountModalProps {
   onClose: () => void
-  onAdded: (accountEmail: string, newCount: number) => void
+  onAdded: (accountEmail: string) => void
 }
 
 const inputClass =
@@ -66,8 +66,8 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
   const saveMutation = useMutation({
     mutationFn: () => api.addAccount(payload()),
     onSuccess: (result) => {
-      const newCount = result.sync.folders?.reduce((s, f) => s + f.new_count, 0) ?? 0
-      onAdded(result.account.email, newCount)
+      // 首屏同步已转后台执行，进度经账号状态与通知中心呈现
+      onAdded(result.account.email)
     },
   })
   const busy = testMutation.isPending || saveMutation.isPending

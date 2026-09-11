@@ -3,7 +3,8 @@ export interface AIProfile {
   name: string
   base_url: string
   model: string
-  api_key_set: boolean
+  /** 已存密钥明文（本地单用户应用，回显供所见即所存；空串=未设置） */
+  api_key: string
 }
 
 export interface AIProfilesResp {
@@ -67,7 +68,7 @@ export interface Account {
   ai_permission: 'readonly' | 'draft_review'
   /** 文风提示词：AI 起草该账号回复时遵循，用户手写可编辑；null=未设置 */
   style_prompt: string | null
-  status: 'ok' | 'auth_error' | 'connection_error' | 'never_synced'
+  status: 'ok' | 'auth_error' | 'connection_error' | 'never_synced' | 'syncing'
   status_detail: string | null
   last_sync_at: string | null
 }
