@@ -57,6 +57,9 @@ uv tool install nmail-app && nmail   # 升级: uv tool upgrade nmail-app
 pip install nmail-app                # 升级: pip install -U nmail-app；卸载: pip uninstall nmail-app
 ```
 
+> ⚠️ 常见笔误：`uvx -from nmail-app nmail`（单横线）会报 `Failed to read --find-links directory …/rom`
+> ——单横线的 `-f` 是 `--find-links` 缩写。必须用**双横线 `--from`**；嫌容易错就用上面的 `uv tool install`。
+
 ### ⑤ 源码开发
 
 见 [README 快速开始-方式③](../README.md#快速开始)：venv + `pip install -r backend/requirements.txt` + 前端构建 + `python run.py`。
