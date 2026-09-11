@@ -8,8 +8,10 @@ from __future__ import annotations
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -68,6 +70,46 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
+
+# ── 本机来源校验（IMPROVEMENT_PLAN S1）────────────────────────────────────
+# 服务仅绑定 127.0.0.1，但浏览器不限：恶意网页可向 http://127.0.0.1:8720 发
+# multipart 无预检 POST 触发本机 API（drive-by），公网域名也可经 DNS rebinding
+# 解析到 127.0.0.1 后用自己的域名作 Host 访问。两道校验零依赖、不影响正常使用：
+# - Host 必须是本机主机名（端口与实际监听一致时才严格比对）；
+# - 浏览器附带的 Origin（POST/fetch 恒带；同源 GET 一般不带）必须是本机源。
+_LOCAL_HOSTNAMES = {"127.0.0.1", "localhost", "::1"}
+
+
+def _is_local_host(hostname: str) -> bool:
+    return (hostname or "").strip("[]").lower() in _LOCAL_HOSTNAMES
+
+
+@app.middleware("http")
+async def _local_source_guard(request: Request, call_next):
+    server = request.scope.get("server")
+    server_port = server[1] if server else None
+
+    host_header = request.headers.get("host", "")
+    hostname, _, port = host_header.rpartition(":")
+    if not hostname or ":" in hostname:  # Host 无端口（HTTP/1.0 少见）或 IPv6 裸地址
+        hostname, port = host_header, ""
+    if not _is_local_host(hostname) or (
+            port and server_port is not None and port != str(server_port)):
+        return JSONResponse({"detail": "拒绝非本机 Host 的请求"}, status_code=403)
+
+    origin = request.headers.get("origin")
+    if origin:
+        try:
+            parsed = urlsplit(origin)
+        except ValueError:
+            return JSONResponse({"detail": "拒绝无法解析的 Origin"}, status_code=403)
+        if parsed.scheme not in ("http", "https") or not _is_local_host(parsed.hostname or "") or (
+                parsed.port is not None and server_port is not None and parsed.port != server_port):
+            return JSONResponse({"detail": "拒绝跨源请求"}, status_code=403)
+
+    return await call_next(request)
+
+
 app.include_router(api_router)
 
 if DIST_DIR is not None:

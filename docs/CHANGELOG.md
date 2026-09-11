@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 安全：本机 API 加 Origin/Host 来源校验中间件（挡 drive-by POST 与 DNS rebinding）
+- 服务虽仅绑定 127.0.0.1，但恶意网页可向 `http://127.0.0.1:8720` 发 multipart 无预检 POST 触发本机 API（drive-by，例如伪造发信/改数据）；公网域名经 DNS rebinding 解析到 127.0.0.1 后亦可携带自身域名访问（IMPROVEMENT_PLAN S1/R5）
+- main.py 新增中间件：Host 必须为本机主机名（端口与实际监听一致才严格比对）；浏览器附带 Origin 时必须为本机源（curl 等无 Origin 的本机工具不受影响）；静态资源与 /api 一并覆盖
+- `vite.config.ts` 代理补 `changeOrigin: true`——否则 dev 代理转发时保留 `localhost:5173` 作 Host，会被新校验拒绝
+- 验证：隔离实例 curl 矩阵——正常访问 200 / 坏 Host 403 / 外站 Origin 403 / `Origin: null` 403 / 同源 Origin 放行；ruff、npm run build 通过
+
 ## 待提交 — fix：总管家流式接口先验 AI 配置再落库用户消息（原未配置时留孤儿消息）
 - `POST /api/ai/chat-manager/stream` 原顺序：先 `append_message(user)` 落库，再创建生成器——AI 未配置/停用时抛 AINotConfigured 返回 400，但用户消息已入库，且 assistant 回复永不出现，会话里留下孤儿提问（IMPROVEMENT_PLAN R8；非流式版本顺序本就正确）
 - 修复：入口先 `tasks._ai_config(profile_id)` 预检（与生成器内部同一校验），未配置直接 400，不落库；M2 的 deps.py 依赖收口将替代此调用

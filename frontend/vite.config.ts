@@ -8,7 +8,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://127.0.0.1:8720',
+      // changeOrigin：代理请求 Host 改写为 127.0.0.1:8720，过服务端本机 Host 校验
+      '/api': { target: 'http://127.0.0.1:8720', changeOrigin: true },
     },
   },
   build: {

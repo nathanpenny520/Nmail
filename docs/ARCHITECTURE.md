@@ -82,8 +82,9 @@ UID 增量拉取 → 落库+附件落盘 → 白名单(留收件箱)/黑名单(�
 
 ### 安全模型
 - HTML 邮件：nh3 白名单（http(s) 链接强制 target=_blank + rel=noopener）→ 远程图默认拦截（计数）→ 前端 sandbox iframe（allow-same-origin+allow-popups-to-escape-sandbox，无脚本；外链点击在新标签由浏览器正常打开，不在 iframe 内导航）
-- 发信：multipart/alternative（写信工作台：TipTap HTML 经 `sanitize_outgoing_html` 白名单消毒后直发 + 派生纯文本；旧 `/emails/send` 保留 Markdown→HTML）；草稿 approve 带 In-Reply-To 并归档 Sent
+- 发信：multipart/alternative（写信工作台：TipTap HTML 经 `sanitize_outgoing_html` 白名单消毒后直发 + 派生纯文本；AI 草稿 approve 同走 `imap_client` 发送）；草稿 approve 带 In-Reply-To 并归档 Sent
 - 密钥：本地 `secrets.json`（POSIX chmod 600）；AI key 按档案存放（`ai_profile_key:{id}`）且不回传；服务仅 127.0.0.1
+- 来源校验（main.py 中间件）：Host 必须为本机主机名（端口与实际监听一致才严格比对）；浏览器附带 Origin 时必须为本机源——挡恶意网页对 127.0.0.1 的 drive-by POST 与 DNS rebinding
 
 ## 分发与打包
 
