@@ -131,6 +131,24 @@ def _get_email_row(email_id: int):
     return row
 
 
+def _sender_image_trusted(sender_email: str) -> bool:
+    """发件人是否在「图片信任白名单」（邮箱或 @域名）。"""
+    email = (sender_email or "").strip().lower()
+    if not email:
+        return False
+    rows = get_conn().execute(
+        "SELECT pattern FROM sender_lists WHERE list_type = 'image_trust'"
+    ).fetchall()
+    for r in rows:
+        pattern = r["pattern"].lower()
+        if pattern.startswith("@"):
+            if email.endswith(pattern):
+                return True
+        elif email == pattern:
+            return True
+    return False
+
+
 @router.get("/emails/{email_id}")
 def get_email(email_id: int, images: bool = False) -> dict:
     row = _get_email_row(email_id)
@@ -145,11 +163,22 @@ def get_email(email_id: int, images: bool = False) -> dict:
         if a["cid"]
     }
 
+    # 放行条件（任一）：URL 显式请求 / 全局设置放行 / 发件人在图片信任白名单
+    from app.db.database import get_setting
+
+    allow_images = (
+        images
+        or bool(get_setting("allow_remote_images", False))
+        or _sender_image_trusted(row["sender_email"])
+    )
+
     body_html = row["body_html"] or ""
     html_clean = None
     blocked = 0
     if body_html:
-        html_clean, blocked = sanitize_email_html(body_html, allow_remote_images=images, cid_map=cid_map)
+        html_clean, blocked = sanitize_email_html(
+            body_html, allow_remote_images=allow_images, cid_map=cid_map
+        )
 
     return {
         **_summary(row),

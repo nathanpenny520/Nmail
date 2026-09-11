@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const [digestTime, setDigestTime] = useState('08:30')
   const [uiFont, setUiFont] = useState<'compact' | 'standard' | 'large'>('compact')
   const [bodyFont, setBodyFont] = useState<'small' | 'standard' | 'large'>('standard')
+  const [allowRemoteImages, setAllowRemoteImages] = useState(false)
 
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [accountMessage, setAccountMessage] = useState<string | null>(null)
@@ -35,6 +36,7 @@ export default function SettingsPage() {
     setDigestTime(data.digest_time)
     setUiFont(data.ui_font)
     setBodyFont(data.body_font)
+    setAllowRemoteImages(data.allow_remote_images)
   }, [data])
 
   // 版本守护：响应缺新字段说明后端进程是旧版本（旧 Pydantic 会静默忽略未知字段）
@@ -76,6 +78,34 @@ export default function SettingsPage() {
     setBodyFont(v)
     fontMutation.mutate({ body_font: v })
   }
+  const changeRemoteImages = (v: boolean) => {
+    setAllowRemoteImages(v)
+    fontMutation.mutate({ allow_remote_images: v })
+  }
+
+  // 更新检查：开关即存；「检查更新」跳过 24h 缓存立即对比一次
+  const updateCheckQuery = useQuery({
+    queryKey: ['update-check'],
+    queryFn: () => api.getUpdateCheck(false),
+    staleTime: 10 * 60_000,
+    retry: false,
+  })
+  const updateToggleMutation = useMutation({
+    mutationFn: (enabled: boolean) => api.updateSettings({ update_check_enabled: enabled }),
+    onSuccess: (saved) => {
+      guardVersion(saved)
+      void queryClient.invalidateQueries({ queryKey: ['update-check'] })
+    },
+    onError: (err: Error) => setSettingsError(`保存失败：${err.message}`),
+  })
+  const checkUpdateMutation = useMutation({
+    mutationFn: () => api.getUpdateCheck(true),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['update-check'] })
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+  const updateState = checkUpdateMutation.data ?? updateCheckQuery.data
 
   // ── AI 配置档案 ──
   const profilesQuery = useQuery({ queryKey: ['ai-profiles'], queryFn: api.getAIProfiles })
@@ -364,6 +394,65 @@ export default function SettingsPage() {
               <option value="large">大</option>
             </select>
           </label>
+        </div>
+        <label className="mt-4 block">
+          <span className="mb-1 block t-md text-gray-600">
+            显示邮件外部图片<span className="ml-1 t-sm text-gray-400">选择即生效；默认拦截以防追踪像素，也可在邮件内对单个发件人「始终显示」</span>
+          </span>
+          <select
+            className={inputClass}
+            value={allowRemoteImages ? 'show' : 'block'}
+            onChange={(e) => changeRemoteImages(e.target.value === 'show')}
+          >
+            <option value="block">默认拦截（推荐）</option>
+            <option value="show">直接显示</option>
+          </select>
+        </label>
+
+        {/* 更新检查 */}
+        <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 t-md text-gray-600">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-indigo-600"
+                checked={!!data?.update_check_enabled}
+                onChange={(e) => updateToggleMutation.mutate(e.target.checked)}
+              />
+              自动检查更新
+            </label>
+            <span className="t-sm text-gray-400">
+              每 24 小时向 GitHub 做一次匿名版本对比，不发送本机数据
+            </span>
+            <span className="flex-1" />
+            <span className="t-sm text-gray-500">当前 v{updateState?.current_version ?? '…'}</span>
+            <button
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => checkUpdateMutation.mutate()}
+              disabled={checkUpdateMutation.isPending}
+            >
+              {checkUpdateMutation.isPending ? '检查中…' : '检查更新'}
+            </button>
+          </div>
+          {updateState?.is_newer ? (
+            <div className="mt-2 flex items-center gap-2 t-sm text-amber-700">
+              发现新版本 <b>{updateState.latest_version}</b>
+              <a
+                className="text-indigo-600 underline underline-offset-2"
+                href={updateState.release_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                前往下载
+              </a>
+              （数据与配置不受升级影响）
+            </div>
+          ) : checkUpdateMutation.data ? (
+            <p className="mt-2 t-sm text-emerald-600">已是最新版本 v{updateState?.current_version}</p>
+          ) : updateState?.checked_at ? (
+            <p className="mt-2 t-sm text-gray-400">上次检查：{updateState.checked_at.slice(0, 10)}</p>
+          ) : null}
+          {updateToggleMutation.isPending && <span className="t-sm text-gray-400">保存中…</span>}
         </div>
       </section>
 

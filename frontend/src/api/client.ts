@@ -19,6 +19,7 @@ import type {
   Settings,
   SettingsPayload,
   SyncResult,
+  UpdateCheckResp,
   UsageStats,
   DigestResp,
 } from '../types'
@@ -86,6 +87,8 @@ export const api = {
   getSettings: () => request<Settings>('/api/settings'),
   updateSettings: (payload: SettingsPayload) =>
     request<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  getUpdateCheck: (force: boolean = false) =>
+    request<UpdateCheckResp>(`/api/update-check${force ? '?force=true' : ''}`),
   testAI: (payload: AITestPayload) =>
     request<AITestResult>('/api/ai/test', { method: 'POST', body: JSON.stringify(payload) }),
 
@@ -224,7 +227,7 @@ export const api = {
   // ── 白/黑名单 ──
   getSenderLists: () =>
     request<{ entries: SenderListEntry[] }>('/api/sender-lists'),
-  addSenderList: (pattern: string, list_type: 'whitelist' | 'blacklist') =>
+  addSenderList: (pattern: string, list_type: 'whitelist' | 'blacklist' | 'image_trust') =>
     request<{ ok: boolean }>('/api/sender-lists', {
       method: 'POST',
       body: JSON.stringify({ pattern, list_type }),

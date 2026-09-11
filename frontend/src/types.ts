@@ -16,6 +16,8 @@ export interface Settings {
   digest_time: string
   ui_font: 'compact' | 'standard' | 'large'
   body_font: 'small' | 'standard' | 'large'
+  allow_remote_images: boolean
+  update_check_enabled: boolean
 }
 
 export interface SettingsPayload {
@@ -23,6 +25,17 @@ export interface SettingsPayload {
   digest_time?: string
   ui_font?: 'compact' | 'standard' | 'large'
   body_font?: 'small' | 'standard' | 'large'
+  allow_remote_images?: boolean
+  update_check_enabled?: boolean
+}
+
+export interface UpdateCheckResp {
+  enabled: boolean
+  current_version: string
+  latest_version: string | null
+  is_newer: boolean
+  release_url: string
+  checked_at: string | null
 }
 
 export interface AITestPayload {
@@ -212,7 +225,7 @@ export interface UsageStats {
 export interface SenderListEntry {
   id: number
   pattern: string
-  list_type: 'whitelist' | 'blacklist'
+  list_type: 'whitelist' | 'blacklist' | 'image_trust'
   created_at: string
 }
 

@@ -199,6 +199,22 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON chat_sessions(pinned DESC, updated_at DESC);
         """,
     ),
+    (
+        6,
+        """
+        -- P4：外部图片信任白名单（sender_lists 增加 image_trust 类型，重建表以替换 CHECK 约束）
+        CREATE TABLE sender_lists_v6 (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            pattern   TEXT NOT NULL UNIQUE,
+            list_type TEXT NOT NULL CHECK (list_type IN ('whitelist', 'blacklist', 'image_trust')),
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO sender_lists_v6 (id, pattern, list_type, created_at)
+            SELECT id, pattern, list_type, created_at FROM sender_lists;
+        DROP TABLE sender_lists;
+        ALTER TABLE sender_lists_v6 RENAME TO sender_lists;
+        """,
+    ),
 ]
 
 

@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/sender-lists", tags=["sender-lists"])
 
 class SenderListIn(BaseModel):
     pattern: str
-    list_type: str  # whitelist | blacklist
+    list_type: str  # whitelist | blacklist | image_trust
 
 
 @router.get("")
@@ -34,8 +34,8 @@ def list_entries() -> dict:
 
 @router.post("")
 def add_entry(payload: SenderListIn) -> dict:
-    if payload.list_type not in ("whitelist", "blacklist"):
-        raise HTTPException(400, "list_type 需为 whitelist/blacklist")
+    if payload.list_type not in ("whitelist", "blacklist", "image_trust"):
+        raise HTTPException(400, "list_type 需为 whitelist/blacklist/image_trust")
     pattern = payload.pattern.strip().lower()
     if not pattern or ("@" not in pattern):
         raise HTTPException(400, "请填写邮箱地址或以 @ 开头的域名")

@@ -43,18 +43,34 @@ export default function EmailReader({
   const [moveOpen, setMoveOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [listMessage, setListMessage] = useState<string | null>(null)
+  const [draftInstrOpen, setDraftInstrOpen] = useState(false)
+  const [draftInstr, setDraftInstr] = useState('')
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
-  // 手动触发 AI 拟稿：生成后直接跳到待审草稿页
+  // 手动触发 AI 拟稿（可带要求提示词）：生成后直接跳到待审草稿页
   const draftMutation = useMutation({
-    mutationFn: () => api.regenerateDraft(detail.id),
+    mutationFn: () =>
+      api.regenerateDraft(detail.id, draftInstr.trim() || undefined),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['drafts'] })
       navigate('/drafts')
     },
     onError: (err: Error) => {
       setListMessage(`拟稿失败：${err.message}`)
+      setTimeout(() => setListMessage(null), 6000)
+    },
+  })
+
+  // 图片信任白名单：该发件人以后的邮件远程图片直接显示
+  const trustImagesMutation = useMutation({
+    mutationFn: () => api.addSenderList(detail.sender_email, 'image_trust'),
+    onSuccess: () => {
+      setListMessage('已加入图片信任白名单，正在重新加载图片…')
+      onShowImages()
+    },
+    onError: (err: Error) => {
+      setListMessage(`操作失败：${err.message}`)
       setTimeout(() => setListMessage(null), 6000)
     },
   })
@@ -210,9 +226,11 @@ export default function EmailReader({
             </button>
             <span className="mx-0.5 h-4 w-px bg-gray-200" />
             <button
-              className={`${btn} border-violet-200 bg-violet-50/60 text-violet-700 hover:bg-violet-50`}
-              title="让 AI 为这封邮件起草回复，生成后到待审草稿页审核发送"
-              onClick={() => draftMutation.mutate()}
+              className={`${btn} border-violet-200 bg-violet-50/60 text-violet-700 hover:bg-violet-50 ${
+                draftInstrOpen ? 'border-violet-400' : ''
+              }`}
+              title="让 AI 为这封邮件起草回复，可附带你的要求"
+              onClick={() => setDraftInstrOpen((v) => !v)}
               disabled={draftMutation.isPending}
             >
               {draftMutation.isPending
@@ -227,21 +245,50 @@ export default function EmailReader({
               <Sparkles className="h-3 w-3" /> AI 助手
             </button>
             {actionBusy && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
-            {listMessage && <span className="text-[11px] text-indigo-600">{listMessage}</span>}
+            {listMessage && <span className="t-xs text-indigo-600">{listMessage}</span>}
+            {draftInstrOpen && (
+              <div className="mt-1 flex w-full items-center gap-2">
+                <input
+                  className="min-w-0 flex-1 rounded-lg border border-violet-200 px-2.5 py-1.5 t-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+                  placeholder="对回复的要求，如：婉拒并致谢 / 询问附件细节（留空则由 AI 自行起草）"
+                  value={draftInstr}
+                  onChange={(e) => setDraftInstr(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && draftMutation.mutate()}
+                  autoFocus
+                />
+                <button
+                  className="shrink-0 rounded-lg bg-violet-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                  onClick={() => draftMutation.mutate()}
+                  disabled={draftMutation.isPending}
+                >
+                  {draftMutation.isPending ? '生成中…' : '生成草稿'}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 正文 */}
           <div className="mt-4">
             {detail.remote_blocked > 0 && (
-              <div className="mb-4 flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 t-sm text-violet-700">
                 <span>已拦截 {detail.remote_blocked} 张外部图片（防追踪）</span>
-                <button
-                  className="rounded-md border border-violet-300 bg-white px-2 py-1 text-[11px] font-medium text-violet-700 hover:bg-violet-100"
-                  onClick={onShowImages}
-                >
-                  <ExternalLink className="mr-1 inline h-3 w-3" />
-                  本次显示图片
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    className="rounded-md border border-violet-300 bg-white px-2 py-1 t-sm font-medium text-violet-700 hover:bg-violet-100"
+                    onClick={onShowImages}
+                  >
+                    <ExternalLink className="mr-1 inline h-3 w-3" />
+                    本次显示
+                  </button>
+                  <button
+                    className="rounded-md border border-violet-300 bg-white px-2 py-1 t-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+                    title="把该发件人加入图片信任白名单：以后其邮件的远程图片直接显示"
+                    onClick={() => trustImagesMutation.mutate()}
+                    disabled={trustImagesMutation.isPending}
+                  >
+                    始终显示该发件人图片
+                  </button>
+                </div>
               </div>
             )}
 

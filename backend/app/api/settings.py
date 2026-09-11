@@ -18,6 +18,8 @@ DEFAULT_SETTINGS: dict[str, object] = {
     "digest_time": "08:30",
     "ui_font": "compact",     # compact | standard | large
     "body_font": "standard",  # small | standard | large
+    "allow_remote_images": False,  # 全局放行邮件远程图片（默认拦截防追踪）
+    "update_check_enabled": True,  # 应用内更新检查（匿名版本对比，可关）
 }
 
 
@@ -26,6 +28,8 @@ class SettingsIn(BaseModel):
     digest_time: str | None = None
     ui_font: str | None = None
     body_font: str | None = None
+    allow_remote_images: bool | None = None
+    update_check_enabled: bool | None = None
 
     @field_validator("digest_time")
     @classmethod
@@ -64,6 +68,12 @@ def read_settings() -> dict:
         "digest_time": get_setting("digest_time", DEFAULT_SETTINGS["digest_time"]),
         "ui_font": get_setting("ui_font", DEFAULT_SETTINGS["ui_font"]),
         "body_font": get_setting("body_font", DEFAULT_SETTINGS["body_font"]),
+        "allow_remote_images": get_setting(
+            "allow_remote_images", DEFAULT_SETTINGS["allow_remote_images"]
+        ),
+        "update_check_enabled": get_setting(
+            "update_check_enabled", DEFAULT_SETTINGS["update_check_enabled"]
+        ),
     }
 
 
@@ -77,6 +87,10 @@ def update_settings(payload: SettingsIn) -> dict:
         set_setting("ui_font", payload.ui_font)
     if payload.body_font is not None:
         set_setting("body_font", payload.body_font)
+    if payload.allow_remote_images is not None:
+        set_setting("allow_remote_images", payload.allow_remote_images)
+    if payload.update_check_enabled is not None:
+        set_setting("update_check_enabled", payload.update_check_enabled)
     return read_settings()
 
 
