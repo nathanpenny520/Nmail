@@ -60,6 +60,8 @@ bash scripts/sync_frontend.sh                       # 构建前端并同步进 P
 
 或只构建 wheel：`pip wheel . -w dist`。发布 PyPI 后用户即可 `uvx --from nmail-app nmail`。打 `v*` tag 时 CI（`.github/workflows/release.yml`）自动完成 wheel 发布、三平台二进制，并（配置 `HOMEBREW_TAP_TOKEN` secret 后）自动同步 Homebrew tap。
 
+**日常发版用一条命令**：`bash scripts/release.sh 0.2.0`（自动改版本号、打 tag、盯 CI、提 winget 版本 PR），完整说明见 [docs/RELEASE.md](docs/RELEASE.md)。
+
 ## 更新
 
 - **应用内检查**（默认开启，可在 设置-通用 关闭）：每 24 小时向 GitHub 做一次匿名版本对比，发现新版本会在通知中心提醒；设置页可手动「检查更新」。只发送版本号，不携带任何本机数据。

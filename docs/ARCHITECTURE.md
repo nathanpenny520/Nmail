@@ -92,5 +92,6 @@ UID 增量拉取 → 落库+附件落盘 → 白名单(留收件箱)/黑名单(�
 | 三平台单文件 | `nmail.spec` | PyInstaller onefile；hiddenimports 显式声明 uvicorn 延迟导入子模块；前端资源随包 |
 | 发布流水线 | `.github/workflows/release.yml` | 打 tag `v*` → wheel 发 PyPI（`uvx --from nmail-app nmail`）+ Windows/macOS/Linux 二进制挂 GitHub Release +（可选 secret `HOMEBREW_TAP_TOKEN`）自动同步 Homebrew tap |
 | winget | winget-pkgs PR | `winget install nathanpenny520.Nmail` / `winget upgrade`；portable 型，SHA256 对齐 Release 资产 |
+| 发版脚本 | `scripts/release.sh` | 一条命令：同步两处版本号 → 提交打 tag → 盯 CI → 自动提 winget 版本 PR；手册与踩坑见 `docs/RELEASE.md` |
 
 已知分发注意点：Windows SmartScreen 对无签名 exe 会警告（缓解：onedir/误报申诉/买签名证书）；macOS 未公证二进制需右键打开或 `xattr -cr`（公证需 Apple Developer 账号）。

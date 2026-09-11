@@ -11,6 +11,7 @@ cd backend && ../.venv/Scripts/python -m uvicorn app.main:app --reload --port 87
 cd frontend && npm run dev                      # 前端 dev server（/api 代理到 8720）
 cd frontend && npm run build                    # 前端构建（含 tsc 类型检查）——前端改动后必须执行
 cd backend && ../.venv/Scripts/python -m ruff check app --select F                  # 后端静态检查
+bash scripts/release.sh 0.2.0                   # 一条命令发版（PyPI/Release/Homebrew/winget PR，详见 docs/RELEASE.md）
 ```
 
 ## 工作流规范（必须遵守）
