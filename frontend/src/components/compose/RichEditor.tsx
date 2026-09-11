@@ -1,0 +1,327 @@
+import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import TextAlign from '@tiptap/extension-text-align'
+import Highlight from '@tiptap/extension-highlight'
+import Image from '@tiptap/extension-image'
+import Placeholder from '@tiptap/extension-placeholder'
+import { Table } from '@tiptap/extension-table'
+import TableCell from '@tiptap/extension-table-cell'
+import TableHeader from '@tiptap/extension-table-header'
+import TableRow from '@tiptap/extension-table-row'
+import { Color, FontFamily, FontSize, TextStyle } from '@tiptap/extension-text-style'
+import {
+  AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Code2, Highlighter, ImagePlus,
+  IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Quote,
+  Redo2, RemoveFormatting, Strikethrough, Table as TableIcon, Trash2, Underline, Undo2,
+} from 'lucide-react'
+import { useRef } from 'react'
+
+/** 编辑器内嵌图上限（base64 直发，超过提示改用附件） */
+const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024
+
+const FONT_FAMILIES: { label: string; value: string }[] = [
+  { label: '默认字体', value: '' },
+  { label: '宋体', value: 'SimSun, serif' },
+  { label: '黑体', value: 'SimHei, sans-serif' },
+  { label: '微软雅黑', value: "'Microsoft YaHei', sans-serif" },
+  { label: '楷体', value: 'KaiTi, serif' },
+  { label: 'Arial', value: 'Arial, sans-serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Courier New', value: "'Courier New', monospace" },
+]
+
+const FONT_SIZES = ['12px', '13px', '14px', '15px', '16px', '18px', '20px', '24px', '32px']
+
+/**
+ * 创建写信编辑器实例。onChange/onCtrlEnter 经 ref 转发，避免闭包过期。
+ * StarterKit v3 已含 Underline/Link/History，链接点击在编辑器内不跳转。
+ */
+export function useMailEditor(initialHtml: string, onChange: (html: string) => void, onCtrlEnter: () => void) {
+  const cbRef = useRef({ onChange, onCtrlEnter })
+  cbRef.current = { onChange, onCtrlEnter }
+  return useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+        link: { openOnClick: false, defaultProtocol: 'https' },
+      }),
+      TextStyle,
+      Color,
+      FontFamily,
+      FontSize,
+      Highlight.configure({ multicolor: true }),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      Image.configure({ allowBase64: true }),
+      Placeholder.configure({ placeholder: '写信正文…' }),
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
+    ],
+    content: initialHtml || '<p></p>',
+    editorProps: {
+      attributes: { class: 'mail-editor-content' },
+      handleKeyDown: (_view, event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+          cbRef.current.onCtrlEnter()
+          return true
+        }
+        return false
+      },
+    },
+    onUpdate: ({ editor }) => cbRef.current.onChange(editor.getHTML()),
+  })
+}
+
+/** AI 辅助结果写入：有选区替换选区，否则整篇替换（与旧版弹框行为一致）。 */
+export function applyAiText(editor: Editor, text: string): void {
+  const html = text
+    .split(/\n{2,}/)
+    .filter((p) => p.trim())
+    .map((p) => `<p>${p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`)
+    .join('')
+  if (!html) return
+  const wholeDoc = editor.state.selection.empty && editor.state.doc.textContent.trim() !== ''
+  if (wholeDoc) editor.commands.setContent(html)
+  else editor.chain().focus().insertContent(html).run()
+}
+
+function Sep() {
+  return <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200" />
+}
+
+function TBtn({
+  title, active, disabled, onClick, children,
+}: {
+  title: string
+  active?: boolean
+  disabled?: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-30 ${
+        active ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function pickColor(onPick: (color: string) => void, title: string, icon: React.ReactNode) {
+  return (
+    <label
+      title={title}
+      onMouseDown={(e) => e.preventDefault()}
+      className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+    >
+      {icon}
+      <input type="color" className="hidden" onChange={(e) => onPick(e.target.value)} />
+    </label>
+  )
+}
+
+/** 富文本工具栏，对齐常见网页邮箱：撤销重做 / 清格式 / 字体字号 / BISU / 颜色高亮 / 列表缩进对齐 / 引用代码表格链接图片 */
+export function EditorToolbar({ editor }: { editor: Editor | null }) {
+  const state = useEditorState({
+    editor,
+    selector: ({ editor: e }) =>
+      e
+        ? {
+            canUndo: e.can().undo(),
+            canRedo: e.can().redo(),
+            bold: e.isActive('bold'),
+            italic: e.isActive('italic'),
+            underline: e.isActive('underline'),
+            strike: e.isActive('strike'),
+            blockquote: e.isActive('blockquote'),
+            codeBlock: e.isActive('codeBlock'),
+            bulletList: e.isActive('bulletList'),
+            orderedList: e.isActive('orderedList'),
+            alignLeft: e.isActive({ textAlign: 'left' }),
+            alignCenter: e.isActive({ textAlign: 'center' }),
+            alignRight: e.isActive({ textAlign: 'right' }),
+            link: e.isActive('link'),
+            inTable: e.isActive('table'),
+            fontSize: (e.getAttributes('textStyle').fontSize as string | undefined) ?? '',
+            fontFamily: (e.getAttributes('textStyle').fontFamily as string | undefined) ?? '',
+          }
+        : null,
+  })
+  if (!editor || !state) return null
+  const chain = () => editor.chain().focus()
+
+  return (
+    <div className="flex flex-wrap items-center gap-0.5 border-b border-gray-100 px-2 py-1">
+      <TBtn title="撤销" disabled={!state.canUndo} onClick={() => chain().undo().run()}>
+        <Undo2 className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="重做" disabled={!state.canRedo} onClick={() => chain().redo().run()}>
+        <Redo2 className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="清除格式" onClick={() => chain().clearNodes().unsetAllMarks().run()}>
+        <RemoveFormatting className="h-4 w-4" />
+      </TBtn>
+      <Sep />
+      <select
+        className="h-7 max-w-24 rounded-md border border-transparent px-1 t-sm text-gray-600 hover:border-gray-200 focus:border-indigo-400 focus:outline-none"
+        title="字体"
+        value={state.fontFamily}
+        onChange={(e) =>
+          e.target.value ? chain().setFontFamily(e.target.value).run() : chain().unsetFontFamily().run()
+        }
+      >
+        {FONT_FAMILIES.map((f) => (
+          <option key={f.label} value={f.value}>
+            {f.label}
+          </option>
+        ))}
+      </select>
+      <select
+        className="h-7 max-w-20 rounded-md border border-transparent px-1 t-sm text-gray-600 hover:border-gray-200 focus:border-indigo-400 focus:outline-none"
+        title="字号"
+        value={state.fontSize}
+        onChange={(e) =>
+          e.target.value ? chain().setFontSize(e.target.value).run() : chain().unsetFontSize().run()
+        }
+      >
+        {!state.fontSize && <option value="">字号</option>}
+        {FONT_SIZES.map((s) => (
+          <option key={s} value={s}>
+            {parseInt(s, 10)}
+          </option>
+        ))}
+      </select>
+      <Sep />
+      <TBtn title="加粗" active={state.bold} onClick={() => chain().toggleBold().run()}>
+        <Bold className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="斜体" active={state.italic} onClick={() => chain().toggleItalic().run()}>
+        <Italic className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="下划线" active={state.underline} onClick={() => chain().toggleUnderline().run()}>
+        <Underline className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="删除线" active={state.strike} onClick={() => chain().toggleStrike().run()}>
+        <Strikethrough className="h-4 w-4" />
+      </TBtn>
+      {pickColor((c) => chain().setColor(c).run(), '文字颜色', <Baseline className="h-4 w-4" />)}
+      {pickColor(
+        (c) => chain().toggleHighlight({ color: c }).run(),
+        '背景高亮',
+        <Highlighter className="h-4 w-4" />,
+      )}
+      <Sep />
+      <TBtn title="无序列表" active={state.bulletList} onClick={() => chain().toggleBulletList().run()}>
+        <List className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="有序列表" active={state.orderedList} onClick={() => chain().toggleOrderedList().run()}>
+        <ListOrdered className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="列表缩进" onClick={() => chain().sinkListItem('listItem').run()}>
+        <IndentIncrease className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="列表减缩进" onClick={() => chain().liftListItem('listItem').run()}>
+        <IndentDecrease className="h-4 w-4" />
+      </TBtn>
+      <Sep />
+      <TBtn title="左对齐" active={state.alignLeft} onClick={() => chain().setTextAlign('left').run()}>
+        <AlignLeft className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="居中" active={state.alignCenter} onClick={() => chain().setTextAlign('center').run()}>
+        <AlignCenter className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="右对齐" active={state.alignRight} onClick={() => chain().setTextAlign('right').run()}>
+        <AlignRight className="h-4 w-4" />
+      </TBtn>
+      <Sep />
+      <TBtn title="引用" active={state.blockquote} onClick={() => chain().toggleBlockquote().run()}>
+        <Quote className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="代码块" active={state.codeBlock} onClick={() => chain().toggleCodeBlock().run()}>
+        <Code2 className="h-4 w-4" />
+      </TBtn>
+      <TBtn title="分隔线" onClick={() => chain().setHorizontalRule().run()}>
+        <Minus className="h-4 w-4" />
+      </TBtn>
+      <Sep />
+      <TBtn
+        title={state.link ? '编辑链接（留空移除）' : '插入链接'}
+        active={state.link}
+        onClick={() => {
+          const existing = (editor.getAttributes('link').href as string | undefined) ?? ''
+          const url = window.prompt('链接地址（留空移除）', existing)?.trim()
+          if (url == null) return
+          if (!url) {
+            chain().unsetLink().run()
+            return
+          }
+          const href = /^(https?:\/\/|mailto:)/i.test(url) ? url : `https://${url}`
+          chain().extendMarkRange('link').setLink({ href }).run()
+        }}
+      >
+        <Link2 className="h-4 w-4" />
+      </TBtn>
+      {pickColorImg(editor)}
+      <TBtn
+        title="插入表格"
+        onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+      >
+        <TableIcon className="h-4 w-4" />
+      </TBtn>
+      {state.inTable && (
+        <TBtn title="删除当前表格" onClick={() => chain().deleteTable().run()}>
+          <Trash2 className="h-4 w-4" />
+        </TBtn>
+      )}
+    </div>
+  )
+}
+
+/** 图片插入：本地文件转 base64 内嵌（超过上限提示改用附件） */
+function pickColorImg(editor: Editor) {
+  return (
+    <label
+      title="插入图片（本地图片内嵌发送）"
+      onMouseDown={(e) => e.preventDefault()}
+      className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+    >
+      <ImagePlus className="h-4 w-4" />
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (!file) return
+          if (file.size > MAX_IMAGE_BYTES) {
+            window.alert('图片超过 1.5MB，建议以附件形式添加')
+            return
+          }
+          const reader = new FileReader()
+          reader.onload = () => {
+            editor.chain().focus().setImage({ src: String(reader.result) }).run()
+          }
+          reader.readAsDataURL(file)
+        }}
+      />
+    </label>
+  )
+}
+
+/** 编辑器内容区（工具栏之下的正文画布） */
+export function EditorSurface({ editor }: { editor: Editor | null }) {
+  return (
+    <div className="mail-editor min-h-0 flex-1 overflow-y-auto">
+      <EditorContent editor={editor} />
+    </div>
+  )
+}

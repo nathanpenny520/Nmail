@@ -18,13 +18,11 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-```markdown
-### S-MMDD-HHmm-<主题>
-- 目标: 一句话
-- 范围: 预计触碰的文件/目录
-- 开始: YYYY-MM-DD HH:MM
+### S-0911-1249-写信工作台
+- 目标: 写信从弹框改为全页多标签工作台 + user_drafts 自动存草稿 + TipTap 富文本编辑器（P1+P2 合并一次提交）
+- 范围: backend/app/db/database.py（迁移v8）、backend/app/api/user_drafts.py（新增）、backend/app/api/emails.py、backend/app/core/mail_html.py；frontend/src/pages/ComposePage.tsx（新增）、components/compose/*（新增）、App.tsx、MailBrowser.tsx、api/client.ts、types.ts；docs
+- 开始: 2026-09-11 12:49
 - 状态: 进行中
-```
 
 ## 已完成
 

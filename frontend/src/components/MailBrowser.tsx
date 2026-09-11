@@ -8,18 +8,13 @@ import { api, type EmailQuery } from '../api/client'
 import {
   CATEGORY_META, type EmailDetail, type EmailSummary, type FolderInfo, type SyncResult,
 } from '../types'
-import ComposeModal, { type ComposeInit } from './ComposeModal'
+import { useCompose } from './compose/ComposeContext'
 import EmailReader from './EmailReader'
 
 const PAGE_SIZE = 50
 
 const batchBtn =
   'rounded-md border border-indigo-200 bg-white px-1.5 py-0.5 t-sm text-gray-600 transition-colors hover:text-indigo-700 disabled:opacity-50'
-
-export interface ComposeContext {
-  mode: 'reply' | 'replyAll' | 'forward' | 'new'
-  base?: EmailDetail | null
-}
 
 /**
  * 邮件浏览主界面（聚合收件箱 / 已归档 共用）。
@@ -28,6 +23,7 @@ export interface ComposeContext {
 export default function MailBrowser({ archived }: { archived: boolean }) {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
+  const compose = useCompose()
 
   const [accountId, setAccountId] = useState<number | null>(null)
   const [folder, setFolder] = useState('INBOX')
@@ -39,7 +35,6 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [showImages, setShowImages] = useState(false)
-  const [compose, setCompose] = useState<ComposeInit | null>(null)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
 
   // 分屏布局：列表宽度可拖拽，阅读区可全屏，均记忆在本地
@@ -267,7 +262,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
 
   const openCompose = (mode: 'reply' | 'replyAll' | 'forward') => {
     if (!detail) return
-    setCompose({ mode, base: detail })
+    void compose.openReply(mode, detail)
   }
 
   const applyQ = () => {
@@ -364,7 +359,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
           )}
           <button
             className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 t-sm font-medium text-gray-700 hover:bg-gray-50"
-            onClick={() => setCompose({ mode: 'new' })}
+            onClick={() => void compose.openNew()}
           >
             <Pencil className="mr-1 h-3.5 w-3.5" /> 写信
           </button>
@@ -665,18 +660,6 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
         )}
       </section>
       </div>
-
-      {compose && (
-        <ComposeModal
-          accounts={accounts}
-          init={compose}
-          onClose={() => setCompose(null)}
-          onSent={() => {
-            setCompose(null)
-            invalidateMail()
-          }}
-        />
-      )}
     </div>
   )
 }

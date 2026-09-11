@@ -33,6 +33,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `api/accounts.py` | 账号 CRUD/测试/探测/同步/文件夹/服务商预设/语气学习 | 授权码存 `secrets.json`（key=`account_pwd:{id}`）；`POST /accounts/probe` 未收录域名自动探测 |
 | `api/emails.py` | 列表/搜索/详情/操作/发送/附件下载 | 搜索：≥3 字走 FTS5 trigram，<3 字回退 LIKE；详情返回消毒后 HTML（`?images=1` 放行远程图+内联 cid） |
 | `api/drafts.py` | 待审草稿：列表/修改/发送(approve)/丢弃/恢复/彻底删除/重新生成 | approve 走 SMTP 并带 `In-Reply-To`；原文自动标已读 |
+| `api/user_drafts.py` | 写信工作台草稿：创建/列表/读取/修改/删除/发送 | 前端防抖 PATCH 自动保存；发送前 `sanitize_outgoing_html` 消毒 + 派生纯文本 + 套基础样式外层；回复草稿带 `In-Reply-To`（软引用邮件 id） |
 | `api/ai.py` | 单邮件问答、总管家问答（会话持久化）、写作辅助、用量、AI 整理 | 问答/总管家均有 `/stream` SSE 版本，中途错误以 `{"error":...}` 事件下发；对话/写作接受 `profile_id` 临时切换档案 |
 | `api/notifications.py` | 通知中心 | — |
 | `api/sender_lists.py` | 白/黑名单（邮箱或 @域名） | 管线中零成本先过滤 |
@@ -43,7 +44,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `core/imap_client.py` | IMAP/SMTP 封装 | 网易系需 IMAP ID 命令；SMTP 端口 465=SSL/587=STARTTLS；`append_sent` 发送后归档 |
 | `core/sync.py` | UID 增量同步 | 首同步限 30 天；UIDVALIDITY 变化自愈；登录失败→`auth_error`+一次性通知；同步完成后触发 AI 流水线 |
 | `core/pipeline.py` | 白/黑名单 → AI 批量分类 → 营销自动归档 → 生成草稿 → 通知 | AI 未配置诚实降级；批量 20 封/请求 |
-| `core/mail_html.py` | nh3 白名单消毒 + 远程图片拦截 + cid 内联 + Markdown→HTML | 两层防护：消毒在前、图片控制在后 |
+| `core/mail_html.py` | nh3 白名单消毒 + 远程图片拦截 + cid 内联 + Markdown→HTML | 两层防护：消毒在前、图片控制在后；另供发件方向 `sanitize_outgoing_html`（放行 data: 内嵌图）与 `html_to_plain_text`/`wrap_email_body_html` |
 | `core/update_check.py` | 应用内更新检查：GitHub Releases 对比 + 通知中心提醒 | 仅匿名 GET api.github.com（UA=Nmail/版本），24h 缓存；开关 `update_check_enabled`；按 ref_id=版本去重，升级后自动清理旧提醒 |
 | `ai/llm.py` | OpenAI 兼容客户端（流式 `iter_deltas` / 非流式） | connect 5s / 读写 15s 快速失败 |
 | `ai/profiles.py` | AI 配置档案存储/解析（settings JSON + secrets 分离） | 解析顺序：显式 profile_id > 激活档案 > 第一个；旧单配置首读自动迁移为「默认」档案 |
@@ -57,16 +58,16 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 
 | 部分 | 内容 |
 |------|------|
-| `pages/` | InboxPage/ArchivedPage（共用 MailBrowser，分屏+可拖拽）、DraftsPage（草稿分屏）、DigestPage（ECharts 摘要）、ManagerPage（AI 总管家，SSE 流式）、SettingsPage |
-| `components/` | MailBrowser（三态：列表/分屏/全屏）、EmailReader（消毒 iframe+操作栏+AI 面板）、HtmlMail（sandbox=allow-same-origin+allow-popups，外链新标签打开，ResizeObserver 高度自适应+zoom 注入）、ComposeModal（Markdown+AI 辅助）、AddAccountModal、AiPanel、NotificationBell（浏览器通知）、Markdown（react-markdown+gfm） |
+| `pages/` | InboxPage/ArchivedPage（共用 MailBrowser，分屏+可拖拽）、ComposePage（写信工作台，多标签）、DraftsPage（草稿分屏）、DigestPage（ECharts 摘要）、ManagerPage（AI 总管家，SSE 流式）、SettingsPage |
+| `components/` | MailBrowser（三态：列表/分屏/全屏）、EmailReader（消毒 iframe+操作栏+AI 面板）、HtmlMail（sandbox=allow-same-origin+allow-popups，外链新标签打开，ResizeObserver 高度自适应+zoom 注入）、compose/（写信工作台：ComposeContext 多标签状态中枢挂 App 级、ComposeForm 字段+附件+AI 辅助+自动保存、RichEditor=TipTap v3 富文本、quote.ts 回复/转发引用）、AddAccountModal、AiPanel、NotificationBell（浏览器通知）、Markdown（react-markdown+gfm） |
 | `api/` | `client.ts`（REST 封装，FormData 不设 JSON 头）、`stream.ts`（SSE 解析，错误可见） |
 | 字号系统 | `index.css` 三档 CSS 变量（`--fs-xs/sm/md/lg`），`<html data-font>` 切换（FontApplier 读设置应用）；`t-xs/sm/md/lg` 工具类；正文字号独立经 iframe zoom 注入 |
 
 ## 数据表（nmail.db）
 
-`settings`(KV) · `notifications` · `accounts`(含 ai_permission/tone_dna) · `emails`(含分类/needs_reply/archived_local) · `attachments` · `sync_state`(uid/uidvalidity) · `emails_fts`(trigram) · `drafts`(pending/sent/discarded) · `ai_logs`(全量 AI 用量) · `sender_lists` · `digest_history` · `chat_sessions`/`chat_messages`（P4 会话持久化）
+`settings`(KV) · `notifications` · `accounts`(含 ai_permission/tone_dna) · `emails`(含分类/needs_reply/archived_local) · `attachments` · `sync_state`(uid/uidvalidity) · `emails_fts`(trigram) · `drafts`(pending/sent/discarded) · `user_drafts`(写信工作台草稿，editing/sent) · `ai_logs`(全量 AI 用量) · `sender_lists` · `digest_history` · `chat_sessions`/`chat_messages`（P4 会话持久化）
 
-迁移版本：v1 基础表 → v2 邮件核心+FTS → v3 AI 层 → v4 摘要+ToneDNA → v5 会话持久化
+迁移版本：v1 基础表 → v2 邮件核心+FTS → v3 AI 层 → v4 摘要+ToneDNA → v5 会话持久化 → v7 date_sort 排序修复 → v8 user_drafts
 
 ## 关键流程
 
@@ -79,7 +80,7 @@ UID 增量拉取 → 落库+附件落盘 → 白名单(留收件箱)/黑名单(�
 
 ### 安全模型
 - HTML 邮件：nh3 白名单（http(s) 链接强制 target=_blank + rel=noopener）→ 远程图默认拦截（计数）→ 前端 sandbox iframe（allow-same-origin+allow-popups-to-escape-sandbox，无脚本；外链点击在新标签由浏览器正常打开，不在 iframe 内导航）
-- 发信：multipart/alternative（Markdown→HTML + 纯文本兜底）；草稿 approve 带 In-Reply-To 并归档 Sent
+- 发信：multipart/alternative（写信工作台：TipTap HTML 经 `sanitize_outgoing_html` 白名单消毒后直发 + 派生纯文本；旧 `/emails/send` 保留 Markdown→HTML）；草稿 approve 带 In-Reply-To 并归档 Sent
 - 密钥：本地 `secrets.json`（POSIX chmod 600）；AI key 按档案存放（`ai_profile_key:{id}`）且不回传；服务仅 127.0.0.1
 
 ## 分发与打包

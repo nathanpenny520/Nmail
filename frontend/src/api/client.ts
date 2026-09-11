@@ -21,6 +21,7 @@ import type {
   SyncResult,
   UpdateCheckResp,
   UsageStats,
+  UserDraft,
   DigestResp,
 } from '../types'
 
@@ -167,6 +168,22 @@ export const api = {
       body: JSON.stringify({ ids, action, ...(folder ? { folder } : {}) }),
     }),
   sendEmail: (form: FormData) => request<{ ok: boolean }>('/api/emails/send', { method: 'POST', body: form }),
+
+  // ── 写信工作台草稿 ──
+  createUserDraft: (payload: Partial<UserDraft>) =>
+    request<{ draft: UserDraft }>('/api/user-drafts', { method: 'POST', body: JSON.stringify(payload) }),
+  getUserDrafts: (status: string = 'editing') =>
+    request<{ drafts: UserDraft[] }>(`/api/user-drafts?status=${status}`),
+  getUserDraft: (id: number) => request<{ draft: UserDraft }>(`/api/user-drafts/${id}`),
+  updateUserDraft: (id: number, payload: Partial<UserDraft>) =>
+    request<{ ok: boolean }>(`/api/user-drafts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  sendUserDraft: (id: number, form: FormData) =>
+    request<{ ok: boolean }>(`/api/user-drafts/${id}/send`, { method: 'POST', body: form }),
+  deleteUserDraft: (id: number) =>
+    request<{ ok: boolean }>(`/api/user-drafts/${id}`, { method: 'DELETE' }),
 
   // ── 通知 ──
   getNotifications: () => request<NotificationsResp>('/api/notifications'),

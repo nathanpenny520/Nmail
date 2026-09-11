@@ -186,6 +186,23 @@ export interface NotificationsResp {
   items: NotificationItem[]
 }
 
+// ── 写信工作台（用户手写草稿）─────────────────────────────────
+
+export interface UserDraft {
+  id: number
+  account_id: number
+  mode: 'new' | 'reply' | 'replyAll' | 'forward' | string
+  in_reply_to: number | null
+  to_addrs: string
+  cc_addrs: string
+  bcc_addrs: string
+  subject: string
+  body_html: string
+  status: 'editing' | 'sent' | 'discarded' | string
+  created_at: string
+  updated_at: string
+}
+
 // ── P2 AI 层 ─────────────────────────────────────────────────
 
 export interface Draft {

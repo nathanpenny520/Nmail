@@ -98,14 +98,47 @@ def sanitize_email_html(
     return str(soup), blocked
 
 
+def sanitize_outgoing_html(html: str) -> str:
+    """发件方向消毒：同一套白名单，但额外放行 data: 图片（编辑器内嵌图）。
+
+    收件路径不放行 data:（历史邮件无需支持），发件路径放行以免用户插入的
+    截图被静默剥离；nh3 白名单仍剔除脚本/事件属性/javascript: 等。
+    """
+    return nh3.clean(
+        html or "",
+        tags=_ALLOWED_TAGS,
+        attributes=_ALLOWED_ATTRS,
+        url_schemes=_URL_SCHEMES | {"data"},
+        link_rel="noopener noreferrer",
+    )
+
+
+def html_to_plain_text(html: str) -> str:
+    """HTML → 纯文本，作为发出邮件的 text/plain alternative。"""
+    soup = BeautifulSoup(html or "", "html.parser")
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
+    for block in soup.find_all(
+        ["p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"]
+    ):
+        block.append("\n")
+    text = soup.get_text()
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def wrap_email_body_html(inner_html: str) -> str:
+    """给正文 HTML 套上基础样式外层（无样式的客户端也能正常阅读）。"""
+    return (
+        '<div style="font-family:-apple-system,\'Segoe UI\',\'Microsoft YaHei\','
+        'sans-serif;font-size:14px;line-height:1.65;color:#1f2937;white-space:normal">'
+        + inner_html
+        + "</div>"
+    )
+
+
 def markdown_to_email_html(markdown_text: str) -> str:
     """写信正文的 Markdown → 带基础样式的 HTML。"""
     import markdown as md_lib
 
     body = md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables"])
-    return (
-        '<div style="font-family:-apple-system,\'Segoe UI\',\'Microsoft YaHei\','
-        'sans-serif;font-size:14px;line-height:1.65;color:#1f2937;white-space:normal">'
-        + body
-        + "</div>"
-    )
+    return wrap_email_body_html(body)

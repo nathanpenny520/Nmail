@@ -226,6 +226,30 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX IF NOT EXISTS idx_emails_date_sort ON emails(date_sort DESC);
         """,
     ),
+    (
+        8,
+        """
+        -- 写信工作台：用户手写草稿（与 AI 待审 drafts 表相互独立）。
+        -- 正文存 HTML（编辑器产出），发送时消毒并派生纯文本 alternative。
+        -- in_reply_to 为软引用（无外键）：被引用邮件可能随时被同步删除。
+        CREATE TABLE IF NOT EXISTS user_drafts (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+            mode        TEXT NOT NULL DEFAULT 'new',
+            in_reply_to INTEGER,
+            to_addrs    TEXT NOT NULL DEFAULT '',
+            cc_addrs    TEXT NOT NULL DEFAULT '',
+            bcc_addrs   TEXT NOT NULL DEFAULT '',
+            subject     TEXT NOT NULL DEFAULT '',
+            body_html   TEXT NOT NULL DEFAULT '',
+            status      TEXT NOT NULL DEFAULT 'editing',
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_drafts_status
+            ON user_drafts(status, updated_at DESC);
+        """,
+    ),
 ]
 
 
