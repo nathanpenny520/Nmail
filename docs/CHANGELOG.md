@@ -3,6 +3,35 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 5afa93a — 工程化：OpenAPI 类型生成基建（3.7a）
+- 新增 devDependency `openapi-typescript` + `npm run gen:api`；`frontend/openapi.json` 为后端 schema 快照（随 API 改动更新、同提交），生成 `src/api/schema.d.ts` 供接口类型消费
+- CLAUDE.md 常用命令新增更新流程一行；存量 types.ts 手写类型按计划渐进替换（新增端点优先走生成类型）
+- 验证：tsc + vite build 通过（schema.d.ts 与现有类型无冲突）
+
+## 7cdb59e — 重构：前端公共件归拢（3.7b）——hooks/useFlash + utils/format
+- `hooks/useFlash`：通知横幅统一定时清理（重发重置计时、卸载清定时器），替代 DraftsPage 手写 flash 与 MailBrowser ×9 的 `setTimeout(setSyncMessage(null))`
+- `utils/format`：shortDate/formatDate/fmtSize/relativeTime 四处定义归一，四文件改为导入，行为逐字保留
+- 顺修遗留：MailBrowser「同步失败」横幅此前没有定时器、永不清除——现由 useFlash 默认时长兜底
+- 验证：npm build（tsc 含）通过
+
+## b4050a8 — 工程化：新增 CI 门禁（T3）
+- `.github/workflows/ci.yml`：push main / PR 触发——backend job（`pip install -e . pytest ruff` → ruff 五规则+TID251 → pytest 44 例）+ frontend job（npm ci → build 含 tsc）；此前主干只有 tag 触发的 release.yml，无任何门禁
+
+## 372bf0a — 测试：pytest 基础层 44 例（T1，纯函数层优先）
+- 覆盖：mail_html 消毒 XSS 样本集（script/onclick/javascript:/iframe/远程图计数与占位/data: 收发差异/cid 内联与缺文件降级）、`_extract_json` 稳健解析、`match_sender_list` 契约（写入侧已 lower）、`reply_subject`、autoconfig `_server_from_xml`（SSL/缺省端口/坏端口回退/明文拒绝）、`_is_newer` 数值比较与垃圾输入、迁移幂等（连跑两遍 + v12 到位）、tx() 提交/回滚、get_setting 坏值容错、TestClient 下的 list_emails 筛选矩阵与 batch 归档往返、S1 守卫五形态
+- conftest 以一次性临时目录隔离数据（绝不触碰真实用户数据）；pyproject 增 pytest 配置（testpaths/pythonpath）
+- 修正测试自身的三处初版误设：搜索按设计忽略文件夹过滤（4 封全含「邮」）、tx 直插裸值经 json.loads 还原为 int、名单大小写契约在写入侧
+- 验证：44 passed
+
+## 0690420 — 工程化：版本号单一来源（T5）
+- `app/config.py` 运行时读 `importlib.metadata.version("nmail-app")`；源码直跑/冻结环境无元数据回退常量——改版本只需改 pyproject.toml；ARCHITECTURE 分发表说明同步更新
+- 验证：源码模式 /api/health 正常回退 0.1.0
+
+## 71d1aea — 工程化：ruff 扩规则一次收敛（T2）
+- 检查命令升级 `--select F,E9,B,SIM,UP,TID251`（CLAUDE.md 同步）；存量 42 条清零——UP 时区别名/collections.abc、SIM105 contextlib.suppress 化 ×6、B904 raise-from 补全 ×6、B905 zip strict、B023 闭包改参数传递（iter_new_mail._fetch_one）
+- 两处 noqa 为已知误报/惯用法：SIM118（sqlite3.Row 的 `in` 是值语义不是键）、B008（FastAPI `File(...)` 依赖注入）
+- 验证：ruff 全绿 + 隔离实例 /api/health 冒烟
+
 ## e5eafc9 — fix：R7 本地库保留策略——启动时通知留 500 条 / ai_logs 留 90 天，UIDVALIDITY 重置清附件孤儿目录
 - notifications / ai_logs 无界增长（本地单机库长年累月必胀）；启动（lifespan）执行 `cleanup_retention`——通知按 id 留最新 500 条、ai_logs 删 90 天前；断言验证 600→500、过期清/近期留
 - UIDVALIDITY 重置分支此前只删 emails 行（附件行随 FK 级联），磁盘 `accounts/<id>/attachments/<email_id>/` 成孤儿——重置时先收旧 id 再顺带 rmtree 各自目录

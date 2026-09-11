@@ -257,14 +257,14 @@ npx openapi-typescript frontend/openapi.json -o frontend/src/api/schema.d.ts
 
 ## 6. 测试与工程化
 
-| # | 项 | 内容 |
-|---|---|---|
-| T1 | pytest 基础层（零测试现状） | `backend/tests/`：`mail_html`（XSS 样本集：script/onclick/javascript:/收发 data: 差异/远程图计数/cid 替换）、`_extract_json`、`match_sender_list`、`reply_subject`、`_server_from_xml`、`update_check._is_newer`、迁移幂等（临时 `NMAIL_DATA_DIR` 连跑两遍）、TestClient 下 `list_emails` 筛选矩阵与 batch 归档。**纯函数层优先，不追求覆盖率** |
-| T2 | ruff 扩规则 | `--select F` → `F,E9,B,SIM,UP`，修存量一次收敛；CI 与本地命令同步更新（CLAUDE.md） |
-| T3 | CI 流水线 | 新增 `.github/workflows/ci.yml`：ruff + pytest + `npm run build`（现有 release.yml 只在 tag 触发，主干无门禁） |
-| T4 | 分层规则固化 | ruff flake8-tidy-imports 或 import-linter：禁止 `scheduler → app.api`、禁止 `core → app.api`（3.6 完成后启用） |
-| T5 | 版本号单一来源 | pyproject 与 `config.APP_VERSION` 双维护 → config 改读 `importlib.metadata.version("nmail-app")`，冻结环境回退常量 |
-| T6 | 仓库卫生 | ✅ 无需动作：`.gitignore` 已含 `reference/`，仓库根不存在 referencee/ 目录（原条目为笔误，复核于 2026-09-11 修订） |
+| # | 项 | 内容 | 状态 |
+|---|---|---|---|
+| T1 | pytest 基础层（零测试现状） | `backend/tests/`：`mail_html`（XSS 样本集：script/onclick/javascript:/收发 data: 差异/远程图计数/cid 替换）、`_extract_json`、`match_sender_list`、`reply_subject`、`_server_from_xml`、`update_check._is_newer`、迁移幂等（临时 `NMAIL_DATA_DIR` 连跑两遍）、TestClient 下 `list_emails` 筛选矩阵与 batch 归档。**纯函数层优先，不追求覆盖率** | ✅ 44 例（372bf0a） |
+| T2 | ruff 扩规则 | `--select F` → `F,E9,B,SIM,UP`，修存量一次收敛；CI 与本地命令同步更新（CLAUDE.md） | ✅ 42 条清零（71d1aea） |
+| T3 | CI 流水线 | 新增 `.github/workflows/ci.yml`：ruff + pytest + `npm run build`（现有 release.yml 只在 tag 触发，主干无门禁） | ✅（b4050a8） |
+| T4 | 分层规则固化 | ruff flake8-tidy-imports 或 import-linter：禁止 `scheduler → app.api`、禁止 `core → app.api`（3.6 完成后启用） | ✅（9f0bc5e） |
+| T5 | 版本号单一来源 | pyproject 与 `config.APP_VERSION` 双维护 → config 改读 `importlib.metadata.version("nmail-app")`，冻结环境回退常量 | ✅（0690420） |
+| T6 | 仓库卫生 | ~~追加 `referencee/`~~：`.gitignore` 已含 `reference/`，仓库根不存在 referencee/ 目录（原条目为笔误） | ✅ 无需动作 |
 
 ---
 
@@ -287,7 +287,7 @@ npx openapi-typescript frontend/openapi.json -o frontend/src/api/schema.d.ts
 - 3.4 jobs 表 + core/jobs.py + AI 整理与批量 IMAP 动作两端点改造（M）｜ 前端 useJob + 进度条（M）｜ R7 启动清理随此落地
 - 验收：AI 整理 HTTP 立即返回、全程可进度可视；真实账号验证
 
-**M4 前端提效与护栏**
+**M4 前端提效与护栏（◐ 部分完成 2026-09-11，S-0911-1718 会话：71d1aea / 0690420 / 372bf0a / b4050a8 / 7cdb59e / 5afa93a；遗留 3.7c SettingsPage 拆分与 ChatView 归并，均为 ⚠ 大文件重构，留待下一会话专注处理）**
 - 3.7a 类型生成（S+渐进替换）｜ 3.7b useFlash/format/ChatView（M）｜ 3.7c SettingsPage 拆分（M，⚠）｜ T1 pytest 基础层（M）｜ T2/T3 ruff+CI（S）｜ T5 版本号（S）
 - 验收：CI 绿；types.ts 手写接口类型清零；新增端点全程无需手写类型
 

@@ -60,6 +60,13 @@
 
 ## 已完成
 
+### S-0911-1718-提升计划M4
+- 目标: 执行 IMPROVEMENT_PLAN M4 护栏与前端提效——T2 ruff 扩规则、T5 版本号、T1 pytest、T3 CI、3.7b 公共件归拢、3.7a 类型生成基建
+- 范围: backend 全量（ruff 修复）、app/config.py、backend/tests/（新增 8 文件）、.github/workflows/ci.yml（新增）、frontend hooks/useFlash.ts（新增）、utils/format.ts（新增）+ 四消费文件、package.json/openapi.json/schema.d.ts、pyproject.toml、CLAUDE.md；docs
+- 产出: 六个提交——① T2 71d1aea：ruff 五规则扩容，存量 42 条清零（B023 闭包改参数；SIM118/B008 为已知误报加 noqa 说明）；② T5 0690420：config 读包元数据、pyproject 单一来源；③ T1 372bf0a：pytest 44 例全绿（消毒 XSS 样本集/_extract_json/名单契约/reply_subject/autoconfig XML/_is_newer/迁移幂等/tx 语义/get_setting 容错/API 筛选矩阵+batch 往返/S1 五形态），conftest 临时目录隔离真实数据；④ T3 b4050a8：ci.yml 门禁（backend ruff+pytest / frontend npm ci+build）；⑤ 3.7b 7cdb59e：hooks/useFlash（定时器自清理，替代 ×9 手写 setTimeout）+ utils/format 四函数归拢，顺修「同步失败」横幅永不清除的遗留；⑥ 3.7a 5afa93a：openapi.json 快照 + schema.d.ts + gen:api script
+- 遗留: **3.7c SettingsPage（1,018 行）拆分与 ChatView 归并未做**（⚠ 大文件重构，按纪律留待下一会话专注处理，开工前即时重读）；types.ts 手写类型按计划渐进替换；pytest 依赖需进 CI（已在 ci.yml 安装）；devDependency 变更需 `npm ci` 同步
+- 时间: 2026-09-11 17:35 完成
+
 ### S-0911-1700-提升计划M3
 - 目标: 执行 IMPROVEMENT_PLAN M3（缩窄版）——jobs 基建、AI 整理与批量 trash/move 异步化（HTTP 立即返回+进度上报）、前端 useJob+进度条、R7 启动保留策略
 - 范围: backend db/database.py（迁移 v12）、core/{jobs（新增）,batch_ops（新增）,pipeline,sync}.py、api/{jobs（新增）,ai,emails}.py、main.py；frontend types.ts、api/{client.ts,useJob.ts（新增）}、MailBrowser.tsx；docs
