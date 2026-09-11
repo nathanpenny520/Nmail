@@ -1,7 +1,7 @@
 # CLAUDE.md — Nmail 工作规范
 
 AI 驱动的本地聚合邮箱客户端。Python FastAPI + SQLite(FTS5) 后端 · React+Vite+TS 前端 · 仅绑定 127.0.0.1 · MIT。
-产品定位与路线：[docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)；架构细节：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；变更记录：[docs/CHANGELOG.md](docs/CHANGELOG.md)。
+产品定位与路线：[docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)；架构细节：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；变更记录：[docs/CHANGELOG.md](docs/CHANGELOG.md)；多会话看板：[docs/SESSIONS.md](docs/SESSIONS.md)。
 
 ## 常用命令
 
@@ -22,6 +22,9 @@ cd backend && ../.venv/Scripts/python -m ruff check app --select F              
 5. **真实数据验证**：收发/同步/AI 相关功能，必须用用户真实账号数据验证后才能宣称完成。
 6. **后端改动必须重启进程**：前端 dist 由后端按请求读盘（强刷即见），但 Python 进程不会热加载——"改了没生效"先查是否重启。
 7. **数据库迁移只追加**：在 `backend/app/db/database.py` 的 `MIGRATIONS` 列表末尾追加新版本号 SQL，禁止修改历史迁移。
+8. **多会话透明——开工三件事**：多个会话并行共享同一工作树是常态。开工前必做：① 读 `docs/SESSIONS.md`，目标范围与任一「进行中」会话重叠时先协调或换范围；② 在看板登记本会话（ID / 目标 / 预计触碰文件）；③ `git log --oneline -5` 看最新动态。收工时更新看板——完成或中断都要留状态、产出与遗留事项，不留僵尸条目。
+9. **即时重读，禁凭记忆覆盖**：共享树里文件随时可能被其他会话修改——编辑前的 Read 必须新鲜；发现文件与预期不符时，以磁盘现状为准，对照 `git log` 弄清发生了什么再调整方案，绝不盲改回去。
+10. **提交纪律**：按路径 `git add` 只暂存本会话改动，不带其他会话的 WIP；提交前看 `git log` 确认并行新提交，推送前先 `git pull --rebase`；CHANGELOG 条目先用「待提交」占位、提交后由产生它的会话回填哈希。
 
 ## 架构速览（详见 docs/ARCHITECTURE.md）
 
