@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, BellRing } from 'lucide-react'
+import { Bell, BellRing, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -46,6 +46,16 @@ export default function NotificationBell() {
 
   const readAllMutation = useMutation({
     mutationFn: api.markNotificationsRead,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+
+  const clearReadMutation = useMutation({
+    mutationFn: api.clearReadNotifications,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.deleteNotification(id),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   })
 
@@ -103,14 +113,25 @@ export default function NotificationBell() {
           <div className="absolute bottom-0 left-10 z-40 mb-1 w-80 rounded-xl border border-gray-200 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
               <span className="text-xs font-semibold text-gray-700">通知中心</span>
-              {unread > 0 && (
-                <button
-                  className="text-[11px] text-indigo-600 hover:underline"
-                  onClick={() => readAllMutation.mutate()}
-                >
-                  全部已读
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {unread > 0 && (
+                  <button
+                    className="text-[11px] text-indigo-600 hover:underline"
+                    onClick={() => readAllMutation.mutate()}
+                  >
+                    全部已读
+                  </button>
+                )}
+                {(data?.items.length ?? 0) > 0 && (
+                  <button
+                    className="text-[11px] text-gray-400 hover:text-red-500"
+                    title="删除全部已读通知"
+                    onClick={() => clearReadMutation.mutate()}
+                  >
+                    清除已读
+                  </button>
+                )}
+              </div>
             </div>
             <div className="max-h-80 overflow-y-auto">
               {(data?.items.length ?? 0) === 0 && (
@@ -121,13 +142,13 @@ export default function NotificationBell() {
                   key={n.id}
                   role="button"
                   tabIndex={0}
-                  className={`cursor-pointer border-b border-gray-50 px-4 py-2.5 transition-colors hover:bg-violet-50/60 ${
+                  className={`group relative cursor-pointer border-b border-gray-50 px-4 py-2.5 transition-colors hover:bg-violet-50/60 ${
                     n.is_read ? '' : 'bg-indigo-50/50'
                   }`}
                   onClick={() => openNotification(n)}
                   onKeyDown={(e) => e.key === 'Enter' && openNotification(n)}
                 >
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-2 pr-5">
                     {!n.is_read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />}
                     <div className="min-w-0">
                       <div className="truncate text-xs font-medium text-gray-800">{n.title}</div>
@@ -135,6 +156,16 @@ export default function NotificationBell() {
                       <div className="mt-0.5 text-[10px] text-gray-300">{n.created_at}</div>
                     </div>
                   </div>
+                  <button
+                    className="absolute right-2 top-2 hidden rounded p-0.5 text-gray-300 hover:bg-gray-100 hover:text-red-500 group-hover:block"
+                    title="删除这条通知"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteMutation.mutate(n.id)
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               ))}
             </div>

@@ -53,3 +53,22 @@ def mark_all_read() -> dict:
     conn.execute("UPDATE notifications SET is_read = 1 WHERE is_read = 0")
     conn.commit()
     return {"ok": True}
+
+
+@router.delete("/notifications/{notification_id}")
+def delete_notification(notification_id: int) -> dict:
+    conn = get_conn()
+    row = conn.execute("SELECT id FROM notifications WHERE id = ?", (notification_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "通知不存在")
+    conn.execute("DELETE FROM notifications WHERE id = ?", (notification_id,))
+    conn.commit()
+    return {"ok": True}
+
+
+@router.post("/notifications/clear-read")
+def clear_read_notifications() -> dict:
+    conn = get_conn()
+    cursor = conn.execute("DELETE FROM notifications WHERE is_read = 1")
+    conn.commit()
+    return {"ok": True, "deleted": cursor.rowcount}

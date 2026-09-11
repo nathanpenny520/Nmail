@@ -169,6 +169,10 @@ export const api = {
     request<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: 'POST' }),
   markNotificationsRead: () =>
     request<{ ok: boolean }>('/api/notifications/read-all', { method: 'POST' }),
+  deleteNotification: (id: number) =>
+    request<{ ok: boolean }>(`/api/notifications/${id}`, { method: 'DELETE' }),
+  clearReadNotifications: () =>
+    request<{ ok: boolean; deleted: number }>('/api/notifications/clear-read', { method: 'POST' }),
 
   // ── AI 层 ──
   getDrafts: (status: string = 'pending') =>
