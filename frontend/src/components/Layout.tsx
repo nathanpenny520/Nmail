@@ -35,7 +35,9 @@ export default function Layout() {
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current) return
-      const w = Math.min(NAV_MAX, Math.max(NAV_MIN, e.clientX))
+      // 全局 zoom 会缩放视觉坐标，换算回布局 px
+      const zoom = Number(getComputedStyle(document.documentElement).getPropertyValue('--app-zoom')) || 1
+      const w = Math.min(NAV_MAX, Math.max(NAV_MIN, e.clientX / zoom))
       widthRef.current = w
       setNavWidth(w)
     }

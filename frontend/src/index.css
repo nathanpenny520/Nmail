@@ -1,25 +1,33 @@
 @import "tailwindcss";
 
-/* 界面字号系统：挂载在 <html data-font="..."> 上，设置页可切换
-   紧凑（默认）对齐主流邮箱客户端密度；标准/大依次递增 */
+/* 界面字号系统：挂载在 <html data-font="..."> 上，设置页可切换。
+   档位 = 字号变量 + 全局 zoom：zoom 作用在渲染结果上，可绕过浏览器
+   「最小字号」钳制（中文版 Chromium 常见默认 12px，纯 font-size 调不动），
+   且间距随比例一起缩，紧凑感真实。 */
 :root,
 [data-font="compact"] {
-  --fs-xs: 8.5px;
-  --fs-sm: 10px;
-  --fs-md: 11px;
-  --fs-lg: 12.5px;
+  --fs-xs: 10.5px;
+  --fs-sm: 11.5px;
+  --fs-md: 12.5px;
+  --fs-lg: 14px;
+  --app-zoom: 0.85;
 }
 [data-font="standard"] {
-  --fs-xs: 9.5px;
-  --fs-sm: 11px;
-  --fs-md: 12px;
-  --fs-lg: 13.5px;
-}
-[data-font="large"] {
-  --fs-xs: 10.5px;
+  --fs-xs: 11px;
   --fs-sm: 12px;
   --fs-md: 13px;
   --fs-lg: 14.5px;
+  --app-zoom: 1;
+}
+[data-font="large"] {
+  --fs-xs: 11.5px;
+  --fs-sm: 12.5px;
+  --fs-md: 13.5px;
+  --fs-lg: 15px;
+  --app-zoom: 1.12;
+}
+body > #root {
+  zoom: var(--app-zoom);
 }
 
 .t-xs { font-size: var(--fs-xs); }

@@ -58,7 +58,9 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current || !listRef.current) return
-      const w = Math.min(640, Math.max(240, e.clientX - listRef.current.getBoundingClientRect().left))
+      // 全局 zoom 会缩放视觉坐标，换算回布局 px
+      const zoom = Number(getComputedStyle(document.documentElement).getPropertyValue('--app-zoom')) || 1
+      const w = Math.min(640, Math.max(240, (e.clientX - listRef.current.getBoundingClientRect().left) / zoom))
       widthRef.current = w
       setListWidth(w)
     }
