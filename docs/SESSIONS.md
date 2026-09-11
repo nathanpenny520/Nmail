@@ -21,7 +21,7 @@
 ### S-0911-1420-工作台标签化 ✅
 - 目标: 空草稿治理（恢复时清理+写信按钮复用空标签+保留空稿即删）+ 侧栏页面标签化（点一次开 tab、再点去已有 tab、可关闭、localStorage 记忆）
 - 范围: frontend components/Layout.tsx（WorkspaceTabs 重写）、components/compose/ComposeContext.tsx；docs
-- 产出: 见 CHANGELOG「空草稿治理 + 侧栏页面标签化」条目（哈希回填见 git log）
+- 产出: 提交 db30ef3（见 CHANGELOG「空草稿治理 + 侧栏页面标签化」条目）
 - 遗留: 无；页面标签切换仍是路由卸载/重挂（仅收件箱+写信台 keep-alive），页面滚动位置不保留——AI 会话/草稿列表等状态在库里，无实质损失
 - 时间: 2026-09-11 14:30 完成
 
