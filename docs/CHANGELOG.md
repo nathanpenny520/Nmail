@@ -3,6 +3,20 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 9f0bc5e — 工程化：ruff banned-api 固化分层规则（T4）
+- pyproject `banned-api` 禁 `app.api`（main/api/tests 白名单放行），CLAUDE.md 检查命令升级 `--select F,TID251`
+- 实测：core/ 下违规 import 被拦截、现库全绿——「core/scheduler/ai 不得依赖 API 层」从约定变成门禁
+
+## 54ef776 — 重构：分类枚举单一来源 ai/categories.py + GET /api/meta（解 A6）
+- 加分类从改 6 处 → 改 1 处：CATEGORIES（key/label/色板/徽章类/判定说明）一处定义——prompts 分类段自动生成（「六选一」随枚举数动态化）、tasks 结果校验、pipeline 自动归档集合、digest 分桶顺序、`GET /api/meta` 下发，全部消费同一来源
+- 前端 `api/useMeta.ts`（react-query 拉取一次长缓存 + 内置回退清单）：MailBrowser 分类筛选/行内徽章、DigestPage 图表色改走下发数据；色值与徽章类保持原值不变（原 ΔE 调色板校验结论仍成立）
+- 验证：ruff、npm build（tsc 含）通过；隔离实例 `/api/meta` 冒烟返回六分类完整字段
+
+## 6b57584 — 重构：AI 收口——deps 统一错误翻译 + tasks._logged 统一用量记账（解 A5）
+- `api/deps.py` 新增 `ai_config_or_400`（未配置/停用 → 400，副作用前预检用）与 `ai_result_or_http`（AI 调用统一翻译：未配置 400 / ValueError 400 / 其余 502）；ai.py ×5 端点 + drafts.regenerate 的 try/except 样板全部收口——**新增 AI 端点零样板**（拿 write 端点当样例）
+- `ai/tasks.py` 新增 `_logged` 上下文管理器：正常退出记成功用量（可 `ok(usage)` 注入）、异常记失败日志（摘要=异常截 200）再抛——classify/draft/chat/write/digest 六函数七对样板归一；流式路径以 `usage_out` 共享 dict 保留「失败也记累计用量」语义
+- 验证：ruff 通过；隔离实例冒烟——未配置 AI 时 write 与总管家流式均 400 且文案正确区分、usage 正常
+
 ## 2cd5e74 — 重构：发送通路归一——mailbox.send_message 唯一发送 + core/outbox 草稿发送，调度器脱离 API 层（解 A2/A8，删 _imap_for）
 - **唯一发送路径**：`core/mailbox.py` 新增 `send_message()`（SMTP 未配置校验→发送→归档 Sent）与 `split_addresses()`（原 emails.re_split 迁入）；新增 `core/outbox.py`——`send_user_draft()` 是写信台草稿发送的唯一实现（状态校验/地址解析/消毒+纯文本派生/In-Reply-To/标记 sent/清附件），失败一律抛 `MailError`（后台线程不再出现 HTTPException）
 - **A2 消除**：scheduler 定时派发改调 `core.outbox.send_user_draft`，`scheduler → app.api` 反向依赖归零（grep 验证 scheduler/core/ai 无 app.api 引用）

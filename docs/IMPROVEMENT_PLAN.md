@@ -63,7 +63,7 @@
 
 ## 3. 解耦与降难方案（核心改造）
 
-### 3.1 新增 `core/mailbox.py`：账号凭据/连接/发送的统一入口（解 A1、A3 前半）— 第一步已落地（fadc747，sync.py 已切换；API 层 7 处与 send_message 归一随 M2）
+### 3.1 新增 `core/mailbox.py`：账号凭据/连接/发送的统一入口（解 A1、A3 前半）✅ 已完成（fadc747 建模块切 sync + 2cd5e74 API 层 7 处迁入、删 _imap_for；仅存 accounts.py 两处「密码来自请求」的文档化例外）
 
 把「拿一个可用的账号上下文」收成唯一入口，消除 8 处 MailConfig 拼装与 `emails._imap_for` 私有导出：
 
@@ -121,7 +121,7 @@ def tx():
 - **两件事必须同一提交切换**（isolation_level=None 会让旧 `commit()` 变 no-op，行为等价于「每语句即提交」，现有调用点因此不需要同步改造）。
 - 迁移策略：新增代码一律 `with tx() as conn:`；存量 ~30 处 `conn.commit()` 用一次机械替换收敛（`_apply_classification`、`batch_action`、`_sync_folder` 等多语句点优先）。
 
-### 3.3 AI 层收口：统一翻译 + 日志辅助 + 枚举单一来源（解 A5、A6）
+### 3.3 AI 层收口：统一翻译 + 日志辅助 + 枚举单一来源（解 A5、A6）✅ 已落地（6b57584 + 54ef776）
 
 **a) `api/deps.py`（新）**——错误翻译一处定义：
 
@@ -193,7 +193,7 @@ def sync_lock(account_id: int) -> threading.Lock:
 - ✅ **分块拉取（R10）**：`iter_new_mail` 生成器已落地——先轻量 SEARCH UID 清单，按 25 封/块 FETCH，块级断点续拉 + 块间节流；稀疏文件夹按密度自适应逐 UID 精确拉取（e8c0084/bb9d796/28ef2df）。
 - 本节不再有待办；后续若需进度百分比，在 `iter_new_mail` 的块产出点上扩展回调即可（3.4 的进度数据源）。
 
-### 3.6 发送通路归一（解 A8，收尾）
+### 3.6 发送通路归一（解 A8，收尾）✅ 已落地（2cd5e74：send_message 唯一发送 + core/outbox 草稿发送 + 调度器脱离 API 层；端点删除于 M1 393293e）
 
 - 三条发送路径（`/api/emails/send`、user_drafts `send_draft_now`、drafts `approve`）统一收敛到 `mailbox.send_message()`（3.1）：消毒、纯文本派生、In-Reply-To、归档 Sent 只写一遍。
 - `POST /api/emails/send` + `client.ts` 的 `sendEmail` **删除**（前端已零调用）；`emails.py:399` 的裸 `f.filename` 问题随删除一并消失。
@@ -278,7 +278,7 @@ npx openapi-typescript frontend/openapi.json -o frontend/src/api/schema.d.ts
 - 3.1 建 `core/mailbox.py` 并切 `sync.py`（M）；S1 Origin/Host 中间件（S，注意 vite dev 代理需配 `changeOrigin: true` 否则被 Host 校验拒掉）
 - 验收：ruff 通过；临时目录冒烟 `/api/health`；S1 用 curl 分别验证坏 Host/坏 Origin 被拒、正常访问放行
 
-**M2 发送归一与 AI 收口**
+**M2 发送归一与 AI 收口（✅ 已完成 2026-09-11，S-0911-1632 会话：2cd5e74 / 6b57584 / 54ef776 / 9f0bc5e；真实账号发信回归待用户重启后验证）**
 - 3.6 发送通路归一 + 删 `/api/emails/send`（M）｜ A2 调度器依赖消除（随 3.6）｜ T4 分层规则（S）
 - 3.3 deps.py + `_logged` + `ai/categories.py` + `/api/meta` + 前端消费（M）
 - 验收：AI 新端点零样板（拿 write 端点当样例对照）；真实账号发一封 user_draft + 一封 AI 草稿 approve，串线与 Sent 归档正常

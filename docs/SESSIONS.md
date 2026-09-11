@@ -18,13 +18,6 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-### S-0911-1632-提升计划M2
-- 目标: 执行 IMPROVEMENT_PLAN M2——发送通路归一（mailbox.send_message 唯一发送路径、user_drafts/drafts/approve 收敛、调度器脱离 app.api 解 A2）、删 _imap_for/re_split 迁出、3.3 AI 收口（deps.py 错误翻译 + tasks._logged + categories.py 单一来源 + /api/meta + 前端消费）、T4 分层规则（ruff 禁 core/scheduler → app.api）
-- 范围: backend api/{emails,user_drafts,drafts,accounts,ai}.py、api/deps.py（新增）、ai/{tasks,prompts,digest,categories（新增）}.py、core/{mailbox,pipeline}.py、scheduler.py、main.py（挂 meta 路由）、pyproject.toml；frontend types.ts、DigestPage.tsx、App 或入口缓存；docs
-- 产出: （进行中）
-- 遗留: 无
-- 时间: 2026-09-11 16:32 进行中
-
 ### S-0911-1416-全面提升计划
 - 目标: 全量代码审核（架构/扩展性/质量/鲁棒性）复查后沉淀为可执行提升计划——以降耦合、降开发难度为主线，保留鲁棒性/安全/测试洞察
 - 范围: docs/IMPROVEMENT_PLAN.md（新增）、docs/SESSIONS.md；**不改任何代码**
@@ -66,6 +59,13 @@
 - 时间: 2026-09-11 13:35 完成
 
 ## 已完成
+
+### S-0911-1632-提升计划M2
+- 目标: 执行 IMPROVEMENT_PLAN M2——发送通路归一、调度器脱离 API 层（A2）、AI 收口（deps 错误翻译 + _logged 用量记账 + categories 单一来源 + /api/meta + 前端消费）、T4 分层规则
+- 范围: backend api/{emails,user_drafts,drafts,accounts,ai,deps（新增）,meta（新增）}.py、ai/{tasks,prompts,digest,categories（新增）}.py、core/{mailbox,outbox（新增）,pipeline}.py、scheduler.py、pyproject.toml；frontend types.ts、api/{client.ts,useMeta.ts（新增）}、MailBrowser.tsx、DigestPage.tsx；docs
+- 产出: 四个功能提交——① 发送通路归一 2cd5e74：mailbox.send_message 唯一发送 + core/outbox.send_user_draft（API/调度器共用，后台线程不再有 HTTPException），scheduler→app.api 归零（A2），_imap_for/re_split 删除，MailConfig 构造 8→1（余 2 处「密码来自请求」文档化例外）；② AI 收口 6b57584：deps.ai_config_or_400/ai_result_or_http 收掉 ai.py×5+drafts×2 样板，tasks._logged 收掉六函数七对日志样板；③ 分类单一来源 54ef776：ai/categories.py + GET /api/meta + prompts/tasks/pipeline/digest/前端 useMeta 全消费（A6，加分类 6 处→1 处）；④ T4 9f0bc5e：ruff banned-api 禁 core/scheduler/ai→app.api（实测拦截），CLAUDE.md 命令升级 F,TID251。每项 ruff+构建+隔离实例冒烟（发送错误路径 6 项矩阵、AI 未配置 400 文案、/api/meta 字段）
+- 遗留: **真实账号发信回归待用户重启后验证**（user_draft 发送 + AI approve，串线与 Sent 归档）；M3（AI 整理异步化）与 M4（3.7 类型生成/公共件/SettingsPage 拆分、T1-T3/T5）待认领
+- 时间: 2026-09-11 16:53 完成
 
 ### S-0911-1546-提升计划修订与M1快修
 - 目标: 逐条核实 IMPROVEMENT_PLAN 后修订并执行修订版 M1 全清单
