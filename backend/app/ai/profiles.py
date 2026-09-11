@@ -2,8 +2,9 @@
 
 档案存 settings 表（JSON 数组），密钥存 secrets.json（ai_profile_key:{id}）；
 密钥永不回传前端，接口只返回 api_key_set 布尔值。
-旧版单配置（ai_base_url / ai_model / ai_api_key）在首次读取时自动迁移为「默认」档案，
-历史密钥原样搬运，老用户无感。
+不预建任何档案：全新安装为空列表，由用户按需创建；旧版单配置
+（ai_base_url / ai_model / ai_api_key）首次读取时迁为一个以模型名命名的档案，
+历史密钥原样搬运；历史版本自动生成的「默认」档案一次性按模型名重命名。
 """
 from __future__ import annotations
 
@@ -27,22 +28,36 @@ def secret_key(profile_id: str) -> str:
 
 
 def ensure_migrated() -> None:
-    """旧单配置 → 「默认」档案；幂等，只在档案数据缺失时执行一次。"""
-    if get_setting(PROFILES_KEY) is not None:
-        return
-    profiles = [
-        {
+    """旧单配置迁移 + 档案名规范化；幂等。"""
+    profiles = get_setting(PROFILES_KEY)
+    if profiles is None:
+        legacy_url = (get_setting("ai_base_url", "") or "").strip()
+        legacy_model = (get_setting("ai_model", "") or "").strip()
+        if not legacy_url and not legacy_model:
+            # 全新安装：不预建「默认」档案（空「默认」只会让切换器出现无意义选项）
+            set_setting(PROFILES_KEY, [])
+            set_setting(ACTIVE_KEY, None)
+            return
+        # 旧版单配置用户：迁为一个以模型名命名的档案，密钥原样搬运，老用户无感
+        profiles = [{
             "id": DEFAULT_PROFILE_ID,
-            "name": "默认",
-            "base_url": (get_setting("ai_base_url", "") or "").strip(),
-            "model": (get_setting("ai_model", "") or "").strip(),
-        }
-    ]
-    set_setting(PROFILES_KEY, profiles)
-    set_setting(ACTIVE_KEY, DEFAULT_PROFILE_ID)
-    legacy = get_secret(LEGACY_SECRET_KEY)
-    if legacy and not has_secret(secret_key(DEFAULT_PROFILE_ID)):
-        set_secret(secret_key(DEFAULT_PROFILE_ID), legacy)
+            "name": legacy_model or "我的配置",
+            "base_url": legacy_url,
+            "model": legacy_model,
+        }]
+        set_setting(PROFILES_KEY, profiles)
+        set_setting(ACTIVE_KEY, DEFAULT_PROFILE_ID)
+        legacy = get_secret(LEGACY_SECRET_KEY)
+        if legacy and not has_secret(secret_key(DEFAULT_PROFILE_ID)):
+            set_secret(secret_key(DEFAULT_PROFILE_ID), legacy)
+        return
+    # 历史版本自动生成的「默认」档案：一次性按模型名重命名（用户自行改过名的不动）
+    for p in profiles:
+        if p.get("id") == DEFAULT_PROFILE_ID and p.get("name") == "默认" \
+                and (p.get("model") or "").strip():
+            p["name"] = p["model"].strip()
+            set_setting(PROFILES_KEY, profiles)
+            break
 
 
 def list_profiles() -> list[dict]:

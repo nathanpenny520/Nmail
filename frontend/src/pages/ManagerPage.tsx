@@ -247,10 +247,10 @@ export default function ManagerPage() {
                 onChange={(e) => setProfileId(e.target.value)}
                 title="本次对话使用的 AI 配置"
               >
-                <option value="">默认模型</option>
+                <option value="">跟随使用中</option>
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name}（{p.model}）
+                    {p.name === p.model ? p.name : `${p.name}（${p.model}）`}
                   </option>
                 ))}
               </select>

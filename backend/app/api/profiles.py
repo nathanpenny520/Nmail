@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.ai import llm
 from app.ai import profiles as profiles_mod
-from app.security import has_secret, set_secret
+from app.security import get_secret, has_secret, set_secret
 
 router = APIRouter(prefix="/api/ai", tags=["ai-profiles"])
 
@@ -122,13 +122,31 @@ def activate_profile(profile_id: str) -> dict:
     return {"ok": True, "active_profile_id": profile_id}
 
 
-@router.get("/models")
-def list_models(profile_id: str | None = None) -> dict:
-    """代理 OpenAI 兼容端点的 GET /models，供前端下拉选择模型名。"""
-    try:
-        base_url, _model, api_key = profiles_mod.resolve_config(profile_id)
-    except profiles_mod.ProfileNotConfigured as exc:
-        return {"ok": False, "models": [], "error": str(exc)}
+class ModelsIn(BaseModel):
+    profile_id: str | None = None  # 提供时补全该档案已存的 URL/密钥
+    base_url: str | None = None    # 显式值优先（支持尚未保存的新配置直接拉取）
+    api_key: str | None = None     # 缺省时回退档案已存密钥
+
+
+@router.post("/models")
+def list_models(payload: ModelsIn) -> dict:
+    """代理 OpenAI 兼容端点的 GET /models，供前端自动补全模型名。
+
+    解析优先级：显式 base_url > 档案已存 base_url；显式 api_key > 档案已存密钥。
+    """
+    base_url = (payload.base_url or "").strip()
+    api_key = (payload.api_key or "").strip() or None
+    if payload.profile_id and not base_url:
+        profile = next(
+            (p for p in profiles_mod.list_profiles() if p["id"] == payload.profile_id), None
+        )
+        if profile is None:
+            return {"ok": False, "models": [], "error": "AI 配置不存在"}
+        base_url = (profile.get("base_url") or "").strip()
+        if api_key is None:
+            api_key = get_secret(profiles_mod.secret_key(profile["id"]))
+    if not base_url:
+        return {"ok": False, "models": [], "error": "请先填写 Base URL"}
     try:
         client = llm.build_client(base_url, api_key)
         models = sorted({m.id for m in client.models.list()})

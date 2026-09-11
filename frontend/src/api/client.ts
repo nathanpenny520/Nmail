@@ -120,10 +120,11 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
     }),
-  getAIModels: (profileId: string) =>
-    request<{ ok: boolean; models: string[]; error: string | null }>(
-      `/api/ai/models?profile_id=${encodeURIComponent(profileId)}`,
-    ),
+  fetchAIModels: (payload: { profile_id?: string; base_url?: string; api_key?: string }) =>
+    request<{ ok: boolean; models: string[]; error: string | null }>('/api/ai/models', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   // ── 账号 ──
   getProviders: () => request<ProvidersResp>('/api/providers'),

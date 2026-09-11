@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, BarChart3, Bot, Info, Loader2, Mail, MailPlus, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { BadgeCheck, BarChart3, Bot, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
@@ -681,6 +681,48 @@ function TestResult({ result }: { result: AITestResult }) {
   )
 }
 
+/** 模型列表自动拉取：Base URL 有效即防抖拉取；已存档案回退其密钥，新配置用输入框现值直连。 */
+function useModelFetcher(baseUrl: string, apiKey: string, profileId?: string) {
+  const [models, setModels] = useState<string[] | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    const url = baseUrl.trim()
+    if (!/^https?:\/\//i.test(url)) {
+      setModels(null)
+      setError('')
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    const timer = window.setTimeout(async () => {
+      try {
+        const r = await api.fetchAIModels({
+          ...(profileId ? { profile_id: profileId } : {}),
+          base_url: url,
+          ...(apiKey ? { api_key: apiKey } : {}),
+        })
+        if (cancelled) return
+        setModels(r.ok ? r.models : [])
+        setError(r.ok ? '' : r.error || '获取模型列表失败')
+      } catch (err) {
+        if (!cancelled) {
+          setModels([])
+          setError((err as Error).message)
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }, 700)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [baseUrl, apiKey, profileId])
+  return { models, error, loading }
+}
+
 /** 档案卡片的公共字段（编辑卡与新建卡共用一套渲染）。 */
 function ProfileFields(props: {
   name: string
@@ -690,11 +732,14 @@ function ProfileFields(props: {
   apiKeySet: boolean
   models: string[] | null
   modelsError: string
+  modelsLoading: boolean
   onName: (v: string) => void
   onBaseUrl: (v: string) => void
   onModel: (v: string) => void
   onApiKey: (v: string) => void
 }) {
+  // API Key 默认明文（本地应用，输入时可直接核对），可一键隐藏
+  const [keyVisible, setKeyVisible] = useState(true)
   return (
     <>
       <div className="grid grid-cols-[1fr_2fr] gap-3">
@@ -734,16 +779,31 @@ function ProfileFields(props: {
               <span className="ml-1 text-emerald-600">已保存（留空不变）</span>
             )}
           </span>
-          <input
-            className={inputClass}
-            type="password"
-            value={props.apiKey}
-            onChange={(e) => props.onApiKey(e.target.value)}
-            placeholder={props.apiKeySet ? '••••••••' : 'sk-…（本地模型可留空）'}
-            autoComplete="off"
-          />
+          <div className="relative">
+            <input
+              className={`${inputClass} pr-9`}
+              type={keyVisible ? 'text' : 'password'}
+              value={props.apiKey}
+              onChange={(e) => props.onApiKey(e.target.value)}
+              placeholder={props.apiKeySet ? '留空 = 不改动已存密钥' : 'sk-…（本地模型可留空）'}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600"
+              onClick={() => setKeyVisible((v) => !v)}
+              title={keyVisible ? '隐藏 API Key' : '显示 API Key'}
+            >
+              {keyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </label>
       </div>
+      {props.modelsLoading && (
+        <p className="mt-2 t-xs text-gray-400">正在获取模型列表…</p>
+      )}
       {props.models !== null && props.models.length > 0 && (
         <div className="mt-2 flex max-h-28 flex-wrap gap-1 overflow-y-auto rounded-lg bg-gray-50 p-2">
           {props.models.map((m) => (
@@ -770,8 +830,9 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
   const [baseUrl, setBaseUrl] = useState(profile.base_url)
   const [model, setModel] = useState(profile.model)
   const [apiKey, setApiKey] = useState('')
-  const [models, setModels] = useState<string[] | null>(null)
-  const [modelsError, setModelsError] = useState('')
+  // Base URL/API Key 变化后自动拉取模型列表（密钥留空时后端回退已存密钥）
+  const { models, error: modelsError, loading: modelsLoading } =
+    useModelFetcher(baseUrl, apiKey, profile.id)
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['ai-profiles'] })
 
@@ -801,21 +862,6 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
     onSuccess: invalidate,
   })
   const testMutation = useMutation({ mutationFn: api.testAI })
-
-  const fetchModels = async () => {
-    setModelsError('')
-    try {
-      const r = await api.getAIModels(profile.id) // 按已保存的 Base URL / 密钥获取
-      if (!r.ok) {
-        setModelsError(r.error || '获取模型列表失败')
-        setModels([])
-      } else {
-        setModels(r.models)
-      }
-    } catch (err) {
-      setModelsError((err as Error).message)
-    }
-  }
 
   return (
     <div
@@ -860,6 +906,7 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
         apiKeySet={profile.api_key_set}
         models={models}
         modelsError={modelsError}
+        modelsLoading={modelsLoading}
         onName={setName}
         onBaseUrl={setBaseUrl}
         onModel={setModel}
@@ -893,13 +940,6 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
             '测试连接'
           )}
         </button>
-        <button
-          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 t-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          onClick={() => void fetchModels()}
-          title="按已保存的 Base URL / 密钥拉取可用模型列表"
-        >
-          获取模型列表
-        </button>
         {profile.api_key_set && (
           <button
             className="t-sm text-gray-400 underline-offset-2 hover:text-red-500 hover:underline"
@@ -931,6 +971,8 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
   const [baseUrl, setBaseUrl] = useState('')
   const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
+  // 未保存的新配置：用输入框现值直连拉取模型（无需先创建）
+  const { models, error: modelsError, loading: modelsLoading } = useModelFetcher(baseUrl, apiKey)
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -957,8 +999,9 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
         model={model}
         apiKey={apiKey}
         apiKeySet={false}
-        models={null}
-        modelsError=""
+        models={models}
+        modelsError={modelsError}
+        modelsLoading={modelsLoading}
         onName={setName}
         onBaseUrl={setBaseUrl}
         onModel={setModel}

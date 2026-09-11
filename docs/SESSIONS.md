@@ -140,7 +140,9 @@
 - 遗留: 提交后回填 CHANGELOG 哈希；后端改动需重启 python run.py 生效；AI 总开关与文风提示词待用户真实账号验证
 - 时间: 2026-09-11 深夜 完成
 
-### S-0911-2530-AI配置体验修补
+### S-0911-2530-AI配置体验修补 ✅
 - 目标: ①Base URL 填完自动拉取模型列表（免手动按钮、免先保存）②API Key 输入框默认明文可见（带显隐切换）③取消「默认」档案概念——全新安装不预建档案、旧迁移档案按模型名命名、历史自动生成的「默认」档案一次性按模型名重命名
 - 范围: backend(ai/profiles.py, api/profiles.py) + frontend(client.ts, SettingsPage, ManagerPage 切换器标签) + docs
-- 时间: 2026-09-11 深夜 进行中
+- 产出: 待提交（条目见 CHANGELOG 置顶）；ruff + npm build 通过；隔离实例 curl 全往返（见 CHANGELOG 验证行）
+- 遗留: 提交后回填 CHANGELOG 哈希；自动拉取需用户真实 Key 验证（3c 已真实打到 DeepSeek 得 401 证明链路通）；后端改动需重启
+- 时间: 2026-09-11 深夜 完成
