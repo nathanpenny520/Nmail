@@ -2,9 +2,9 @@
 
 独立于 AI 待审草稿（api/drafts.py）。前端写信工作台的每个标签对应一条
 user_drafts 记录，编辑内容防抖自动保存（PATCH）；附件上传即落盘
-（data_dir/drafts/<id>/），发送时从磁盘读取，定时发送由调度器到期触发
-（send_draft_now 供 API 与 scheduler 共用）。正文存 HTML，发送前消毒并
-派生纯文本 alternative。
+（data_dir/drafts/<id>/），发送时从磁盘读取，定时发送由调度器到期触发。
+发送走 core/outbox.send_user_draft（API 与 scheduler 共用的唯一实现），
+本模块只留薄壳并把 MailError 翻译为 HTTP。
 """
 from __future__ import annotations
 
@@ -15,10 +15,8 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from app.api.emails import _imap_for, re_split
-from app.config import get_data_dir
-from app.core import imap_client
-from app.core.mail_html import html_to_plain_text, sanitize_outgoing_html, wrap_email_body_html
+from app.api.deps import mail_error_to_http
+from app.core import mailbox, outbox
 from app.db.database import get_conn
 
 router = APIRouter(prefix="/api/user-drafts", tags=["user-drafts"])
@@ -39,10 +37,6 @@ class UserDraftIn(BaseModel):
 
 class ScheduleIn(BaseModel):
     send_at: str  # ISO 本地时间（datetime-local），如 2026-09-11T15:30
-
-
-def _draft_dir(draft_id: int) -> Path:
-    return get_data_dir() / "drafts" / str(draft_id)
 
 
 def _att_dict(row) -> dict:  # noqa: ANN001
@@ -85,7 +79,7 @@ def _get_draft(draft_id: int):
 
 
 def _remove_draft_files(draft_id: int) -> None:
-    shutil.rmtree(_draft_dir(draft_id), ignore_errors=True)
+    shutil.rmtree(outbox.draft_dir(draft_id), ignore_errors=True)
 
 
 @router.post("")
@@ -161,7 +155,7 @@ def delete_draft(draft_id: int) -> dict:
 async def upload_attachments(draft_id: int, files: list[UploadFile] = File(...)) -> dict:
     _get_draft(draft_id)
     conn = get_conn()
-    target_dir = _draft_dir(draft_id)
+    target_dir = outbox.draft_dir(draft_id)
     target_dir.mkdir(parents=True, exist_ok=True)
     for f in files:
         cur = conn.execute(
@@ -240,65 +234,11 @@ def unschedule_draft(draft_id: int) -> dict:
 
 # ── 发送 ────────────────────────────────────────────────────
 
-def send_draft_now(draft_id: int) -> None:
-    """发送草稿（同步核心，API 与调度器共用）。失败抛 HTTPException。"""
-    row = _get_draft(draft_id)
-    if row["status"] not in ("editing", "scheduled"):
-        raise HTTPException(400, "该草稿已发送或已丢弃")
-
-    to_list = re_split(row["to_addrs"])
-    cc_list = re_split(row["cc_addrs"])
-    bcc_list = re_split(row["bcc_addrs"])
-    if not to_list:
-        raise HTTPException(400, "收件人不能为空")
-
-    cfg, acct = _imap_for(row["account_id"])
-    if not acct.get("smtp_server"):
-        raise HTTPException(400, "该账号未配置 SMTP 服务器")
-
-    html = wrap_email_body_html(sanitize_outgoing_html(row["body_html"]))
-    text = html_to_plain_text(html)
-
-    # 回复信件带上 In-Reply-To，让对方客户端正确串线
-    in_reply_to: str | None = None
-    if row["in_reply_to"]:
-        mrow = get_conn().execute(
-            "SELECT message_id FROM emails WHERE id = ?", (row["in_reply_to"],)
-        ).fetchone()
-        if mrow and mrow["message_id"]:
-            in_reply_to = mrow["message_id"]
-
-    paths = [
-        r["path"]
-        for r in get_conn().execute(
-            "SELECT path FROM user_draft_attachments WHERE draft_id = ? ORDER BY id", (draft_id,)
-        ).fetchall()
-        if Path(r["path"]).exists()
-    ]
-
-    try:
-        sent_message = imap_client.send_email(
-            cfg, to_list, cc_list, bcc_list, row["subject"], text, html, paths,
-            in_reply_to=in_reply_to,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"发送失败：{exc}") from exc
-
-    imap_client.append_sent(cfg, sent_message)
-    conn = get_conn()
-    conn.execute(
-        "UPDATE user_drafts SET status = 'sent', send_at = NULL, updated_at = datetime('now')"
-        " WHERE id = ?",
-        (draft_id,),
-    )
-    conn.commit()
-    _remove_draft_files(draft_id)
-
-
 @router.post("/{draft_id}/send")
 def send_draft(draft_id: int) -> dict:
     """立即发送草稿。收发件人、正文与附件均取自已保存内容。"""
-    send_draft_now(draft_id)
+    try:
+        outbox.send_user_draft(draft_id)
+    except mailbox.MailError as exc:
+        raise mail_error_to_http(exc)
     return {"ok": True}

@@ -7,10 +7,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.core import imap_client, sync as sync_engine
+from app.api.deps import mail_error_to_http
+from app.core import imap_client, mailbox, sync as sync_engine
 from app.core.providers import MANUAL_NOTE, PRESETS, match_provider, probe_server
 from app.db.database import get_conn
-from app.security import get_secret, set_secret
+from app.security import set_secret
 
 router = APIRouter(prefix="/api", tags=["accounts"])
 
@@ -240,18 +241,12 @@ def sync_account_now(account_id: int, folder: str = "INBOX") -> dict:
 
 @router.get("/accounts/{account_id}/folders")
 def list_account_folders(account_id: int) -> dict:
-    row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
-    if not row:
-        raise HTTPException(404, "账号不存在")
-    password = get_secret(f"account_pwd:{account_id}")
-    if not password:
-        raise HTTPException(400, "缺少密码凭证")
-    cfg = imap_client.MailConfig(
-        email=row["email"], password=password,
-        imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
-    )
     try:
-        with imap_client.connect_imap(cfg) as mb:
+        handle = mailbox.load_account(account_id)
+    except mailbox.MailError as exc:
+        raise mail_error_to_http(exc)
+    try:
+        with mailbox.open_imap(handle) as mb:
             return {"folders": imap_client.list_folders(mb)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"获取文件夹失败：{exc}") from exc
@@ -267,18 +262,12 @@ def create_folder(account_id: int, payload: FolderCreateIn) -> dict:
     name = payload.name.strip()
     if not name:
         raise HTTPException(400, "文件夹名不能为空")
-    row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
-    if not row:
-        raise HTTPException(404, "账号不存在")
-    password = get_secret(f"account_pwd:{account_id}")
-    if not password:
-        raise HTTPException(400, "缺少密码凭证")
-    cfg = imap_client.MailConfig(
-        email=row["email"], password=password,
-        imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
-    )
     try:
-        with imap_client.connect_imap(cfg) as mb:
+        handle = mailbox.load_account(account_id)
+    except mailbox.MailError as exc:
+        raise mail_error_to_http(exc)
+    try:
+        with mailbox.open_imap(handle) as mb:
             existing = {f.name for f in mb.folder.list()}
             if name in existing or name.upper() == "INBOX":
                 raise HTTPException(400, f"文件夹「{name}」已存在")

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from app.core.outbox import send_user_draft
 from app.core.sync import start_sync
 from app.db.database import get_conn, get_setting
 
@@ -56,8 +57,6 @@ def _notify(title: str, body: str) -> None:
 
 def send_due_drafts() -> None:
     """定时发送到期草稿；成功/失败均写通知，失败退回编辑态。"""
-    from app.api.user_drafts import send_draft_now
-
     rows = get_conn().execute(
         "SELECT id, subject, to_addrs, send_at FROM user_drafts"
         " WHERE status = 'scheduled' AND send_at IS NOT NULL"
@@ -71,7 +70,7 @@ def send_due_drafts() -> None:
         if due is None or due > now:
             continue
         try:
-            send_draft_now(row["id"])
+            send_user_draft(row["id"])
             _notify("定时邮件已发送", f"「{row['subject'] or '（无主题）'}」已按计划发出")
             logger.info("scheduled draft %s sent", row["id"])
         except Exception as exc:  # noqa: BLE001 — 单封失败不阻塞其他定时任务

@@ -8,10 +8,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.core import imap_client
+from app.api.deps import mail_error_to_http
+from app.core import imap_client, mailbox
 from app.core.mail_html import sanitize_email_html
 from app.db.database import get_conn
-from app.security import get_secret
 
 router = APIRouter(prefix="/api", tags=["emails"])
 
@@ -75,17 +75,13 @@ def batch_action(payload: BatchActionIn) -> dict:
     updated = 0
     failed = 0
     for account_id, account_rows in by_account.items():
-        first = account_rows[0]
-        password = get_secret(f"account_pwd:{account_id}")
-        if not password:
+        try:
+            handle = mailbox.load_account(account_id)  # 缺账号/缺密钥按该账号全部失败计
+        except mailbox.MailError:
             failed += len(account_rows)
             continue
-        cfg = imap_client.MailConfig(
-            email=first["account_email"], password=password,
-            imap_server=first["imap_server"], imap_port=int(first["imap_port"]),
-        )
         try:
-            with imap_client.connect_imap(cfg) as mb:
+            with mailbox.open_imap(handle) as mb:
                 if action in flag_map:
                     flag, value = flag_map[action]
                     by_folder: dict[str, list[str]] = {}
@@ -304,21 +300,6 @@ def get_email(email_id: int, images: bool = False) -> dict:
     }
 
 
-def _imap_for(account_id: int) -> tuple[imap_client.MailConfig, dict]:
-    row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
-    if not row:
-        raise HTTPException(404, "账号不存在")
-    password = get_secret(f"account_pwd:{account_id}")
-    if not password:
-        raise HTTPException(400, "缺少密码凭证")
-    cfg = imap_client.MailConfig(
-        email=row["email"], password=password,
-        imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
-        smtp_server=row["smtp_server"], smtp_port=int(row["smtp_port"]),
-    )
-    return cfg, {"email": row["email"], "smtp_server": row["smtp_server"], "smtp_port": row["smtp_port"]}
-
-
 @router.post("/emails/{email_id}/action")
 def email_action(email_id: int, payload: EmailActionIn) -> dict:
     row = _get_email_row(email_id)
@@ -332,10 +313,13 @@ def email_action(email_id: int, payload: EmailActionIn) -> dict:
         conn.commit()
         return {"ok": True}
 
-    cfg, _acct = _imap_for(row["account_id"])
+    try:
+        handle = mailbox.load_account(row["account_id"])
+    except mailbox.MailError as exc:
+        raise mail_error_to_http(exc)
     new_uid: int | None = None
     try:
-        with imap_client.connect_imap(cfg) as mb:
+        with mailbox.open_imap(handle) as mb:
             if action == "read":
                 imap_client.set_flag(mb, row["folder"], row["uid"], imap_client.SEEN_FLAG, True)
             elif action == "unread":
@@ -379,10 +363,6 @@ def email_action(email_id: int, payload: EmailActionIn) -> dict:
             )
     conn.commit()
     return {"ok": True}
-
-
-def re_split(raw: str) -> list[str]:
-    return [x for x in raw.replace(";", ",").split(",") if x.strip()]
 
 
 @router.get("/attachments/{attachment_id}/download")

@@ -5,10 +5,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.ai import tasks
-from app.core import imap_client
+from app.api.deps import mail_error_to_http
+from app.core import imap_client, mailbox
 from app.core.mail_html import markdown_to_email_html
 from app.db.database import get_conn
-from app.security import get_secret
 
 router = APIRouter(prefix="/api/drafts", tags=["drafts"])
 
@@ -102,31 +102,25 @@ def draft_action(draft_id: int, payload: DraftActionIn) -> dict:
     if not content:
         raise HTTPException(400, "草稿内容为空，无法发送")
 
-    account = conn.execute("SELECT * FROM accounts WHERE id = ?", (row["account_id"],)).fetchone()
-    password = get_secret(f"account_pwd:{row['account_id']}")
-    if not account or not password:
-        raise HTTPException(400, "账号凭证缺失")
-    cfg = imap_client.MailConfig(
-        email=account["email"], password=password,
-        imap_server=account["imap_server"], imap_port=int(account["imap_port"]),
-        smtp_server=account["smtp_server"], smtp_port=int(account["smtp_port"]),
-    )
+    try:
+        handle = mailbox.load_account(int(row["account_id"]))
+    except mailbox.MailError as exc:
+        raise mail_error_to_http(exc)
 
     try:
-        sent_message = imap_client.send_email(
-            cfg,
+        mailbox.send_message(
+            handle,
             to=[row["sender_email"]],
-            cc=[],
-            bcc=[],
             subject=imap_client.reply_subject(row["subject"]),
-            body_text=content,
-            body_html=markdown_to_email_html(content),
+            text=content,
+            html=markdown_to_email_html(content),
             in_reply_to=(row["message_id"] or "").strip() or None,
         )
+    except mailbox.MailError as exc:  # smtp_missing 等
+        raise mail_error_to_http(exc)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"发送失败：{exc}") from exc
 
-    imap_client.append_sent(cfg, sent_message)
     conn.execute(
         "UPDATE drafts SET status = 'sent', content = ?, updated_at = datetime('now') WHERE id = ?",
         (content, draft_id),

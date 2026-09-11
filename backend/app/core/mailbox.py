@@ -1,14 +1,16 @@
-"""账号凭据/连接统一入口。
+"""账号凭据/连接/发送统一入口。
 
-全项目唯一的 MailConfig 构造点：查账号行 + 读密钥 → AccountHandle（含就绪 cfg）。
-API 层的 _imap_for 等 8 处拼装将逐步迁移至此（IMPROVEMENT_PLAN §3.1）；
-添加账号入库前的表单直连 test_connection 属预检路径，不经此处。
+全项目唯一的 MailConfig 构造点：查账号行 + 读密钥 → AccountHandle（含就绪 cfg）；
+唯一的 SMTP 发送路径：send_message（发送 + 归档 Sent）。
+添加账号入库前、改密预检的表单直连 test_connection 属预检路径（密码来自请求
+而非凭据库），不经此处。
 """
 from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
+from email.message import EmailMessage
 from typing import Iterator
 
 from imap_tools import MailBox
@@ -65,3 +67,38 @@ def open_imap(handle: AccountHandle) -> Iterator[MailBox]:
     """建立已登录 IMAP 连接（超时与网易 ID 握手由 imap_client.connect_imap 处理）。"""
     with imap_client.connect_imap(handle.cfg) as mb:
         yield mb
+
+
+def split_addresses(raw: str) -> list[str]:
+    """逗号/分号分隔的地址串 → 去空列表（原 api/emails.re_split，随发送收口迁入）。"""
+    return [x for x in (raw or "").replace(";", ",").split(",") if x.strip()]
+
+
+def send_message(
+    handle: AccountHandle,
+    *,
+    to: list[str],
+    subject: str,
+    text: str,
+    cc: list[str] | None = None,
+    bcc: list[str] | None = None,
+    html: str | None = None,
+    attachment_paths: list[str] | None = None,
+    in_reply_to: str | None = None,
+) -> EmailMessage:
+    """唯一 SMTP 发送路径：构建 → 发送 → 归档 Sent（尽力而为）。
+
+    正文约定：html 须为**已消毒**的最终 HTML（发件方向消毒在各内容来源处完成后传入；
+    纯文本 text 必传——富文本来源用 html_to_plain_text 派生，Markdown 来源用原文）。
+    in_reply_to 写入 In-Reply-To/References 供对方客户端串线。
+    SMTP/网络错误抛原异常（调用方翻译为面向用户的文案）；SMTP 未配置抛
+    MailError("smtp_missing")；归档 Sent 失败仅告警不影响发送结果。
+    """
+    if not handle.cfg.smtp_server:
+        raise MailError("smtp_missing", "该账号未配置 SMTP 服务器")
+    sent = imap_client.send_email(
+        handle.cfg, to, cc or [], bcc or [], subject, text, html,
+        attachment_paths, in_reply_to=in_reply_to,
+    )
+    imap_client.append_sent(handle.cfg, sent)
+    return sent

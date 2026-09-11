@@ -18,6 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0911-1632-提升计划M2
+- 目标: 执行 IMPROVEMENT_PLAN M2——发送通路归一（mailbox.send_message 唯一发送路径、user_drafts/drafts/approve 收敛、调度器脱离 app.api 解 A2）、删 _imap_for/re_split 迁出、3.3 AI 收口（deps.py 错误翻译 + tasks._logged + categories.py 单一来源 + /api/meta + 前端消费）、T4 分层规则（ruff 禁 core/scheduler → app.api）
+- 范围: backend api/{emails,user_drafts,drafts,accounts,ai}.py、api/deps.py（新增）、ai/{tasks,prompts,digest,categories（新增）}.py、core/{mailbox,pipeline}.py、scheduler.py、main.py（挂 meta 路由）、pyproject.toml；frontend types.ts、DigestPage.tsx、App 或入口缓存；docs
+- 产出: （进行中）
+- 遗留: 无
+- 时间: 2026-09-11 16:32 进行中
+
 ### S-0911-1416-全面提升计划
 - 目标: 全量代码审核（架构/扩展性/质量/鲁棒性）复查后沉淀为可执行提升计划——以降耦合、降开发难度为主线，保留鲁棒性/安全/测试洞察
 - 范围: docs/IMPROVEMENT_PLAN.md（新增）、docs/SESSIONS.md；**不改任何代码**
