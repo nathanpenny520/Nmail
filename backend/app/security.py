@@ -24,7 +24,10 @@ def _read_all() -> dict[str, str]:
 
 def _write_all(data: dict[str, str]) -> None:
     path = get_secrets_path()
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    # 临时文件 + 原子替换：写一半崩溃/并发写不会留下损坏的 JSON（坏了 = 所有密钥读回 None）
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
     try:
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # POSIX 下收紧权限，Windows 忽略
     except OSError:
@@ -47,3 +50,8 @@ def set_secret(key: str, value: str | None) -> None:
 
 def has_secret(key: str) -> bool:
     return bool(_read_all().get(key))
+
+
+def secret_keys() -> list[str]:
+    """全部密钥键名，供档案层对账清理孤儿。"""
+    return list(_read_all())

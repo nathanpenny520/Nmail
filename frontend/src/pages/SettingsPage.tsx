@@ -848,7 +848,14 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
         model,
         api_key: apiKey, // 全量保存：与输入框一致（清空=清除）
       }),
-    onSuccess: invalidate,
+    onSuccess: ({ profile: saved }) => {
+      // 用落库返回值回填输入框：页面显示与本地存储强制一致（后端已 trim）
+      setName(saved.name)
+      setBaseUrl(saved.base_url)
+      setModel(saved.model)
+      setApiKey(saved.api_key)
+      invalidate()
+    },
   })
   const activateMutation = useMutation({
     mutationFn: () => api.activateAIProfile(profile.id),

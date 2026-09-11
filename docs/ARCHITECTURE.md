@@ -50,7 +50,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `core/mail_html.py` | nh3 白名单消毒 + 远程图片拦截 + cid 内联 + Markdown→HTML | 两层防护：消毒在前、图片控制在后；另供发件方向 `sanitize_outgoing_html`（放行 data: 内嵌图）与 `html_to_plain_text`/`wrap_email_body_html` |
 | `core/update_check.py` | 应用内更新检查：GitHub Releases 对比 + 通知中心提醒 | 仅匿名 GET api.github.com（UA=Nmail/版本），24h 缓存；开关 `update_check_enabled`；按 ref_id=版本去重，升级后自动清理旧提醒 |
 | `ai/llm.py` | OpenAI 兼容客户端（流式 `iter_deltas` / 非流式） | connect 5s / 读写 15s 快速失败 |
-| `ai/profiles.py` | AI 配置档案存储/解析（settings JSON + secrets 分离）+ 总开关 | 解析顺序：显式 profile_id > 激活档案 > 第一个；`resolve_config()` 在总开关停用时直接抛 `ProfileNotConfigured`（全任务统一拒绝）；不预建档案（全新安装为空列表）；旧单配置首读迁移为以模型名命名的档案，历史自动生成的「默认」档案一次性按模型名重命名 |
+| `ai/profiles.py` | AI 配置档案存储/解析（settings JSON + secrets 分离）+ 总开关 | 解析顺序：显式 profile_id > 激活档案 > 第一个；`resolve_config()` 在总开关停用时直接抛 `ProfileNotConfigured`（全任务统一拒绝）；不预建档案（全新安装为空列表）；旧单配置首读迁移为以模型名命名的档案，历史自动生成的「默认」档案一次性按模型名重命名；列表双写备份（`ai_profiles_backup`）——主值缺失/损坏时自愈恢复，绝不静默走旧配置重建；孤儿密钥对账：不被档案引用的 `ai_profile_key:*` 即读即清 |
 | `ai/tasks.py` | 分类/草稿/问答/写作/摘要综述 + 用量日志 | 所有任务接受 `profile_id` 并经 `_ai_config()` 按档案解析；所有调用写 `ai_logs` |
 | `ai/digest.py` | 每日摘要：统计（零成本 SQL）+ AI 综述（一次调用） | 当天已生成则复用 |
 | `ai/prompts.py` | 全部提示词模板 | 结构化输出要求纯 JSON，`_extract_json` 容错解析 |
@@ -84,7 +84,7 @@ UID 增量拉取 → 落库+附件落盘 → 白名单(留收件箱)/黑名单(�
 ### 安全模型
 - HTML 邮件：nh3 白名单（http(s) 链接强制 target=_blank + rel=noopener）→ 远程图默认拦截（计数）→ 前端 sandbox iframe（allow-same-origin+allow-popups-to-escape-sandbox，无脚本；外链点击在新标签由浏览器正常打开，不在 iframe 内导航）
 - 发信：multipart/alternative（写信工作台：TipTap HTML 经 `sanitize_outgoing_html` 白名单消毒后直发 + 派生纯文本；AI 草稿 approve 同走 `imap_client` 发送）；草稿 approve 带 In-Reply-To 并归档 Sent
-- 密钥：本地 `secrets.json`（POSIX chmod 600）；AI key 按档案存放（`ai_profile_key:{id}`）且不回传；服务仅 127.0.0.1
+- 密钥：本地 `secrets.json`（POSIX chmod 600，原子写：临时文件+`os.replace`）；AI key 按档案存放（`ai_profile_key:{id}`）明文回显（所见即所存）；服务仅 127.0.0.1
 - 来源校验（main.py 中间件）：Host 必须为本机主机名（端口与实际监听一致才严格比对）；浏览器附带 Origin 时必须为本机源——挡恶意网页对 127.0.0.1 的 drive-by POST 与 DNS rebinding
 
 ## 分发与打包

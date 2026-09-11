@@ -179,3 +179,10 @@
 - 产出: 测试连接空密钥直测不回退 + llm.friendly_error 401 人话提示（test/models 两处）+ 迁移 v11 清 tone_dna 用量（2 条）+ 前端删 TASK_LABELS 映射；ruff + npm build 通过；隔离实例（真库副本）curl 三态语义与迁移验证
 - 遗留: 后端改动需重启 python run.py 生效（密钥恢复已即时生效，secrets.json 按请求读）；孤儿密钥对账清理、保存后卡片回读同步两项加固用户选暂缓；secrets.json 仍有 2 把无主孤儿 key（c9f6765f/39693236，GLM 疑似）待用户决定去留
 - 时间: 2026-09-11 16:14 完成
+
+### S-0911-1730-AI档案一致性加固 ✅
+- 目标（用户三条硬要求）: ①保存即所见=所存 ②删除即删干净 ③绝不刷新后丢失（接 401 排障确认的 ensure_migrated 静默重建缺陷）
+- 范围: backend(ai/profiles.py, security.py) + frontend(SettingsPage) + docs
+- 产出: save_profiles 双写 ai_profiles_backup；ensure_migrated 主值缺失/损坏→备份自愈恢复（有备份绝不静默走旧配置重建）；prune_orphan_secrets 孤儿对账（全路径兜底）；secrets.json 原子写（tmp+os.replace）；前端保存成功用落库返回值回填输入框。ruff + npm build 通过；隔离实例场景矩阵 S1-S3 全过（孤儿清除/删主值恢复/坏值自愈/全新安装，见 CHANGELOG 验证行）
+- 备注: 用户重启后现存 3 把孤儿（83c543e0/c9f6765f/39693236）将被自动清——83c543e0 的值已复制回 default 档案无损；GLM 两把为同一 key 的重复档案，若还需用 GLM 请从服务商控制台复制
+- 时间: 2026-09-11 17:30 完成
