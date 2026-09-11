@@ -14,6 +14,7 @@ import json
 import logging
 import re
 import threading
+import time
 from datetime import datetime, timezone
 
 
@@ -78,12 +79,29 @@ def _save_attachments(account_id: int, email_id: int, parsed) -> bool:
     return has_any
 
 
+def _norm_date(dt: datetime | None) -> tuple[str | None, str | None]:
+    """归一化邮件日期为 (date, date_sort)；畸形日期头容错。
+
+    年份超界的 Date 头（如 year=0001/9999）在 Windows 的本地时区换算
+    （astimezone → CRT localtime）会抛 `OSError: [Errno 22] Invalid argument`，
+    曾导致整个文件夹同步死循环——此处任何异常都降级为不参与排序。
+    """
+    if dt is None:
+        return None, None
+    try:
+        return dt.isoformat(timespec="seconds"), dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+    except Exception:  # noqa: BLE001 — 单封畸形日期不阻塞同步
+        try:
+            return dt.isoformat(), None
+        except Exception:  # noqa: BLE001
+            return None, None
+
+
 def _upsert_email(account_id: int, folder: str, parsed) -> int:
     """插入（或忽略重复）邮件行，返回行 id（不提交，事务由调用方按块管理）。"""
     text = (parsed.body_text or "").strip()
     snippet = re.sub(r"\s+", " ", text)[:180]
-    date_iso = parsed.date.isoformat(timespec="seconds") if parsed.date else None
-    date_sort = parsed.date.astimezone(timezone.utc).isoformat(timespec="seconds") if parsed.date else None
+    date_iso, date_sort = _norm_date(parsed.date)
     conn = get_conn()
     cur = conn.execute(
         "INSERT OR IGNORE INTO emails"
@@ -142,8 +160,9 @@ def _set_account_status(account_id: int, status: str, detail: str | None = None)
 def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dict:
     """同步单个账号的指定文件夹，返回 {ok, folders: [...], error}。
 
-    网络类异常（含 QQ 大响应中途掐断导致的 Errno 22）自动重试一次：
-    断点已按块落库，重试只补剩余部分。登录失败不重试（结果可预期）。
+    网络类异常（含 QQ 随机掐断重负载连接导致的 Errno 22）自动重试：
+    断点已按小块落库，重试只补剩余部分；重试间退避等待，给服务商频控降温。
+    登录失败不重试（结果可预期）。
     """
     account_id = int(account["id"])
     password = get_secret(f"account_pwd:{account_id}")
@@ -158,7 +177,10 @@ def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dic
     )
     results: list[dict] = []
     last_error: Exception | None = None
-    for attempt in (1, 2):
+    for attempt, backoff in ((1, 0), (2, 15), (3, 45)):
+        if backoff:
+            logger.info("sync retry for %s in %ss (断点已落库，只补剩余)", account["email"], backoff)
+            time.sleep(backoff)
         try:
             with connect_imap(cfg) as mb:
                 results = []
@@ -173,8 +195,6 @@ def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dic
         except Exception as exc:  # noqa: BLE001 — 网络/服务器错误统一为 connection_error
             last_error = exc
             logger.warning("sync failed for %s (attempt %d): %s", account["email"], attempt, exc)
-            if attempt == 1:
-                continue  # 断点已落库，重连只补剩余部分
 
     if last_error is not None:
         _set_account_status(account_id, "connection_error", str(last_error)[:300])

@@ -26,7 +26,8 @@ def _to_local_dt(iso: str | None) -> datetime | None:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone()
-    except ValueError:
+    except (ValueError, OSError, OverflowError):
+        # Windows 上极值年份的本地时区换算抛 OSError [Errno 22]，畸形日期不参与摘要
         return None
 
 
