@@ -63,7 +63,7 @@
 
 ## 3. 解耦与降难方案（核心改造）
 
-### 3.1 新增 `core/mailbox.py`：账号凭据/连接/发送的统一入口（解 A1、A3 前半）
+### 3.1 新增 `core/mailbox.py`：账号凭据/连接/发送的统一入口（解 A1、A3 前半）— 第一步已落地（fadc747，sync.py 已切换；API 层 7 处与 send_message 归一随 M2）
 
 把「拿一个可用的账号上下文」收成唯一入口，消除 8 处 MailConfig 拼装与 `emails._imap_for` 私有导出：
 
@@ -96,7 +96,7 @@ def send_message(handle, *, to, cc, bcc, subject, html, text=None,
 - **迁移顺序**：先建 mailbox.py 并让 `sync.py` 切换（它已是 core 层，零风险）→ 再逐个切 accounts/emails/drafts/user_drafts → 删除 `_imap_for`。
 - **例外**：`accounts.py` 添加账号的连接预检发生在账号行入库前（表单直连 `test_connection`），允许从表单构造 MailConfig，不属重复构造；SMTP 缺失检查收进 `send_message` 统一判断。
 
-### 3.2 `database.py` 事务边界：`tx()` + 写锁（解 A4）
+### 3.2 `database.py` 事务边界：`tx()` + 写锁（解 A4）✅ 已落地（0b549c9，与 isolation_level=None 同一提交）
 
 现状每个调用点自己 `commit()`、异常从不 rollback、跨线程共享连接。改为「框架替你做对」：
 
@@ -233,14 +233,14 @@ npx openapi-typescript frontend/openapi.json -o frontend/src/api/schema.d.ts
 | # | 问题 | 位置 | 修法 | 状态 |
 |---|---|---|---|---|
 | R1 | IMAP 无超时，调度线程可永久挂起 | imap_client.py:66 | `timeout=60` + 超时并入 connection_error | ✅ 已修（e8c0084） |
-| R2 | move 拿不到新 uid 时旧 uid 写进新文件夹，撞 UNIQUE 后下次同步静默丢信 | emails.py:117,369 | 拿不到新 uid → 删除本地行交增量重建 | ☐ |
-| R3 | 共享连接跨线程事务污染 | database.py | 3.2 `tx()` 方案 | ☐ |
-| R4 | `/api/emails/send` 裸 `f.filename` 路径注入 | emails.py:399 | 随 3.6 删除端点即消 | ☐ |
-| R5 | 恶意网页可 multipart 无预检 POST 触发本机发信（drive-by）；DNS rebinding 同理 | main.py | S1 Origin/Host 校验 | ☐ |
-| R6 | 混合时区 `e.date` 字符串比较，日界漏算/多算 | ai.py:134、digest.py:44 | 统一 `COALESCE(e.date_sort, e.date)` | ☐ |
+| R2 | move 拿不到新 uid 时旧 uid 写进新文件夹，撞 UNIQUE 后下次同步静默丢信 | emails.py:117,369 | 拿不到新 uid → 删除本地行交增量重建 | ✅（4c22b2f） |
+| R3 | 共享连接跨线程事务污染 | database.py | 3.2 `tx()` 方案 | ✅（0b549c9） |
+| R4 | `/api/emails/send` 裸 `f.filename` 路径注入 | emails.py:399 | 随 3.6 删除端点即消 | ✅ 提前完成（393293e） |
+| R5 | 恶意网页可 multipart 无预检 POST 触发本机发信（drive-by）；DNS rebinding 同理 | main.py | S1 Origin/Host 校验 | ✅（9ab675a） |
+| R6 | 混合时区 `e.date` 字符串比较，日界漏算/多算 | ai.py:134、digest.py:44 | 统一 `COALESCE(e.date_sort, e.date)` | ✅（56b9883） |
 | R7 | notifications / ai_logs 无界增长；UIDVALIDITY 重置后附件文件成孤儿 | sync.py:202、notifications | 启动时保留策略（通知 500 条 / ai_logs 90 天）；重置分支顺带删 `attachments/<email_id>/` 目录 | ☐ |
-| R8 | 总管家未配 AI 时先落库了用户消息 → 孤儿消息 | ai.py chat_manager_stream | 配置解析挪到 `append_message` 之前 | ☐ |
-| R9 | settings 表单值损坏 → 所有读取请求 500 | database.py get_setting | json.loads 包 try 返回 default | ☐ |
+| R8 | 总管家未配 AI 时先落库了用户消息 → 孤儿消息 | ai.py chat_manager_stream | 配置解析挪到 `append_message` 之前 | ✅（d34a54a） |
+| R9 | settings 表单值损坏 → 所有读取请求 500 | database.py get_setting | json.loads 包 try 返回 default | ✅（208443c） |
 | R10 | 首翻 bulk 全量驻留内存 | imap_client.py | 3.5 分块拉取（已落地） | ✅ 已修（e8c0084） |
 
 ---
@@ -272,7 +272,7 @@ npx openapi-typescript frontend/openapi.json -o frontend/src/api/schema.d.ts
 
 > 规模标注：S=半天内 / M=1 天内 / L=2 天上下。每步遵守「文档同步 + ruff + npm build + 冒烟」；标注 ⚠ 的项触碰并行会话刚改过的文件，开工前重读。
 
-**M1 地基与快修（建议立即做，全部小步独立提交；R1/T6 已完成移除）**
+**M1 地基与快修（✅ 已完成 2026-09-11，S-0911-1546 会话：6fbf821/4c22b2f/393293e/208443c/56b9883/d34a54a/9ab675a/fadc747/0b549c9；R1/T6 早已完成移除）**
 - R2 move uid（S）｜ R4 删 /api/emails/send（S）｜ R8 孤儿消息（S）｜ R9 get_setting 容错（S）｜ R6 date_sort 比较（S）
 - 3.2 `tx()` + isolation_level=None（M，同一提交切换）
 - 3.1 建 `core/mailbox.py` 并切 `sync.py`（M）；S1 Origin/Host 中间件（S，注意 vite dev 代理需配 `changeOrigin: true` 否则被 Host 校验拒掉）

@@ -3,45 +3,45 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — 重构：数据库事务边界 tx() + autocommit 切换（同一提交，行为等价）
+## 0b549c9 — 重构：数据库事务边界 tx() + autocommit 切换（同一提交，行为等价）
 - 落地 IMPROVEMENT_PLAN §3.2：连接改 `isolation_level=None`（autocommit，单条语句即生效）——存量 ~30 处 `conn.commit()` 变无害 no-op，现有调用点无需同步改造；补 `PRAGMA synchronous=NORMAL`（WAL 推荐档，免逐提交 fsync 拖慢分块入库）与 `busy_timeout=5000`（跨进程写冲突兜底）
 - 新增 `tx()`：进程内全局写锁 + `BEGIN IMMEDIATE`，成功提交、异常回滚（含 SQLite 已自动回滚的容错）——多语句原子性有了显式入口，后续新增代码一律走 tx()；存量多语句点（batch_action、_apply_classification 等）随触碰机械替换
 - 语义验证（隔离库）：多语句原子提交 ✅ / 中途异常全量回滚 ✅ / set_setting 往返与坏值容错 ✅；应用启动冒烟通过
 
-## 待提交 — 重构：新增 core/mailbox.py（账号凭据/连接统一入口），sync.py 切换为首个消费者
+## fadc747 — 重构：新增 core/mailbox.py（账号凭据/连接统一入口），sync.py 切换为首个消费者
 - 落地 IMPROVEMENT_PLAN §3.1：`load_account`（查账号行+读密钥 → AccountHandle，缺一抛 `MailError(not_found|missing_credential)`）成为**全项目唯一 MailConfig 构造点**，`has_credentials`/`open_imap` 一并收口
 - `core/sync.py` 切换：`sync_account` 的 get_secret+MailConfig 拼装与 `connect_imap` 直连改走 `mailbox.load_account`/`mailbox.open_imap`，`start_sync` 的凭证预检改 `has_credentials`——原「缺少密码凭证」文案由 MailError.message 承接，行为不变
 - API 层其余 7 处拼装（accounts/emails/drafts/user_drafts）按计划 M2 逐个迁移后删除 `_imap_for`；添加账号入库前的表单直连预检为文档化例外
 - 验证：ruff 通过；隔离实例冒烟 /api/health、无账号手动同步 404 正常
 
-## 待提交 — 安全：本机 API 加 Origin/Host 来源校验中间件（挡 drive-by POST 与 DNS rebinding）
+## 9ab675a — 安全：本机 API 加 Origin/Host 来源校验中间件（挡 drive-by POST 与 DNS rebinding）
 - 服务虽仅绑定 127.0.0.1，但恶意网页可向 `http://127.0.0.1:8720` 发 multipart 无预检 POST 触发本机 API（drive-by，例如伪造发信/改数据）；公网域名经 DNS rebinding 解析到 127.0.0.1 后亦可携带自身域名访问（IMPROVEMENT_PLAN S1/R5）
 - main.py 新增中间件：Host 必须为本机主机名（端口与实际监听一致才严格比对）；浏览器附带 Origin 时必须为本机源（curl 等无 Origin 的本机工具不受影响）；静态资源与 /api 一并覆盖
 - `vite.config.ts` 代理补 `changeOrigin: true`——否则 dev 代理转发时保留 `localhost:5173` 作 Host，会被新校验拒绝
 - 验证：隔离实例 curl 矩阵——正常访问 200 / 坏 Host 403 / 外站 Origin 403 / `Origin: null` 403 / 同源 Origin 放行；ruff、npm run build 通过
 
-## 待提交 — fix：总管家流式接口先验 AI 配置再落库用户消息（原未配置时留孤儿消息）
+## d34a54a — fix：总管家流式接口先验 AI 配置再落库用户消息（原未配置时留孤儿消息）
 - `POST /api/ai/chat-manager/stream` 原顺序：先 `append_message(user)` 落库，再创建生成器——AI 未配置/停用时抛 AINotConfigured 返回 400，但用户消息已入库，且 assistant 回复永不出现，会话里留下孤儿提问（IMPROVEMENT_PLAN R8；非流式版本顺序本就正确）
 - 修复：入口先 `tasks._ai_config(profile_id)` 预检（与生成器内部同一校验），未配置直接 400，不落库；M2 的 deps.py 依赖收口将替代此调用
 
-## 待提交 — fix：AI 上下文/每日摘要改用 date_sort 排序（原混合时区 e.date 字符串比较漏算日界）
+## 56b9883 — fix：AI 上下文/每日摘要改用 date_sort 排序（原混合时区 e.date 字符串比较漏算日界）
 - `_manager_context`（总管家上下文）与 digest `_collect_stats` 的 `e.date >= ?` 时间窗、`ORDER BY e.date`、"重要邮件"排序全部建立在混合时区 ISO 串的字典序上：+08:00 与 +00:00 的邮件交错时，日界多算/漏算、排序错位（IMPROVEMENT_PLAN R6）
 - 统一切到迁移 v7 已建的 `date_sort`（UTC 归一）：SQL 比较/排序用 `COALESCE(e.date_sort, e.date)`（畸形日期无 date_sort 时回落原值）；摘要"重要邮件"的 Python 侧排序同切 date_key，对前端展示字段 `date` 无影响
 
-## 待提交 — fix：get_setting 容错损坏的设置值（原 json.loads 裸抛 → 所有读取请求 500）
+## 208443c — fix：get_setting 容错损坏的设置值（原 json.loads 裸抛 → 所有读取请求 500）
 - settings 表单值若被外部写坏（非 JSON 字符串），`get_setting` 的 `json.loads` 裸抛异常，所有依赖该设置的接口（轮询间隔、摘要时间、AI 开关等）集体 500，且无自愈路径
 - 修复（IMPROVEMENT_PLAN R9）：解析失败回退 default；坏值在下次 set_setting 保存时自然被覆盖
 
-## 待提交 — fix/安全：删除死代码端点 POST /api/emails/send（附件名路径注入 + 发送逻辑三轨之一）
+## 393293e — fix/安全：删除死代码端点 POST /api/emails/send（附件名路径注入 + 发送逻辑三轨之一）
 - 前端写信台二期后该端点零调用（client.ts 的 sendEmail 无人调用），发送已收敛到 user_drafts 一条链路——保留只会三处各写一遍消毒/纯文本派生/归档 Sent（IMPROVEMENT_PLAN A8），且其附件落盘 `tmp_dir / f.filename` 未剥路径分隔符，恶意 multipart 文件名（`../../x`）可写任意位置（R4）
 - 删除：后端端点与临时目录逻辑、前端 `sendEmail` 客户端方法；`_imap_for` 保留（M2 收口时随 core/mailbox.py 迁移）
 - 验证：ruff、npm run build 通过；隔离实例冒烟——POST /api/emails/send 已无处理器（405）、/api/health 与 /api/emails 正常
 
-## 待提交 — fix：move 邮件拿不到新 UID 时旧 uid 写进新文件夹（撞 UNIQUE + 增量跳过）→ 删行交增量重建
+## 4c22b2f — fix：move 邮件拿不到新 UID 时旧 uid 写进新文件夹（撞 UNIQUE + 增量跳过）→ 删行交增量重建
 - 批量与单封 move 此前 `uid = COALESCE(?, uid)`：服务器未回目标文件夹新 UID 时，旧 uid 原样写进新文件夹——与源文件夹同 uid 的行撞 `(account_id, folder, uid)` UNIQUE 报错，即使侥幸写入，下次增量同步从新文件夹 last_uid 起步也永远扫不到它，信"消失"
 - 修复（[IMPROVEMENT_PLAN](IMPROVEMENT_PLAN.md) R2）：批量 `batch-action` 与单封 `action` 两处一致——拿不到新 UID 即删除本地行，交下次增量同步按服务器真实状态重建；不再有中间态脏行
 
-## 待提交 — docs：IMPROVEMENT_PLAN 修订（对齐代码现状）
+## 6fbf821 — docs：IMPROVEMENT_PLAN 修订（对齐代码现状）
 - 逐条对照当前代码核实提升计划：R1（IMAP 超时）、R10/3.5（分块拉取）、A9 同步侧（后台化+进度）、T6（.gitignore）确认已由同步引擎系列提交（e8c0084…28ef2df）解决，移出待办；M3 缩窄为「AI 整理/批量动作异步化」；修正前端文件路径（src/types.ts、components/MailBrowser.tsx）与通知横幅规模（flash ×8 + syncMessage ×19）；A4→A5 编号笔误、MailConfig ×8 等其余断言经核实成立
 
 ## efd36e2 — fix：Errno 22 真凶——畸形 Date 头（1900-01-01）令 astimezone 抛 OSError，同步死循环

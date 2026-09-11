@@ -18,13 +18,6 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-### S-0911-1546-提升计划修订与M1快修
-- 目标: 逐条核实 IMPROVEMENT_PLAN 后修订（清除已被同步引擎会话解决的项、修正路径/规模、缩窄 M3），随后按修订版 M1 清单逐项小步执行：R2 move uid、R4 删 /api/emails/send、R8 孤儿消息、R9 get_setting 容错、R6 date_sort、S1 Origin/Host 中间件、3.1 core/mailbox.py、3.2 tx()
-- 范围: docs（IMPROVEMENT_PLAN/SESSIONS/CHANGELOG）；backend api/emails.py、api/ai.py、ai/digest.py、db/database.py、main.py、core/mailbox.py（新增）、core/sync.py；frontend api/client.ts、vite.config.ts
-- 产出: （进行中）
-- 遗留: 无
-- 时间: 2026-09-11 15:46 进行中
-
 ### S-0911-1416-全面提升计划
 - 目标: 全量代码审核（架构/扩展性/质量/鲁棒性）复查后沉淀为可执行提升计划——以降耦合、降开发难度为主线，保留鲁棒性/安全/测试洞察
 - 范围: docs/IMPROVEMENT_PLAN.md（新增）、docs/SESSIONS.md；**不改任何代码**
@@ -66,6 +59,13 @@
 - 时间: 2026-09-11 13:35 完成
 
 ## 已完成
+
+### S-0911-1546-提升计划修订与M1快修
+- 目标: 逐条核实 IMPROVEMENT_PLAN 后修订并执行修订版 M1 全清单
+- 范围: docs；backend api/emails.py、api/ai.py、ai/digest.py、db/database.py、main.py、core/mailbox.py（新增）、core/sync.py；frontend api/client.ts、vite.config.ts
+- 产出: 计划修订 6fbf821（R1/R10/A9 同步侧/T6 确认已被同步引擎系列提交解决而移出待办、M3 缩窄为 AI 整理异步化、修正路径与横幅规模）；M1 八项全部落地——R2 move 拿不到新 UID 删行交增量重建 4c22b2f、R4 删零调用 /api/emails/send（附件名路径注入）393293e、R9 get_setting 容错 208443c、R6 时间窗/排序切 date_sort 56b9883、R8 总管家先验配置后落库 d34a54a、S1 Origin/Host 校验中间件+vite changeOrigin 9ab675a、3.1 core/mailbox.py 唯一 MailConfig 构造点并切 sync fadc747、3.2 tx()+autocommit 同一提交切换 0b549c9；每项均过 ruff/构建/隔离实例冒烟（S1 为 8 项 curl 矩阵，tx() 为提交/回滚断言）
+- 遗留: M2 待认领（发送通路归一 + 删 _imap_for + AI 收口 + 分层规则）；tx() 存量多语句点随触碰机械替换；真实账号回归建议用户重启进程后顺手验证 R2（批量移动邮件）与 S1（正常使用不受影响）
+- 时间: 2026-09-11 16:06 完成
 
 ### S-0911-1230-发版自动化
 - 目标: 发版压成一条命令并沉淀手册，供未来 AI 会话直接使用
