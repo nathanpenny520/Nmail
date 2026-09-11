@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: OAuth 回调两处加固（真实用户首授权发现）
+- **OAuthError 缺 `.message` 属性**：回调捕获授权错误后取 `exc.message` 渲染错误页时抛 AttributeError，把可处理的业务错误（如 Google 拒绝换令牌）变成裸 500——报错本体贴不出来。补齐属性（对齐 MailError 形态）；mailbox.load_account 同链路一并受益
+- **回调绝不裸 500**：回调是浏览器直接导航的落地页，try 范围扩到换令牌→建号→首同步全程，任意意外异常渲染为 200 错误页（含异常类型+消息，截断 300 字）并落流程状态供前端展示
+- **错误翻译补齐**：Google 对 Web 型客户端缺 secret 只回 `error_description`（`client_secret is missing.`），翻译层现按描述文本识别并给出可操作指引（补填 client_secret 或改用桌面应用类型）；`_token_request` 另接住 SOCKS 代理环境变量缺 socksio 的 ImportError（非 HTTPError 子类，实测会裸 500）
+- 验证：pytest 70 例全绿（新增 4 例回归：.message 属性/错误翻译矩阵/SOCKS ImportError/回调任意异常不 500）；ruff 通过
+- 用户实测触发：Google 控制台建的是 Web 型客户端且未填 client_secret——修好后补填 secret 或改桌面型即可走通
+
 ## ed79b87 — Gmail / Outlook OAuth2 授权登录（XOAUTH2）
 - 依据 docs/自建邮箱客户端 Gmail+Outlook OAuth2 完整教程.md 落地：Google/微软已停用账号密码直连，Gmail/Outlook 账号改走 OAuth2 授权码 + PKCE 流程（用户自建 OAuth 客户端，client_id 填设置页；不内置凭据）
 - 后端：迁移 v13（accounts.auth_type/oauth_provider）；新增 `core/oauth.py`（PKCE/授权 URL/换令牌/令牌刷新按账号加锁防并发、XOAUTH2 编码、流程状态 TTL）与 `api/oauth.py`（status/config/authorize/flow 轮询 + `/oauth/callback` 回环回调直出自关闭 HTML，回调里完成换令牌→建/转账号→首同步）；`imap_client`/`mailbox` 支持 `access_token` 认证通路（IMAP `xoauth2`、SMTP `AUTH XOAUTH2` 带裸 docmd 回退）；删除账号联动清令牌，OAuth 账号拒绝改密

@@ -138,17 +138,20 @@ def oauth_callback(code: str = "", state: str = "", error: str = "") -> HTMLResp
             client_secret=client.get("client_secret") or None)
         account_id = _upsert_oauth_account(flow["email"], provider)
         oauth.store_tokens(account_id, provider.key, flow["email"], tokens)
+        account = get_conn().execute(
+            "SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+        sync_engine.start_sync({"id": account_id, **{k: account[k] for k in
+                                                      ("email", "imap_server", "imap_port")}})
+        oauth.settle_flow(state, True, f"{flow['email']} 已接入 Nmail")
+        return _page("授权成功", f"{flow['email']} 已接入 Nmail，正在后台同步邮件，本页可关闭。",
+                     ok=True)
     except oauth.OAuthError as exc:
         oauth.settle_flow(state, False, exc.message)
         return _page("授权失败", exc.message, ok=False)
-
-    account = get_conn().execute(
-        "SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
-    sync_engine.start_sync({"id": account_id, **{k: account[k] for k in
-                                                  ("email", "imap_server", "imap_port")}})
-    oauth.settle_flow(state, True, f"{flow['email']} 已接入 Nmail")
-    return _page("授权成功", f"{flow['email']} 已接入 Nmail，正在后台同步邮件，本页可关闭。",
-                 ok=True)
+    except Exception as exc:  # noqa: BLE001 — 回调是浏览器直接导航的落地页，绝不裸 500
+        detail = f"{type(exc).__name__}: {exc}"[:300]
+        oauth.settle_flow(state, False, detail)
+        return _page("授权失败", detail, ok=False)
 
 
 def _upsert_oauth_account(email: str, provider: oauth.OAuthProvider) -> int:

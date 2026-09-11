@@ -45,6 +45,10 @@ _TOKEN_ERR_HINT = {
 class OAuthError(Exception):
     """面向用户的 OAuth 错误（消息不含令牌内容）。"""
 
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
 
 @dataclass(frozen=True)
 class OAuthProvider:
@@ -167,18 +171,28 @@ def _token_request(provider: OAuthProvider, data: dict[str, str]) -> dict:
         resp = httpx.post(provider.token_url, data=data,
                           headers={"Content-Type": "application/x-www-form-urlencoded"},
                           timeout=30)
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ImportError, OSError) as exc:
+        # ImportError：终端设了 SOCKS 代理环境变量但未装 socksio（httpx 构建传输层时抛，
+        # 不是 HTTPError 子类——不接住就会以裸 500 冒出来）
         raise OAuthError(f"无法连接 {provider.name} 令牌服务：{exc}") from exc
     try:
         payload = resp.json()
     except ValueError as exc:
         raise OAuthError(f"{provider.name} 令牌服务返回异常（HTTP {resp.status_code}）") from exc
     if resp.status_code != 200 or "access_token" not in payload:
-        err = payload.get("error", "")
-        hint = _TOKEN_ERR_HINT.get(err)
-        detail = hint or payload.get("error_description") or err or f"HTTP {resp.status_code}"
-        raise OAuthError(f"{provider.name} 授权失败：{detail}")
+        raise OAuthError(f"{provider.name} 授权失败：{_translate_token_error(payload)}")
     return payload
+
+
+def _translate_token_error(payload: dict) -> str:
+    """错误码/描述 → 用户可操作的人话（覆盖高频踩坑，未命中回退原文）。"""
+    err = payload.get("error", "")
+    desc = payload.get("error_description") or ""
+    hint = _TOKEN_ERR_HINT.get(err)
+    if hint is None and "client_secret" in f"{err} {desc}":
+        hint = ("该 OAuth 客户端是 Web 类型，换令牌必须附 client_secret：到 "
+                "设置-邮箱账号-OAuth2 点「修改」补填后重新授权；或改用「桌面应用」类型的客户端 ID")
+    return hint or desc or err or "未知错误"
 
 
 def exchange_code(provider: OAuthProvider, *, client_id: str, code: str,

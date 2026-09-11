@@ -190,6 +190,52 @@ def test_flow_expired(monkeypatch):
         set_secret(oauth.client_key("gmail"), None)
 
 
+# ── 回调健壮性（回归：OAuthError 无 .message 曾把可处理错误变成裸 500）──
+
+def test_oauth_error_has_message():
+    err = oauth.OAuthError("测试消息")
+    assert err.message == "测试消息"  # mailbox/api 层依赖 .message，不能只有 args
+
+
+def test_token_error_translate_secret_missing():
+    """Web 型客户端缺 client_secret：Google 只回 error_description，需给出可操作指引。"""
+    assert "client_secret" in oauth._translate_token_error(
+        {"error": "", "error_description": "client_secret is missing."})
+    assert oauth._translate_token_error(
+        {"error": "invalid_client", "error_description": "x"}) == "client_id / client_secret 不正确，请检查 OAuth 客户端配置"
+
+
+def test_token_request_socks_importerror_translated(monkeypatch):
+    """终端设 SOCKS 代理但未装 socksio：httpx 抛 ImportError（非 HTTPError），须接住转 OAuthError。"""
+    import pytest
+
+    def fake_post(*a, **kw):
+        raise ImportError("Using SOCKS proxy, but the 'socksio' package is not installed.")
+
+    monkeypatch.setattr(oauth.httpx, "post", fake_post)
+    with pytest.raises(oauth.OAuthError, match="令牌服务"):
+        oauth.exchange_code(oauth.PROVIDERS["gmail"], client_id="x", code="y",
+                            code_verifier="z", redirect_uri="http://localhost/oauth/callback")
+
+
+def test_api_callback_unexpected_exception_never_500(monkeypatch):
+    """换令牌环节抛任意异常：回调渲染为 200 错误页并落流程状态，绝不再裸 500。"""
+    oauth.save_client("gmail", "boom-cid")
+    try:
+        state, _f = oauth.create_flow("boom@gmail.com", "gmail", "http://localhost:8720/oauth/callback")
+
+        def boom(*a, **kw):
+            raise RuntimeError("something exploded")
+
+        monkeypatch.setattr(oauth, "exchange_code", boom)
+        resp = client.get("/oauth/callback", params={"code": "x", "state": state})
+        assert resp.status_code == 200
+        assert "授权失败" in resp.text and "something exploded" in resp.text
+        assert client.get(f"/api/oauth/flow/{state}").json()["status"] == "error"
+    finally:
+        set_secret(oauth.client_key("gmail"), None)
+
+
 # ── API 端点语义 ─────────────────────────────────────────────
 
 def test_api_status_and_config_roundtrip():

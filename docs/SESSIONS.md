@@ -23,6 +23,7 @@
 - 范围: backend（db 迁移 v13、core/oauth.py 新增、imap_client/mailbox、api/oauth.py 新增、api/accounts、core/providers 文案）、frontend（types/client/AddAccountModal/SettingsPage/OauthSettings.tsx 新增）、docs（教程文档一并入库）
 - 产出: 提交 ed79b87（见 CHANGELOG「Gmail / Outlook OAuth2 授权登录」条目）；pytest 66 例全绿 + ruff + npm build + 隔离实例冒烟（迁移/动态回调地址/授权 URL 参数/回调三态/API 语义矩阵）
 - 遗留: 真实 Google/Microsoft OAuth 客户端的端到端授权（换真实令牌、IMAP/SMTP 实连收发）待用户按教程完成控制台配置后验证——设置页 OAuth 卡片有分步指引与回调地址复制；桌面型 OAuth 客户端对 localhost 回环不校验端口，Web 型需登记设置页显示的回调地址；个人 Outlook 账号需先在网页版开启 POP/IMAP 与「经过身份验证的 SMTP」
+- 跟进: 用户真实授权首批出两坑（详见 CHANGELOG「OAuth 回调两处加固」条目）——①Google org_internal 403：同意屏幕用户类型选了「内部」，改「外部」+加测试用户即解；②回调裸 500：OAuthError 缺 .message + Web 型客户端缺 client_secret，已修复并加固（回调不 500、SOCKS ImportError 接住、secret 缺失给指引），修复提交见该条目
 - 时间: 2026-09-11 18:35 完成
 
 ### S-0911-1416-全面提升计划
