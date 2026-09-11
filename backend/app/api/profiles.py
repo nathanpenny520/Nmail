@@ -53,7 +53,19 @@ def list_profiles() -> dict:
     return {
         "profiles": [_profile_dict(p) for p in profiles_mod.list_profiles()],
         "active_profile_id": profiles_mod.get_active_id(),
+        "ai_enabled": profiles_mod.is_enabled(),
     }
+
+
+class EnabledIn(BaseModel):
+    enabled: bool
+
+
+@router.put("/enabled")
+def set_ai_enabled(payload: EnabledIn) -> dict:
+    """AI 总开关：停用即回归传统邮件（所有 AI 入口隐藏、任务拒绝），配置档案保留。"""
+    profiles_mod.set_enabled(payload.enabled)
+    return {"ok": True, "ai_enabled": payload.enabled}
 
 
 @router.post("/profiles")

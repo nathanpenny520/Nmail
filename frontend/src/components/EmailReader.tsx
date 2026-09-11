@@ -6,6 +6,7 @@ import {
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
+import { useAIEnabled } from '../api/useAI'
 import type { EmailDetail } from '../types'
 import AiPanel from './AiPanel'
 import HtmlMail from './HtmlMail'
@@ -47,6 +48,7 @@ export default function EmailReader({
   const [draftInstr, setDraftInstr] = useState('')
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const aiEnabled = useAIEnabled()
 
   // 手动触发 AI 拟稿（可带要求提示词）：生成后直接跳到待审草稿页
   const draftMutation = useMutation({
@@ -224,26 +226,30 @@ export default function EmailReader({
             >
               <Ban className="h-3 w-3 text-rose-500" /> 拉黑归档
             </button>
-            <span className="mx-0.5 h-4 w-px bg-gray-200" />
-            <button
-              className={`${btn} border-violet-200 bg-violet-50/60 text-violet-700 hover:bg-violet-50 ${
-                draftInstrOpen ? 'border-violet-400' : ''
-              }`}
-              title="让 AI 为这封邮件起草回复，可附带你的要求"
-              onClick={() => setDraftInstrOpen((v) => !v)}
-              disabled={draftMutation.isPending}
-            >
-              {draftMutation.isPending
-                ? <Loader2 className="h-3 w-3 animate-spin" />
-                : <PenLine className="h-3 w-3" />}
-              AI 拟稿
-            </button>
-            <button
-              className={`${btn} border-violet-200 text-violet-700 hover:bg-violet-50`}
-              onClick={() => setAiOpen((v) => !v)}
-            >
-              <Sparkles className="h-3 w-3" /> AI 助手
-            </button>
+            {aiEnabled && (
+              <>
+                <span className="mx-0.5 h-4 w-px bg-gray-200" />
+                <button
+                  className={`${btn} border-violet-200 bg-violet-50/60 text-violet-700 hover:bg-violet-50 ${
+                    draftInstrOpen ? 'border-violet-400' : ''
+                  }`}
+                  title="让 AI 为这封邮件起草回复，可附带你的要求"
+                  onClick={() => setDraftInstrOpen((v) => !v)}
+                  disabled={draftMutation.isPending}
+                >
+                  {draftMutation.isPending
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : <PenLine className="h-3 w-3" />}
+                  AI 拟稿
+                </button>
+                <button
+                  className={`${btn} border-violet-200 text-violet-700 hover:bg-violet-50`}
+                  onClick={() => setAiOpen((v) => !v)}
+                >
+                  <Sparkles className="h-3 w-3" /> AI 助手
+                </button>
+              </>
+            )}
             {actionBusy && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
             {listMessage && <span className="t-xs text-indigo-600">{listMessage}</span>}
             {draftInstrOpen && (

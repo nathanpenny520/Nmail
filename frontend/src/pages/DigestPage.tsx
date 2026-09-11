@@ -7,6 +7,7 @@ import { BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { api } from '../api/client'
+import { useAIEnabled } from '../api/useAI'
 import { CATEGORY_META } from '../types'
 import Markdown from '../components/Markdown'
 
@@ -50,6 +51,7 @@ function Chart({ option, height }: { option: echarts.EChartsCoreOption; height: 
 
 export default function DigestPage() {
   const queryClient = useQueryClient()
+  const aiEnabled = useAIEnabled()
   const { data, isLoading } = useQuery({
     queryKey: ['digest'],
     queryFn: api.getDigest,
@@ -172,18 +174,26 @@ export default function DigestPage() {
               <Download className="h-3.5 w-3.5" /> 导出 Markdown
             </button>
           )}
-          <button
-            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-            onClick={() => generateMutation.mutate()}
-            disabled={generateMutation.isPending}
-          >
-            {generateMutation.isPending
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <RefreshCw className="h-3.5 w-3.5" />}
-            {digest ? '重新生成' : '生成今日摘要'}
-          </button>
+          {aiEnabled && (
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+            >
+              {generateMutation.isPending
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <RefreshCw className="h-3.5 w-3.5" />}
+              {digest ? '重新生成' : '生成今日摘要'}
+            </button>
+          )}
         </div>
       </div>
+
+      {!aiEnabled && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          AI 功能已停用（设置 - AI 配置可开启），暂停生成摘要；历史摘要仍可查看与导出。
+        </div>
+      )}
 
       {generateMutation.isError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

@@ -115,6 +115,11 @@ export const api = {
     request<{ ok: boolean; active_profile_id: string }>(`/api/ai/profiles/${id}/activate`, {
       method: 'PUT',
     }),
+  setAIEnabled: (enabled: boolean) =>
+    request<{ ok: boolean; ai_enabled: boolean }>('/api/ai/enabled', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
   getAIModels: (profileId: string) =>
     request<{ ok: boolean; models: string[]; error: string | null }>(
       `/api/ai/models?profile_id=${encodeURIComponent(profileId)}`,
@@ -295,16 +300,18 @@ export const api = {
     }),
   removeSenderList: (id: number) =>
     request<{ ok: boolean }>(`/api/sender-lists/${id}`, { method: 'DELETE' }),
-  updateAccount: (id: number, payload: { password?: string; ai_permission?: string }) =>
+  updateAccount: (id: number, payload: {
+    password?: string
+    ai_permission?: string
+    style_prompt?: string | null
+  }) =>
     request<{ ok: boolean; account: Account }>(`/api/accounts/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
 
-  // ── 每日摘要与语气 ──
+  // ── 每日摘要 ──
   getDigest: () => request<DigestResp>('/api/digest'),
   generateDigest: () =>
     request<DigestResp['digest']>('/api/digest/generate', { method: 'POST' }),
-  learnToneDna: (id: number) =>
-    request<{ ok: boolean; tone_dna: string }>(`/api/accounts/${id}/tone-dna`, { method: 'POST' }),
 }

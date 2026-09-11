@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilePenLine, Loader2, RotateCcw, Send, Sparkles, Trash2, Undo2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
+import { useAIEnabled } from '../api/useAI'
 import type { Draft } from '../types'
 
 type Tab = 'pending' | 'sent' | 'discarded'
@@ -162,6 +163,7 @@ function DraftDetail({ draft, tab, onChanged }: { draft: Draft; tab: Tab; onChan
   const [showInstruction, setShowInstruction] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const queryClient = useQueryClient()
+  const aiEnabled = useAIEnabled()
 
   useEffect(() => setContent(draft.content), [draft.id, draft.content])
 
@@ -297,13 +299,15 @@ function DraftDetail({ draft, tab, onChanged }: { draft: Draft; tab: Tab; onChan
             >
               保存修改
             </button>
-            <button
-              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 px-2.5 py-1.5 t-sm text-violet-700 hover:bg-violet-50 disabled:opacity-50"
-              onClick={() => setShowInstruction((v) => !v)}
-              disabled={busy}
-            >
-              <Sparkles className={`h-3 w-3 ${regenMutation.isPending ? 'animate-spin' : ''}`} /> AI 重写
-            </button>
+            {aiEnabled && (
+              <button
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 px-2.5 py-1.5 t-sm text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+                onClick={() => setShowInstruction((v) => !v)}
+                disabled={busy}
+              >
+                <Sparkles className={`h-3 w-3 ${regenMutation.isPending ? 'animate-spin' : ''}`} /> AI 重写
+              </button>
+            )}
             <span className="flex-1" />
             <button
               className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 t-sm text-gray-500 hover:text-amber-600 disabled:opacity-50"

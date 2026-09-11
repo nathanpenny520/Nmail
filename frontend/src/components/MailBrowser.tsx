@@ -5,6 +5,7 @@ import {
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, type EmailQuery } from '../api/client'
+import { useAIEnabled } from '../api/useAI'
 import {
   CATEGORY_META, type EmailDetail, type EmailSummary, type FolderInfo, type SyncResult,
 } from '../types'
@@ -24,6 +25,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const compose = useCompose()
+  const aiEnabled = useAIEnabled()
 
   const [accountId, setAccountId] = useState<number | null>(null)
   const [folder, setFolder] = useState('INBOX')
@@ -238,7 +240,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
     onSuccess: (result) => {
       invalidateMail()
       if (result.skipped_no_ai) {
-        setSyncMessage('未配置 AI 端点，请到设置中填写')
+        setSyncMessage('AI 未配置或已停用，请到设置 - AI 配置检查')
       } else {
         setSyncMessage(
           `AI 整理完成：分类 ${result.classified} 封${result.archived > 0 ? `，归档营销 ${result.archived} 封` : ''}`,
@@ -346,7 +348,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
             收信
           </button>
-          {!archived && (
+          {!archived && aiEnabled && (
             <button
               className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 t-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
               onClick={() => organizeMutation.mutate()}

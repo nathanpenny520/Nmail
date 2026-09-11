@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
+from app.ai import tasks
 from app.ai.digest import build_digest
 from app.db.database import get_conn
 
@@ -28,4 +29,7 @@ def get_digest() -> dict:
 
 @router.post("/generate")
 def generate() -> dict:
-    return build_digest(force=True)
+    try:
+        return build_digest(force=True)
+    except tasks.AINotConfigured as exc:
+        raise HTTPException(400, str(exc)) from None

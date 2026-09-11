@@ -124,15 +124,15 @@ def generate_reply_draft(
     account_id: int | None = None,
     profile_id: str | None = None,
 ) -> str:
-    """为一封来信生成回复草稿正文（Markdown）；已学习 Tone DNA 时注入风格。"""
+    """为一封来信生成回复草稿正文（Markdown）；账号设置文风提示词时注入遵循。"""
     base_url, model, api_key = _ai_config(profile_id)
     system = prompts.DRAFT_SYSTEM
     if account_id is not None:
         row = get_conn().execute(
-            "SELECT tone_dna FROM accounts WHERE id = ?", (account_id,)
+            "SELECT style_prompt FROM accounts WHERE id = ?", (account_id,)
         ).fetchone()
-        if row and row["tone_dna"]:
-            system += f"\n\n用户的写作风格参考（尽量贴近模仿）：{row['tone_dna']}"
+        if row and row["style_prompt"]:
+            system += f"\n\n用户的文风要求（起草时请遵循）：{row['style_prompt']}"
     body = email_row["body_text"] or ""
     if not body.strip():
         from bs4 import BeautifulSoup
@@ -281,32 +281,6 @@ def digest_overview(user: str, account_id: int | None = None,
                   True, "digest", account_id)
     except Exception as exc:  # noqa: BLE001
         log_usage("digest", model, 0, 0, False, str(exc)[:200], account_id)
-        raise
-    return text.strip()
-
-
-def generate_tone_dna(samples: list[str], account_id: int | None = None,
-                      profile_id: str | None = None) -> str:
-    """从已发邮件样本总结用户的写作风格（Tone DNA）。"""
-    base_url, model, api_key = _ai_config(profile_id)
-    joined = "\n\n----\n\n".join(s[:1500] for s in samples if s.strip())
-    user = (
-        "以下是用户发出的若干封真实邮件，请总结这个人的写作风格，"
-        "输出一段 100-200 字的中文风格描述，包括：常用语言、正式程度、称呼与结尾习惯、"
-        "句子长短与语气、常见口头表达。只输出风格描述本身，供今后模仿其风格起草邮件。\n\n"
-        + joined
-    )
-    try:
-        text, usage = llm.chat(
-            base_url, model, api_key,
-            "你是写作风格分析师，只输出风格描述本身。",
-            user, temperature=0.2,
-        )
-        log_usage("tone_dna", model,
-                  usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
-                  True, f"{len(samples)} 封样本", account_id)
-    except Exception as exc:  # noqa: BLE001
-        log_usage("tone_dna", model, 0, 0, False, str(exc)[:200], account_id)
         raise
     return text.strip()
 

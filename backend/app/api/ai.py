@@ -97,8 +97,8 @@ def chat_manager(payload: ManagerChatIn) -> dict:
             context, payload.question, history=payload.history,
             profile_id=payload.profile_id,
         )
-    except tasks.AINotConfigured:
-        raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
+    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
+        raise HTTPException(400, str(exc)) from None
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"AI 调用失败：{exc}") from exc
     if payload.session_id is not None:
@@ -121,8 +121,8 @@ def chat_manager_stream(payload: ManagerChatIn):
             context, payload.question, history=payload.history,
             profile_id=payload.profile_id,
         )
-    except tasks.AINotConfigured:
-        raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
+    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
+        raise HTTPException(400, str(exc)) from None
     if payload.session_id is not None:
         gen = _persist_stream(gen, payload.session_id, _record_model(payload.profile_id))
     return _sse(gen)
@@ -206,8 +206,8 @@ def chat(payload: ChatIn) -> dict:
             history=payload.history, account_id=account_id,
             profile_id=payload.profile_id,
         )
-    except tasks.AINotConfigured:
-        raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
+    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
+        raise HTTPException(400, str(exc)) from None
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"AI 调用失败：{exc}") from exc
     return {"answer": answer}
@@ -225,8 +225,8 @@ def chat_stream(payload: ChatIn):
             history=payload.history, account_id=account_id,
             profile_id=payload.profile_id,
         )
-    except tasks.AINotConfigured:
-        raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
+    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
+        raise HTTPException(400, str(exc)) from None
     return _sse(gen)
 
 
@@ -244,8 +244,8 @@ def write(payload: WriteIn) -> dict:
     try:
         result = tasks.write_assist(payload.text, payload.op, payload.instruction,
                                     profile_id=payload.profile_id)
-    except tasks.AINotConfigured:
-        raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
+    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
+        raise HTTPException(400, str(exc)) from None
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001

@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
+import { useAIEnabled } from '../../api/useAI'
 import type { Account, DraftAttachment, UserDraft } from '../../types'
 import { useCompose } from './ComposeContext'
 import AiWriteDialog from './AiWriteDialog'
@@ -33,6 +34,7 @@ function fmtSendAt(iso: string): string {
  */
 export default function ComposeForm({ draft, accounts }: { draft: UserDraft; accounts: Account[] }) {
   const { updateTab, requestClose, finishSent, cacheDraft, patchDraft, registerFlush } = useCompose()
+  const aiEnabled = useAIEnabled()
 
   const [accountId, setAccountId] = useState(draft.account_id)
   const [to, setTo] = useState(draft.to_addrs)
@@ -323,18 +325,20 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
         </div>
       </div>
 
-      {/* AI 写作入口行 */}
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-gray-100 px-3 py-1">
-        <button
-          className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 t-sm font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
-          onClick={() => setAiOpen(true)}
-          disabled={!editor}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          AI 写作
-        </button>
-        <span className="t-xs text-gray-400">按指令整篇生成，或对现有正文润色/翻译</span>
-      </div>
+      {/* AI 写作入口行（AI 停用时隐藏，回归传统写信） */}
+      {aiEnabled && (
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-gray-100 px-3 py-1">
+          <button
+            className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 t-sm font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+            onClick={() => setAiOpen(true)}
+            disabled={!editor}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            AI 写作
+          </button>
+          <span className="t-xs text-gray-400">按指令整篇生成，或对现有正文润色/翻译</span>
+        </div>
+      )}
 
       <EditorToolbar
         editor={editor}

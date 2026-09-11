@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Pencil, Pin, PinOff, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
+import { useAIEnabled } from '../api/useAI'
 import { streamChat } from '../api/stream'
 import Markdown from '../components/Markdown'
 import type { Account, ChatSession } from '../types'
@@ -48,6 +49,7 @@ export default function ManagerPage() {
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
   const accounts: Account[] = accountsQuery.data?.accounts ?? []
   const sessionsQuery = useQuery({ queryKey: ['chats'], queryFn: api.getChats })
+  const aiEnabled = useAIEnabled()
   const sessions: ChatSession[] = sessionsQuery.data?.sessions ?? []
   const profilesQuery = useQuery({ queryKey: ['ai-profiles'], queryFn: api.getAIProfiles })
   const profiles = profilesQuery.data?.profiles ?? []
@@ -164,6 +166,11 @@ export default function ManagerPage() {
 
   return (
     <div className="flex h-full">
+      {!aiEnabled && (
+        <div className="absolute inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center t-sm text-amber-800">
+          AI 功能已停用，可在「设置 - AI 配置」重新开启
+        </div>
+      )}
       {/* 会话历史栏 */}
       <aside className="flex w-56 shrink-0 flex-col border-r border-gray-100 bg-gray-50/60">
         <div className="flex items-center justify-between px-3 py-3">

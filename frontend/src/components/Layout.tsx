@@ -1,6 +1,7 @@
 import { Archive, BarChart3, FilePenLine, FileText, Inbox, Pencil, Plus, Settings, Sparkles, X } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useAIEnabled } from '../api/useAI'
 import { useCompose } from './compose/ComposeContext'
 import ComposeWorkbench from './compose/ComposeWorkbench'
 import NotificationBell from './NotificationBell'
@@ -24,6 +25,9 @@ const PAGE_TABS: Record<string, { label: string; icon: typeof Inbox }> = {
   '/settings': { label: '设置', icon: Settings },
 }
 
+// 纯 AI 页面：AI 停用（传统邮件模式）时从导航与标签条隐藏
+const AI_ONLY_TABS = ['/drafts', '/digest', '/assistant']
+
 const NAV_MIN = 96
 const NAV_MAX = 240
 const NAV_DEFAULT = 148
@@ -34,6 +38,7 @@ function WorkspaceTabs() {
   const { tabs, activeComposeId, setActiveCompose, openNew, requestClose } = useCompose()
   const location = useLocation()
   const navigate = useNavigate()
+  const aiEnabled = useAIEnabled()
 
   // 页面标签：打开过即留下，去重；记忆在 localStorage，刷新后仍在
   const [pageTabs, setPageTabs] = useState<string[]>(() => {
@@ -47,11 +52,13 @@ function WorkspaceTabs() {
   useEffect(() => {
     localStorage.setItem('nmail_page_tabs', JSON.stringify(pageTabs))
   }, [pageTabs])
-  // 直接输 URL / 前进后退进入页面路由时也补一个标签
+  // 直接输 URL / 前进后退进入页面路由时也补一个标签（AI 停用时跳过纯 AI 页面）
   useEffect(() => {
     const path = location.pathname
-    if (PAGE_TABS[path]) setPageTabs((prev) => (prev.includes(path) ? prev : [...prev, path]))
-  }, [location.pathname])
+    if (PAGE_TABS[path] && (aiEnabled || !AI_ONLY_TABS.includes(path))) {
+      setPageTabs((prev) => (prev.includes(path) ? prev : [...prev, path]))
+    }
+  }, [location.pathname, aiEnabled])
 
   const closePageTab = (path: string) => {
     setPageTabs((prev) => prev.filter((p) => p !== path))
@@ -78,7 +85,7 @@ function WorkspaceTabs() {
         <Inbox className="h-3.5 w-3.5 shrink-0" />
         <span className="whitespace-nowrap">收件箱</span>
       </button>
-      {pageTabs.map((path) => {
+      {pageTabs.filter((path) => aiEnabled || !AI_ONLY_TABS.includes(path)).map((path) => {
         const meta = PAGE_TABS[path]
         const Icon = meta.icon
         const active = activeComposeId === null && location.pathname === path
@@ -182,6 +189,7 @@ export default function Layout() {
   }, [])
 
   const iconOnly = navWidth <= ICON_ONLY_BELOW
+  const aiEnabled = useAIEnabled()
   const navLinkClass = (isActive: boolean) =>
     `flex items-center rounded-lg px-2 py-1.5 t-sm transition-colors ${
       iconOnly ? 'justify-center' : 'gap-2'
@@ -203,7 +211,9 @@ export default function Layout() {
           {!iconOnly && <span className="truncate text-sm font-bold tracking-tight">Nmail</span>}
         </div>
         <nav className={`flex-1 space-y-0.5 ${iconOnly ? 'px-1.5' : 'px-2.5'}`}>
-          {navItems.map(({ to, label, icon: Icon }) => (
+          {navItems
+            .filter(({ to }) => aiEnabled || !AI_ONLY_TABS.includes(to))
+            .map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}

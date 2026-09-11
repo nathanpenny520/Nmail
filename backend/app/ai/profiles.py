@@ -12,6 +12,7 @@ from app.security import get_secret, has_secret, set_secret
 
 PROFILES_KEY = "ai_profiles"
 ACTIVE_KEY = "active_profile_id"
+ENABLED_KEY = "ai_enabled"  # "0"=停用（传统邮件模式）；缺省/"1"=启用
 LEGACY_SECRET_KEY = "ai_api_key"
 
 DEFAULT_PROFILE_ID = "default"
@@ -62,6 +63,15 @@ def set_active_id(profile_id: str | None) -> None:
     set_setting(ACTIVE_KEY, profile_id)
 
 
+def is_enabled() -> bool:
+    """AI 总开关：停用后所有 AI 任务一律拒绝（配置档案原样保留）。"""
+    return (get_setting(ENABLED_KEY, "1") or "1") != "0"
+
+
+def set_enabled(enabled: bool) -> None:
+    set_setting(ENABLED_KEY, "1" if enabled else "0")
+
+
 def resolve(profile_id: str | None = None) -> dict:
     """取目标档案：显式指定 > 激活档案 > 第一个；无档案时抛 ProfileNotConfigured。"""
     profiles = list_profiles()
@@ -75,7 +85,9 @@ def resolve(profile_id: str | None = None) -> dict:
 
 
 def resolve_config(profile_id: str | None = None) -> tuple[str, str, str | None]:
-    """返回 (base_url, model, api_key)；档案不完整时抛 ProfileNotConfigured。"""
+    """返回 (base_url, model, api_key)；AI 停用或档案不完整时抛 ProfileNotConfigured。"""
+    if not is_enabled():
+        raise ProfileNotConfigured("AI 功能已停用，可在「设置 - AI 配置」重新开启")
     p = resolve(profile_id)
     base_url = (p.get("base_url") or "").strip()
     model = (p.get("model") or "").strip()

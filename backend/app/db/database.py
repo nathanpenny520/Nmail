@@ -267,6 +267,17 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX IF NOT EXISTS idx_user_draft_att ON user_draft_attachments(draft_id);
         """,
     ),
+    (
+        10,
+        """
+        -- 语气学习（Tone DNA）退役 → 每账号可编辑的「文风提示词」：
+        -- 黑盒自动学习改为用户手写、完全透明；已生成的语气描述原样转存（可改可清）
+        ALTER TABLE accounts ADD COLUMN style_prompt TEXT;
+        UPDATE accounts SET style_prompt = tone_dna
+         WHERE tone_dna IS NOT NULL AND TRIM(tone_dna) != '';
+        ALTER TABLE accounts DROP COLUMN tone_dna;
+        """,
+    ),
 ]
 
 

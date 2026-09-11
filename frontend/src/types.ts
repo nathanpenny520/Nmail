@@ -9,6 +9,7 @@ export interface AIProfile {
 export interface AIProfilesResp {
   profiles: AIProfile[]
   active_profile_id: string | null
+  ai_enabled: boolean
 }
 
 export interface Settings {
@@ -64,7 +65,8 @@ export interface Account {
   smtp_port: number
   color: string
   ai_permission: 'readonly' | 'draft_review'
-  has_tone_dna: boolean
+  /** 文风提示词：AI 起草该账号回复时遵循，用户手写可编辑；null=未设置 */
+  style_prompt: string | null
   status: 'ok' | 'auth_error' | 'connection_error' | 'never_synced'
   status_detail: string | null
   last_sync_at: string | null

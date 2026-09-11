@@ -127,8 +127,10 @@
 - 遗留: 提交后回填 CHANGELOG 哈希
 - 时间: 2026-09-11 深夜
 
-### S-0911-2500-AI透明化与设置侧边栏
+### S-0911-2500-AI透明化与设置侧边栏 ✅
 - 目标: ①语气学习（Tone DNA）退役 → 每账号「文风提示词」（迁移 v10 转存旧数据）②AI 总开关（关闭=传统邮件模式，隐藏全部 AI 入口）③设置页改侧边栏分类（通用/邮箱账号/AI 配置/AI 用量/关于）
-- 范围: backend(db/ai/api) + frontend(types/client/SettingsPage重写/Layout/MailBrowser/EmailReader/ComposeForm小改/DigestPage/DraftsPage/ManagerPage) + docs
-- 协调: ComposeForm.tsx 等文件存在并行 WIP（工作台标签化会话），仅做一行级条件渲染小改；SettingsPage 含上一会话未提交的 AI 用量措辞改动（63d8db6 已代提交其 CHANGELOG 条目，代码仍在工作树），本会话重写时保留该措辞
-- 时间: 2026-09-11 深夜 进行中
+- 范围: backend(db/ai/api) + frontend(types/client/useAI新增/SettingsPage重写/Layout/MailBrowser/EmailReader/ComposeForm小改/DigestPage/DraftsPage/ManagerPage) + docs
+- 产出: 待提交（条目见 CHANGELOG 置顶）；ruff + npm build 通过；隔离实例 curl 全往返（迁移 v10 schema、style_prompt 设置/清空、停用态 400 文案、ai_enabled 开关）
+- 协调: 与草稿保存会话并行无冲突（ComposeForm 新鲜重读后仅加条件渲染）；期间误向真实库插入过测试账号 t@t.com，已当场清理（id=3，无关联数据），真实账号未受影响
+- 遗留: 提交后回填 CHANGELOG 哈希；后端改动需重启 python run.py 生效；AI 总开关与文风提示词待用户真实账号验证
+- 时间: 2026-09-11 深夜 完成

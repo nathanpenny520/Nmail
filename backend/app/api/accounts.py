@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core import imap_client, sync as sync_engine
 from app.core.providers import MANUAL_NOTE, PRESETS, match_provider, probe_server
@@ -34,6 +34,7 @@ class AccountIn(BaseModel):
 class AccountPatchIn(BaseModel):
     password: str | None = None
     ai_permission: str | None = None  # readonly | draft_review
+    style_prompt: str | None = Field(default=None, max_length=2000)  # None=不改；空串=清除
 
 
 class ProbeIn(BaseModel):
@@ -74,7 +75,7 @@ def _account_dict(row) -> dict[str, Any]:  # noqa: ANN001
         "smtp_port": row["smtp_port"],
         "color": row["color"],
         "ai_permission": row["ai_permission"] if "ai_permission" in row.keys() else "draft_review",
-        "has_tone_dna": bool(row["tone_dna"]) if "tone_dna" in row.keys() else False,
+        "style_prompt": row["style_prompt"] if "style_prompt" in row.keys() else None,
         "status": row["status"],
         "status_detail": row["status_detail"],
         "last_sync_at": row["last_sync_at"],
@@ -184,6 +185,15 @@ def update_account(account_id: int, payload: AccountPatchIn) -> dict:
         )
         conn.commit()
 
+    if payload.style_prompt is not None:
+        # 空串=清除（存 NULL）；非空=覆盖（前端已限 2000 字）
+        text = payload.style_prompt.strip()
+        conn.execute(
+            "UPDATE accounts SET style_prompt = ? WHERE id = ?",
+            (text or None, account_id),
+        )
+        conn.commit()
+
     if payload.password is not None:
         cfg = imap_client.MailConfig(
             email=row["email"], password=payload.password,
@@ -197,59 +207,6 @@ def update_account(account_id: int, payload: AccountPatchIn) -> dict:
 
     updated = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
     return {"ok": True, "account": _account_dict(updated)}
-
-
-@router.post("/accounts/{account_id}/tone-dna")
-def learn_tone_dna(account_id: int) -> dict:
-    """从服务器「已发送」文件夹取样，让 AI 学习该账号的写作语气。"""
-    row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
-    if not row:
-        raise HTTPException(404, "账号不存在")
-    password = get_secret(f"account_pwd:{account_id}")
-    if not password:
-        raise HTTPException(400, "缺少密码凭证")
-    cfg = imap_client.MailConfig(
-        email=row["email"], password=password,
-        imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
-    )
-    samples: list[str] = []
-    try:
-        with imap_client.connect_imap(cfg) as mb:
-            sent = imap_client.find_sent_folder(mb)
-            if not sent:
-                raise HTTPException(400, "未找到「已发送」文件夹，无法学习语气")
-            mb.folder.set(sent)
-            # 用 UIDNEXT 开窗取最近一段邮件（部分服务商不支持 SORT 扩展）
-            name = f'"{sent}"' if " " in sent else sent
-            _, data = mb.client.status(name, "(UIDNEXT)")
-            uidnext = int(re.search(rb"UIDNEXT (\d+)", data[0]).group(1))
-            criteria = f"UID {max(1, uidnext - 300)}:*"
-            for msg in mb.fetch(criteria, mark_seen=False, bulk=True):
-                text = (msg.text or "").strip()
-                if len(text) < 30:
-                    continue
-                samples.append(text[:1500])
-                if len(samples) >= 10:
-                    break
-    except HTTPException:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"读取已发送邮件失败：{exc}") from exc
-
-    if not samples:
-        raise HTTPException(400, "已发送文件夹中没有足够的文本邮件样本")
-
-    try:
-        from app.ai import tasks
-
-        tone = tasks.generate_tone_dna(samples, account_id=account_id)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"语气学习失败：{exc}") from exc
-
-    conn = get_conn()
-    conn.execute("UPDATE accounts SET tone_dna = ? WHERE id = ?", (tone, account_id))
-    conn.commit()
-    return {"ok": True, "tone_dna": tone}
 
 
 @router.delete("/accounts/{account_id}")
