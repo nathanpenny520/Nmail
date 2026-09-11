@@ -16,10 +16,9 @@ const STATUS_META: Record<Account['status'], { label: string; dot: string; text:
   syncing: { label: '同步中', dot: 'bg-sky-400 animate-pulse', text: 'text-sky-600' },
 }
 
-// tone_dna 仅剩历史用量日志，保留映射供展示
 const TASK_LABELS: Record<string, string> = {
   classify: '分类', draft: '草稿', chat: '对话', write: '写作辅助',
-  digest: '每日摘要', tone_dna: '语气学习（已下线）',
+  digest: '每日摘要',
 }
 
 // token 数显示：≥1万 显示「x.x万」，否则千分位
@@ -924,7 +923,7 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
             testMutation.mutate({
               base_url: baseUrl,
               model,
-              ...(apiKey ? { api_key: apiKey } : {}),
+              api_key: apiKey, // 全量直测：清空=按空密钥测，不回退已存密钥
             })
           }
           disabled={testMutation.isPending}

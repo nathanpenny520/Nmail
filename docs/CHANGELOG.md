@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix：AI 密钥 401 排障（恢复有效密钥）+ 测试连接空密钥直测不回退 + 401 人话提示；迁移 v11 清语气学习残留用量
+- **排障结论（非程序问题）**：设置页 401「****42b0 is invalid」根因是该 key 在 DeepSeek 平台侧被删除/重置——ai_logs 证实同 key+model 至 09-11 04:16 仍成功跑 58 次、07:27 起同一存储密钥连吃 401，期间本地零变更；裸 curl 绕开应用复现同错。保存管线无损：界面显示=DB 档案=secrets.json=报错指纹四处一致
+- **处置**：secrets.json 里仍存有用户后生成的有效 key（****75dc，属已删档案 83c543e0 的孤儿密钥），已写回激活档案，测试连接实测 ok（1.3s）
+- **测试连接语义修复**：前端由「api_key 非空才发送」改为全量直发——清空 Key 点测试=按空密钥直测（占位 EMPTY），不再偷偷回退已存旧密钥误导排障；省略字段（None）回退档案密钥的便捷语义保留
+- **401 人话提示**：`llm.friendly_error` 给鉴权类错误统一追加「401 通常不是保存失败，而是该密钥已在服务商平台被删除/重置」提示，`/api/ai/test` 与 `/api/ai/models` 两处生效
+- **迁移 v11**：`DELETE FROM ai_logs WHERE task_type='tone_dna'`——语气学习（v10 退役）残留的 2 条历史用量清除，AI 用量页不再出现「语气学习（已下线）」行；前端同步删 TASK_LABELS 的 tone_dna 映射
+- 验证：ruff、npm run build 通过；隔离实例（真库副本）curl 往返——v11 迁移后 tone_dna 2→0、usage by_task 无 tone_dna；test 端点「省略=回退档案密钥 ok / 空串=EMPTY 直测不回退 / 坏 key=带人话提示」三态逐一验证
+
 ## 0b549c9 — 重构：数据库事务边界 tx() + autocommit 切换（同一提交，行为等价）
 - 落地 IMPROVEMENT_PLAN §3.2：连接改 `isolation_level=None`（autocommit，单条语句即生效）——存量 ~30 处 `conn.commit()` 变无害 no-op，现有调用点无需同步改造；补 `PRAGMA synchronous=NORMAL`（WAL 推荐档，免逐提交 fsync 拖慢分块入库）与 `busy_timeout=5000`（跨进程写冲突兜底）
 - 新增 `tx()`：进程内全局写锁 + `BEGIN IMMEDIATE`，成功提交、异常回滚（含 SQLite 已自动回滚的容错）——多语句原子性有了显式入口，后续新增代码一律走 tx()；存量多语句点（batch_action、_apply_classification 等）随触碰机械替换

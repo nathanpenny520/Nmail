@@ -70,7 +70,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 
 `settings`(KV) · `notifications` · `accounts`(含 ai_permission/style_prompt 文风提示词) · `emails`(含分类/needs_reply/archived_local) · `attachments` · `sync_state`(uid/uidvalidity) · `emails_fts`(trigram) · `drafts`(pending/sent/discarded) · `user_drafts`(写信台草稿，editing/scheduled/sent，含 send_at) · `user_draft_attachments`(写信台附件行，文件在 data_dir/drafts/<id>/) · `ai_logs`(全量 AI 用量) · `sender_lists` · `digest_history` · `chat_sessions`/`chat_messages`（P4 会话持久化）
 
-迁移版本：v1 基础表 → v2 邮件核心+FTS → v3 AI 层 → v4 摘要+ToneDNA → v5 会话持久化 → v7 date_sort 排序修复 → v8 user_drafts → v9 草稿附件+send_at → v10 语气学习退役→文风提示词（tone_dna 数据转存 style_prompt 后删列）+ AI 总开关（settings KV `ai_enabled`）
+迁移版本：v1 基础表 → v2 邮件核心+FTS → v3 AI 层 → v4 摘要+ToneDNA → v5 会话持久化 → v7 date_sort 排序修复 → v8 user_drafts → v9 草稿附件+send_at → v10 语气学习退役→文风提示词（tone_dna 数据转存 style_prompt 后删列）+ AI 总开关（settings KV `ai_enabled`） → v11 清语气学习残留用量日志（ai_logs task_type='tone_dna'）
 
 ## 关键流程
 

@@ -76,6 +76,14 @@ def iter_deltas(base_url: str, model: str, api_key: str | None,
                 yield content
 
 
+def friendly_error(error: str) -> str:
+    """鉴权类错误补人话提示——401 多为密钥在服务商平台侧被删除/重置，本地保存无损。"""
+    low = error.lower()
+    if "401" in error or "authentication" in low or "invalid_api_key" in low:
+        return error + "（提示：401 通常不是保存失败，而是该密钥已在服务商平台被删除/重置，请到控制台核对或重新生成）"
+    return error
+
+
 def test_connection(base_url: str, model: str, api_key: str | None) -> dict:
     """发送一个极小请求，验证端点 / 密钥 / 模型名是否可用。"""
     started = time.perf_counter()
@@ -101,5 +109,5 @@ def test_connection(base_url: str, model: str, api_key: str | None) -> dict:
             "model": model,
             "reply": None,
             "latency_ms": int((time.perf_counter() - started) * 1000),
-            "error": str(exc),
+            "error": friendly_error(str(exc)),
         }

@@ -153,4 +153,4 @@ def list_models(payload: ModelsIn) -> dict:
         models = sorted({m.id for m in client.models.list()})
         return {"ok": True, "models": models, "error": None}
     except Exception as exc:  # noqa: BLE001 — 网络/鉴权错误统一转为友好结果
-        return {"ok": False, "models": [], "error": str(exc)}
+        return {"ok": False, "models": [], "error": llm.friendly_error(str(exc))}

@@ -171,3 +171,11 @@
 - 备注: 期间用户 AI 档案被重建为单个 default 档案、key 为已失效遗留 key（****42b0，当日在 DeepSeek 平台侧已失效），已引导重新生成；另发现 notifications@whizzzest.com 冒用用户域名发 1900 日期垃圾验证码邮件，建议拉黑
 - 备注: 用户两把 DeepSeek key（****42b0/****71b2）经真实验证均被平台判无效（42b0 当日早些时候曾成功，后于平台侧失效），已引导重新生成，非程序问题
 - 时间: 2026-09-12 凌晨 完成
+
+### S-0911-1614-AI密钥401排障与测试语义修复 ✅
+- 目标: ①查清设置页 401「****42b0 is invalid」根因与保存机制是否有问题 ②语气学习「已下线」用量行删除 ③测试连接语义修复（用户选定范围）
+- 范围: backend(ai/llm.py, api/profiles.py, db/database.py) + frontend(SettingsPage) + docs
+- 排障结论: 非程序问题——key 在 DeepSeek 平台侧被删/重置（ai_logs 同 key 至 04:16 成功 58 次、07:27 起 401，本地零变更；裸 curl 复现）。保存管线四处一致无损。secrets.json 孤儿密钥 ****75dc（已删档案 83c543e0 残留）实测有效，已写回激活档案，测试连接 ok
+- 产出: 测试连接空密钥直测不回退 + llm.friendly_error 401 人话提示（test/models 两处）+ 迁移 v11 清 tone_dna 用量（2 条）+ 前端删 TASK_LABELS 映射；ruff + npm build 通过；隔离实例（真库副本）curl 三态语义与迁移验证
+- 遗留: 后端改动需重启 python run.py 生效（密钥恢复已即时生效，secrets.json 按请求读）；孤儿密钥对账清理、保存后卡片回读同步两项加固用户选暂缓；secrets.json 仍有 2 把无主孤儿 key（c9f6765f/39693236，GLM 疑似）待用户决定去留
+- 时间: 2026-09-11 16:14 完成

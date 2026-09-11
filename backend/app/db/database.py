@@ -284,6 +284,13 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE accounts DROP COLUMN tone_dna;
         """,
     ),
+    (
+        11,
+        """
+        -- 语气学习功能已退役（v10），残留的历史用量日志一并清除，AI 用量页不再展示该行
+        DELETE FROM ai_logs WHERE task_type = 'tone_dna';
+        """,
+    ),
 ]
 
 
