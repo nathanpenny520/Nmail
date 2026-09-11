@@ -1,5 +1,8 @@
-"""AI 能力 API：上下文问答、写作辅助、用量统计、「AI 整理」补分类。"""
+"""AI 能力 API：上下文问答、总管家问答、写作辅助、用量统计、「AI 整理」补分类。"""
 from __future__ import annotations
+
+from collections import Counter
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -28,6 +31,69 @@ class OrganizeIn(BaseModel):
     account_id: int | None = None
     folder: str = "INBOX"
     limit: int = 200
+
+
+class ManagerChatIn(BaseModel):
+    question: str
+    history: list[dict] | None = None
+    account_id: int | None = None
+    days: int = 7
+
+
+@router.post("/chat-manager")
+def chat_manager(payload: ManagerChatIn) -> dict:
+    """「AI 总管家」：基于最近邮件全量上下文回答全局问题。"""
+    conn = get_conn()
+    since = (datetime.now() - timedelta(days=max(1, payload.days))).isoformat(timespec="seconds")
+    where = " WHERE e.date >= ?"
+    params: list = [since]
+    if payload.account_id is not None:
+        where += " AND e.account_id = ?"
+        params.append(payload.account_id)
+    rows = conn.execute(
+        "SELECT e.subject, e.sender_name, e.sender_email, e.date, e.category,"
+        " e.importance, e.needs_reply, e.archived_local, e.snippet, a.email AS account_email"
+        f" FROM emails e JOIN accounts a ON a.id = e.account_id{where}"
+        " ORDER BY e.date DESC LIMIT 150",
+        params,
+    ).fetchall()
+
+    lines = []
+    cat_count: Counter = Counter()
+    for r in rows:
+        cat = r["category"] or "未分类"
+        cat_count[cat] += 1
+        flags = []
+        if r["needs_reply"]:
+            flags.append("需回复")
+        if r["archived_local"]:
+            flags.append("已归档")
+        flags_str = f" [{'|'.join(flags)}]" if flags else ""
+        snippet = (r["snippet"] or "")[:60]
+        lines.append(
+            f'{(r["date"] or "")[:10]} {r["account_email"]} <{r["sender_email"]}> '
+            f'「{r["subject"]}」({cat}/{r["importance"] or "-"}){flags_str} {snippet}'
+        )
+
+    unread_row = conn.execute(
+        f"SELECT COUNT(*) AS n FROM emails e{where} AND e.is_read = 0 AND e.archived_local = 0",
+        params,
+    ).fetchone()
+
+    cats_str = "、".join(f"{k} {v}" for k, v in cat_count.most_common())
+    context = (
+        f"邮箱最近 {payload.days} 天概况：共 {len(rows)} 封（{cats_str}），"
+        f"未读 {unread_row['n']} 封。明细（新→旧，最多 150 条）：\n" + "\n".join(lines)
+    )
+    try:
+        answer = tasks.chat_with_context(
+            context, payload.question, history=payload.history,
+        )
+    except tasks.AINotConfigured:
+        raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"AI 调用失败：{exc}") from exc
+    return {"answer": answer}
 
 
 def _build_context(email_id: int) -> tuple[str, int]:

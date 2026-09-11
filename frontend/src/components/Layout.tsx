@@ -1,4 +1,4 @@
-import { Archive, BarChart3, FilePenLine, Inbox, Mail, Settings } from 'lucide-react'
+import { Archive, BarChart3, FilePenLine, Inbox, Mail, Settings, Sparkles } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import NotificationBell from './NotificationBell'
 
@@ -7,10 +7,11 @@ const navItems = [
   { to: '/drafts', label: '待审草稿', icon: FilePenLine },
   { to: '/archived', label: '已归档', icon: Archive },
   { to: '/digest', label: '每日摘要', icon: BarChart3 },
+  { to: '/assistant', label: 'AI 总管家', icon: Sparkles },
 ]
 
 const navLinkClass = (isActive: boolean) =>
-  `flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
+  `flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-colors ${
     isActive
       ? 'bg-indigo-50 font-medium text-indigo-700'
       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -19,10 +20,10 @@ const navLinkClass = (isActive: boolean) =>
 export default function Layout() {
   return (
     <div className="flex h-screen bg-gray-50 text-gray-900">
-      <aside className="flex w-44 shrink-0 flex-col border-r border-gray-200 bg-white">
+      <aside className="flex w-40 shrink-0 flex-col border-r border-gray-200 bg-white">
         <div className="flex items-center gap-2 px-4 py-4">
-          <Mail className="h-5 w-5 text-indigo-600" />
-          <span className="text-[15px] font-bold tracking-tight">Nmail</span>
+          <Mail className="h-[18px] w-[18px] text-indigo-600" />
+          <span className="text-sm font-bold tracking-tight">Nmail</span>
         </div>
         <nav className="flex-1 space-y-1 px-3">
           {navItems.map(({ to, label, icon: Icon }) => (

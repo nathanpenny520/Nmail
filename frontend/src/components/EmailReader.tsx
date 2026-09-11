@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Archive, ArchiveRestore, ArrowLeft, Ban, CircleCheck, CornerUpLeft, CornerUpRight,
-  ExternalLink, Forward, Loader2, Sparkles, Star, Trash2,
+  ExternalLink, Forward, Loader2, PenLine, Sparkles, Star, Trash2,
 } from 'lucide-react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { EmailDetail } from '../types'
 import AiPanel from './AiPanel'
@@ -31,7 +32,7 @@ function formatDate(iso: string | null): string {
 }
 
 const btn =
-  'inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50'
+  'inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50'
 
 /** 全文阅读模式：占满主区域，内容列居中限宽，保证长邮件完整可读。 */
 export default function EmailReader({
@@ -41,6 +42,20 @@ export default function EmailReader({
   const [aiOpen, setAiOpen] = useState(false)
   const [listMessage, setListMessage] = useState<string | null>(null)
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+
+  // 手动触发 AI 拟稿：生成后直接跳到待审草稿页
+  const draftMutation = useMutation({
+    mutationFn: () => api.regenerateDraft(detail.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['drafts'] })
+      navigate('/drafts')
+    },
+    onError: (err: Error) => {
+      setListMessage(`拟稿失败：${err.message}`)
+      setTimeout(() => setListMessage(null), 6000)
+    },
+  })
 
   const senderListMutation = useMutation({
     mutationFn: ({ type }: { type: 'whitelist' | 'blacklist' }) =>
@@ -83,10 +98,10 @@ export default function EmailReader({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-4xl px-6 pb-10 pt-4 lg:px-8">
           {/* 头部 */}
-          <h1 className="text-base font-semibold leading-snug text-gray-900">
+          <h1 className="text-[15px] font-semibold leading-snug text-gray-900">
             {detail.subject || '（无主题）'}
           </h1>
-          <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-xs text-gray-500">
+          <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-[11px] text-gray-500">
             <span className="font-medium text-gray-700">{detail.sender_name || detail.sender_email}</span>
             {detail.sender_name && detail.sender_email && detail.sender_name !== detail.sender_email && (
               <span className="text-gray-400">&lt;{detail.sender_email}&gt;</span>
@@ -95,12 +110,12 @@ export default function EmailReader({
             <span>{formatDate(detail.date)}</span>
           </div>
           {detail.recipients.length > 0 && (
-            <div className="mt-0.5 text-[11px] text-gray-400">
+            <div className="mt-0.5 text-[10px] text-gray-400">
               收件人：{detail.recipients.join('，')}
             </div>
           )}
           {detail.cc.length > 0 && (
-            <div className="mt-0.5 text-[11px] text-gray-400">抄送：{detail.cc.join('，')}</div>
+            <div className="mt-0.5 text-[10px] text-gray-400">抄送：{detail.cc.join('，')}</div>
           )}
 
           {/* 操作栏 */}
@@ -184,6 +199,17 @@ export default function EmailReader({
             </button>
             <span className="mx-0.5 h-4 w-px bg-gray-200" />
             <button
+              className={`${btn} border-violet-200 bg-violet-50/60 text-violet-700 hover:bg-violet-50`}
+              title="让 AI 为这封邮件起草回复，生成后到待审草稿页审核发送"
+              onClick={() => draftMutation.mutate()}
+              disabled={draftMutation.isPending}
+            >
+              {draftMutation.isPending
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <PenLine className="h-3 w-3" />}
+              AI 拟稿
+            </button>
+            <button
               className={`${btn} border-violet-200 text-violet-700 hover:bg-violet-50`}
               onClick={() => setAiOpen((v) => !v)}
             >
@@ -211,7 +237,7 @@ export default function EmailReader({
             {detail.body_html ? (
               <HtmlMail html={detail.body_html} />
             ) : (
-              <pre className="whitespace-pre-wrap break-words font-sans text-[13px] leading-relaxed text-gray-800">
+              <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-gray-800">
                 {detail.body_text}
               </pre>
             )}

@@ -144,6 +144,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  aiManagerChat: (payload: { question: string; history?: { role: string; content: string }[]; account_id?: number; days?: number }) =>
+    request<{ answer: string }>('/api/ai/chat-manager', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   aiWrite: (payload: { text: string; op: string; instruction?: string }) =>
     request<{ text: string }>('/api/ai/write', {
       method: 'POST',

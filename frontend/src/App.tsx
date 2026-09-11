@@ -4,6 +4,7 @@ import ArchivedPage from './pages/ArchivedPage'
 import DigestPage from './pages/DigestPage'
 import DraftsPage from './pages/DraftsPage'
 import InboxPage from './pages/InboxPage'
+import ManagerPage from './pages/ManagerPage'
 import SettingsPage from './pages/SettingsPage'
 
 export default function App() {
@@ -14,6 +15,7 @@ export default function App() {
         <Route path="/drafts" element={<DraftsPage />} />
         <Route path="/archived" element={<ArchivedPage />} />
         <Route path="/digest" element={<DigestPage />} />
+        <Route path="/assistant" element={<ManagerPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

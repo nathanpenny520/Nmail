@@ -251,7 +251,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             <div className="relative max-w-xl flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
               <input
-                className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-2 text-[13px] outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                className="w-full rounded-lg border border-gray-300 py-1 pl-8 pr-2 text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 placeholder="搜索邮件，回车确认（覆盖所有文件夹）"
                 value={qInput}
                 onChange={(e) => setQInput(e.target.value)}
@@ -287,7 +287,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
           </div>
           <div className="flex items-center gap-2 text-xs">
             <select
-              className="flex-1 rounded-lg border border-gray-300 px-2 py-1 outline-none focus:border-indigo-500"
+              className="flex-1 rounded-lg border border-gray-300 px-2 py-1 text-xs outline-none focus:border-indigo-500"
               value={accountId ?? ''}
               onChange={(e) => {
                 setAccountId(e.target.value ? Number(e.target.value) : null)
@@ -304,7 +304,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             </select>
             {!archived && !q && accountId != null && (
               <select
-                className="flex-1 rounded-lg border border-gray-300 px-2 py-1 outline-none focus:border-indigo-500"
+                className="flex-1 rounded-lg border border-gray-300 px-2 py-1 text-xs outline-none focus:border-indigo-500"
                 value={folder}
                 onChange={(e) => {
                   setFolder(e.target.value)
@@ -334,7 +334,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               星标
             </button>
             <select
-              className="flex-1 rounded-lg border border-gray-300 px-1 py-1 outline-none focus:border-indigo-500"
+              className="flex-1 rounded-lg border border-gray-300 px-1 py-1 text-xs outline-none focus:border-indigo-500"
               value={category}
               onChange={(e) => {
                 setCategory(e.target.value)
@@ -351,7 +351,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               ))}
             </select>
           </div>
-          <div className="flex items-center justify-between px-0.5 text-[11px] text-gray-400">
+          <div className="flex items-center justify-between px-0.5 text-[10px] text-gray-400">
             <span>
               {archived ? '已归档' : q ? `搜索「${q}」` : '收件箱'} · 共 {total} 封
             </span>
@@ -360,9 +360,9 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {listQuery.isLoading && <div className="p-6 text-sm text-gray-400">加载中…</div>}
+          {listQuery.isLoading && <div className="p-6 text-xs text-gray-400">加载中…</div>}
           {!listQuery.isLoading && items.length === 0 && (
-            <div className="p-8 text-center text-sm text-gray-400">
+            <div className="p-8 text-center text-xs text-gray-400">
               {archived ? '还没有已归档的邮件' : '此视图暂无邮件'}
             </div>
           )}
@@ -370,33 +370,33 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             <button
               key={item.id}
               onClick={() => selectEmail(item)}
-              className={`block w-full border-b border-gray-50 px-4 py-2 text-left transition-colors hover:bg-gray-50 ${
+              className={`block w-full border-b border-gray-50 px-4 py-1.5 text-left transition-colors hover:bg-gray-50 ${
                 item.is_read ? '' : 'bg-blue-50/40'
               }`}
             >
-              <div className="mx-auto flex max-w-5xl items-center gap-2">
+              <div className="mx-auto flex max-w-6xl items-center gap-2">
                 <span
-                  className="h-2 w-2 shrink-0 rounded-full"
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
                   style={{ backgroundColor: item.account_color }}
                   title={item.account_email}
                 />
-                <span className={`w-44 shrink-0 truncate text-[13px] ${item.is_read ? 'text-gray-600' : 'font-semibold text-gray-900'}`}>
+                <span className={`w-40 shrink-0 truncate text-xs ${item.is_read ? 'text-gray-600' : 'font-semibold text-gray-900'}`}>
                   {item.sender_name || item.sender_email}
                 </span>
-                <span className={`min-w-0 flex-1 truncate text-[13px] ${item.is_read ? 'text-gray-700' : 'font-medium text-gray-900'}`}>
+                <span className={`min-w-0 flex-1 truncate text-xs ${item.is_read ? 'text-gray-700' : 'font-medium text-gray-900'}`}>
                   {item.subject || '（无主题）'}
                   <span className="ml-2 font-normal text-gray-400">{item.snippet}</span>
                 </span>
                 {item.category && CATEGORY_META[item.category] && (
                   <span
-                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${CATEGORY_META[item.category].cls}`}
+                    className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-medium ${CATEGORY_META[item.category].cls}`}
                   >
                     {CATEGORY_META[item.category].label}
                   </span>
                 )}
                 {item.has_attachments && <Paperclip className="h-3 w-3 shrink-0 text-gray-400" />}
                 {item.starred && <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />}
-                <span className="w-12 shrink-0 text-right text-[11px] text-gray-400">
+                <span className="w-12 shrink-0 text-right text-[10px] text-gray-400">
                   {shortDate(item.date)}
                 </span>
               </div>
