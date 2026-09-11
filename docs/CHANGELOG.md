@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 写信台二期：同层标签互切 + 附件持久化 + 定时发送 + 模板/签名 + AI 写作对话框
+- 标签排布对齐网页邮箱：主区顶部常驻标签条（收件箱固定 + 各写信标签 + ＋新写），一键互切；写信不再走路由，收件箱等页面 keep-alive（隐藏不卸载），切回即恢复列表/阅读状态；侧栏导航点击自动露出底层页
+- 附件持久化：选择即上传落盘（data_dir/drafts/<id>/，迁移 v9 新表 user_draft_attachments），按个删除、随草稿恢复，发送后自动清理；回复"能添加几个"：数量不设限，单个为本地文件
+- 定时发送：发送旁「定时」→ 时间选择 → 草稿转 scheduled 状态，调度器每分钟 tick 到期即发（复用 send_draft_now），成功/失败均写通知中心，失败自动退回编辑态；标签页橙色横幅可随时取消定时；重启后 scheduled 草稿仍恢复为标签可管理
+- 模板与签名：工具栏「插入模板」「签名」下拉（插入光标处/末尾，Markdown 自动转富文本）；管理弹窗支持按账号存签名、模板增删改（settings KV 存 Markdown 文本，新端点 /api/compose-extras）
+- AI 写作对话框（核心）：点「AI 写作」弹窗——指令描述直接生成整篇正文（新 compose 操作，支持把现有正文作背景），或一键润色/更正式/更简短/译中/译英；结果预览后「替换正文/插入末尾」，输出经后端 Markdown→HTML 转换（nh3 消毒），插入即得可用富文本，不再是纯文本覆盖
+- 验证：npm build、ruff --select F 通过；隔离实例往返：附件上传/删除/磁盘落位/删稿清理、定时（过去/非法/未来时间校验、scheduled 列表、取消）、Markdown 转换、模板签名 KV、调度器到期派发失败路径（退回 editing + 通知）；AI 真实生成与 SMTP 定时实发待用户验证
+
 ## ddf3d0d — 发版自动化：一条命令 + 手册
 - 新增 `scripts/release.sh X.Y.Z`：预检（版本文件干净/不落后 origin/tag 未占用/gh 登录）→ 同步 pyproject+config.py 两处版本号 → 提交打 tag 推送 → `gh run watch` 盯 release CI 全绿 → 等 Release 资产取 exe SHA256 → fork 建分支提 winget 版本更新 PR；支持 `--dry-run`（演练后还原）与 `--skip-winget`
 - 新增 `docs/RELEASE.md` 发版手册：前置条件、流程、AI 收尾清单、故障处理表；沉淀 winget 全部实战踩坑（单层首字母折叠、locale.en-US 文件名、本地 validate 验不出路径规则、目录含子目录报错、fork 默认分支 master）

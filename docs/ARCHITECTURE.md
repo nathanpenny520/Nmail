@@ -20,7 +20,8 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 本地数据目录（platformdirs；Windows: %LOCALAPPDATA%/Nmail）
    ├─ nmail.db      全部业务数据
    ├─ secrets.json  AI key、各账号授权码（永不回传前端）
-   └─ accounts/<id>/attachments/  附件落盘
+   ├─ accounts/<id>/attachments/  附件落盘
+   └─ drafts/<id>/               写信台草稿附件落盘（发送/删稿即清）
 ```
 
 ## 后端模块（backend/app/）
@@ -33,8 +34,9 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `api/accounts.py` | 账号 CRUD/测试/探测/同步/文件夹/服务商预设/语气学习 | 授权码存 `secrets.json`（key=`account_pwd:{id}`）；`POST /accounts/probe` 未收录域名自动探测 |
 | `api/emails.py` | 列表/搜索/详情/操作/发送/附件下载 | 搜索：≥3 字走 FTS5 trigram，<3 字回退 LIKE；详情返回消毒后 HTML（`?images=1` 放行远程图+内联 cid） |
 | `api/drafts.py` | 待审草稿：列表/修改/发送(approve)/丢弃/恢复/彻底删除/重新生成 | approve 走 SMTP 并带 `In-Reply-To`；原文自动标已读 |
-| `api/user_drafts.py` | 写信工作台草稿：创建/列表/读取/修改/删除/发送 | 前端防抖 PATCH 自动保存；发送前 `sanitize_outgoing_html` 消毒 + 派生纯文本 + 套基础样式外层；回复草稿带 `In-Reply-To`（软引用邮件 id） |
-| `api/ai.py` | 单邮件问答、总管家问答（会话持久化）、写作辅助、用量、AI 整理 | 问答/总管家均有 `/stream` SSE 版本，中途错误以 `{"error":...}` 事件下发；对话/写作接受 `profile_id` 临时切换档案 |
+| `api/user_drafts.py` | 写信台草稿：CRUD + 附件上传/删除 + 定时/取消 + 发送 | 编辑防抖 PATCH 自动保存；附件选择即落盘 `data_dir/drafts/<id>/`（行在 user_draft_attachments，草稿删除/发送成功即清理）；`send_draft_now` 同步核心供 API 与调度器共用；发送前 `sanitize_outgoing_html` 消毒 + 派生纯文本 + 套基础样式外层；回复草稿带 `In-Reply-To`（软引用邮件 id） |
+| `api/compose_extras.py` | 写信台模板/签名 KV（Markdown 文本整存整取）+ `POST /markdown` Markdown→消毒 HTML 转换 | 存 settings KV（compose_templates/compose_signatures） |
+| `api/ai.py` | 单邮件问答、总管家问答（会话持久化）、写作辅助、用量、AI 整理 | 问答/总管家均有 `/stream` SSE 版本，中途错误以 `{"error":...}` 事件下发；对话/写作接受 `profile_id` 临时切换档案；写作 `op=compose` 按指令整篇写邮件，`want_html=true` 附带 Markdown→消毒 HTML 结果 |
 | `api/notifications.py` | 通知中心 | — |
 | `api/sender_lists.py` | 白/黑名单（邮箱或 @域名） | 管线中零成本先过滤 |
 | `api/chats.py` | 总管家会话持久化（chat_sessions/messages）：列表/消息/置顶/重命名/删除 | 列表 置顶>updated_at 倒序；删除级联；`append_message` 供 ai.py 落库复用 |
@@ -52,22 +54,22 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `ai/digest.py` | 每日摘要：统计（零成本 SQL）+ AI 综述（一次调用） | 当天已生成则复用 |
 | `ai/prompts.py` | 全部提示词模板 | 结构化输出要求纯 JSON，`_extract_json` 容错解析 |
 | `db/database.py` | 连接（WAL）+ `MIGRATIONS` 版本化迁移 + KV 设置 | 迁移只追加不改历史 |
-| `scheduler.py` | 每 60s tick：到期账号增量同步 + 摘要到点生成 | 「检查到期」而非每账号注册任务，改设置无需重建调度 |
+| `scheduler.py` | 每 60s tick：到期账号增量同步 + 摘要到点生成 + 定时草稿派发 | 「检查到期」而非每账号注册任务，改设置无需重建调度；定时草稿到期调 `send_draft_now`，成功/失败写通知中心，失败退回 editing |
 
 ## 前端（frontend/src/）
 
 | 部分 | 内容 |
 |------|------|
-| `pages/` | InboxPage/ArchivedPage（共用 MailBrowser，分屏+可拖拽）、ComposePage（写信工作台，多标签）、DraftsPage（草稿分屏）、DigestPage（ECharts 摘要）、ManagerPage（AI 总管家，SSE 流式）、SettingsPage |
-| `components/` | MailBrowser（三态：列表/分屏/全屏）、EmailReader（消毒 iframe+操作栏+AI 面板）、HtmlMail（sandbox=allow-same-origin+allow-popups，外链新标签打开，ResizeObserver 高度自适应+zoom 注入）、compose/（写信工作台：ComposeContext 多标签状态中枢挂 App 级、ComposeForm 字段+附件+AI 辅助+自动保存、RichEditor=TipTap v3 富文本、quote.ts 回复/转发引用）、AddAccountModal、AiPanel、NotificationBell（浏览器通知）、Markdown（react-markdown+gfm） |
+| `pages/` | InboxPage/ArchivedPage（共用 MailBrowser，分屏+可拖拽）、DraftsPage（草稿分屏）、DigestPage（ECharts 摘要）、ManagerPage（AI 总管家，SSE 流式）、SettingsPage |
+| `components/` | Layout（侧栏 + 工作区同层标签条 + 写信台覆盖层：写信标签激活时底层页面 display:none keep-alive）、MailBrowser（三态：列表/分屏/全屏）、EmailReader（消毒 iframe+操作栏+AI 面板）、HtmlMail（sandbox=allow-same-origin+allow-popups，外链新标签打开，ResizeObserver 高度自适应+zoom 注入）、compose/（写信工作台：ComposeContext 多标签状态中枢挂 App 级 + 草稿缓存恢复、ComposeWorkbench 当前标签表单、ComposeForm 字段+附件上传落盘+定时+自动保存、RichEditor=TipTap v3 富文本、AiWriteDialog 指令生成/快捷改写→预览→替换或插入、InsertDialogs 模板/签名菜单与管理弹窗、quote.ts 回复/转发引用、ui.tsx Dropdown/Modal）、AddAccountModal、AiPanel、NotificationBell（浏览器通知）、Markdown（react-markdown+gfm） |
 | `api/` | `client.ts`（REST 封装，FormData 不设 JSON 头）、`stream.ts`（SSE 解析，错误可见） |
 | 字号系统 | `index.css` 三档 CSS 变量（`--fs-xs/sm/md/lg`），`<html data-font>` 切换（FontApplier 读设置应用）；`t-xs/sm/md/lg` 工具类；正文字号独立经 iframe zoom 注入 |
 
 ## 数据表（nmail.db）
 
-`settings`(KV) · `notifications` · `accounts`(含 ai_permission/tone_dna) · `emails`(含分类/needs_reply/archived_local) · `attachments` · `sync_state`(uid/uidvalidity) · `emails_fts`(trigram) · `drafts`(pending/sent/discarded) · `user_drafts`(写信工作台草稿，editing/sent) · `ai_logs`(全量 AI 用量) · `sender_lists` · `digest_history` · `chat_sessions`/`chat_messages`（P4 会话持久化）
+`settings`(KV) · `notifications` · `accounts`(含 ai_permission/tone_dna) · `emails`(含分类/needs_reply/archived_local) · `attachments` · `sync_state`(uid/uidvalidity) · `emails_fts`(trigram) · `drafts`(pending/sent/discarded) · `user_drafts`(写信台草稿，editing/scheduled/sent，含 send_at) · `user_draft_attachments`(写信台附件行，文件在 data_dir/drafts/<id>/) · `ai_logs`(全量 AI 用量) · `sender_lists` · `digest_history` · `chat_sessions`/`chat_messages`（P4 会话持久化）
 
-迁移版本：v1 基础表 → v2 邮件核心+FTS → v3 AI 层 → v4 摘要+ToneDNA → v5 会话持久化 → v7 date_sort 排序修复 → v8 user_drafts
+迁移版本：v1 基础表 → v2 邮件核心+FTS → v3 AI 层 → v4 摘要+ToneDNA → v5 会话持久化 → v7 date_sort 排序修复 → v8 user_drafts → v9 草稿附件+send_at
 
 ## 关键流程
 

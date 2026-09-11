@@ -1,9 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { api } from '../../api/client'
-import type { EmailDetail, UserDraft } from '../../types'
+import type { Account, EmailDetail, UserDraft } from '../../types'
 import { buildComposeInit } from './quote'
 
 export interface ComposeTab {
@@ -15,20 +14,24 @@ export interface ComposeTab {
 
 interface ComposeContextValue {
   tabs: ComposeTab[]
-  activeId: number | null
   /** 各标签对应的草稿数据（新建/恢复时缓存，表单初始化用） */
   drafts: Record<number, UserDraft>
+  accounts: Account[]
+  /** 当前激活的写信标签 id；null = 显示底层页面（收件箱等） */
+  activeComposeId: number | null
+  setActiveCompose: (id: number | null) => void
   openNew: () => Promise<void>
   openReply: (mode: 'reply' | 'replyAll' | 'forward', base: EmailDetail) => Promise<void>
-  setActive: (draftId: number) => void
   updateTab: (draftId: number, patch: Partial<ComposeTab>) => void
+  /** 表单拿到服务端最新草稿（附件/定时状态变化）后回写缓存 */
+  cacheDraft: (draft: UserDraft) => void
   /** 关闭标签：有未保存改动时先弹确认，否则直接关闭（草稿已自动保存，保留在服务端） */
   requestClose: (draftId: number) => void
   /** 关闭确认弹窗里的草稿 id；null 表示无待确认 */
   pendingCloseId: number | null
   /** confirmed=true 丢弃草稿；false 保留草稿仅关标签 */
   settleClose: (draftId: number, discard: boolean) => Promise<void>
-  /** 发送完成：移除标签、刷新邮件列表 */
+  /** 发送/定时完成：移除标签、刷新邮件列表 */
   finishSent: (draftId: number) => void
 }
 
@@ -45,29 +48,30 @@ function tabTitle(d: Pick<UserDraft, 'subject' | 'to_addrs'>): string {
 }
 
 /**
- * 写信工作台状态中枢：挂在 Layout 之外（App 级），在收件箱与写信页之间
- * 来回切换不丢标签。草稿本身实时落库（user_drafts），刷新页面后自动恢复。
+ * 写信工作台状态中枢（挂 App 级）。写信不走路由：打开标签只是在
+ * Layout 主区上方盖一层工作台，收件箱等页面保持挂载（keep-alive），
+ * 标签条一键互切。草稿实时落库（user_drafts），刷新后自动恢复标签。
  */
 export function ComposeProvider({ children }: { children: ReactNode }) {
   const [tabs, setTabs] = useState<ComposeTab[]>([])
-  const [activeId, setActiveId] = useState<number | null>(null)
+  const [activeComposeId, setActiveCompose] = useState<number | null>(null)
   const [drafts, setDrafts] = useState<Record<number, UserDraft>>({})
   const [pendingCloseId, setPendingCloseId] = useState<number | null>(null)
   const restoredRef = useRef(false)
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
-  const accountsRef = useRef(accountsQuery.data?.accounts ?? [])
-  accountsRef.current = accountsQuery.data?.accounts ?? []
+  const accounts = accountsQuery.data?.accounts ?? []
+  const accountsRef = useRef(accounts)
+  accountsRef.current = accounts
 
-  // 应用启动恢复：服务端仍处于 editing 的草稿即未关完的标签
+  // 应用启动恢复：服务端 editing/scheduled 的草稿即未关完的标签
   useEffect(() => {
     if (restoredRef.current) return
     restoredRef.current = true
-    api
-      .getUserDrafts('editing')
-      .then(({ drafts: list }) => {
+    Promise.all([api.getUserDrafts('editing'), api.getUserDrafts('scheduled')])
+      .then(([editing, scheduled]) => {
+        const list = [...editing.drafts, ...scheduled.drafts]
         setDrafts((prev) => {
           const next = { ...prev }
           for (const d of list) next[d.id] = d
@@ -78,15 +82,11 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       .catch(() => {}) // 恢复失败不打断应用启动
   }, [])
 
-  const addTab = useCallback(
-    (draft: UserDraft) => {
-      setDrafts((prev) => ({ ...prev, [draft.id]: draft }))
-      setTabs((prev) => [...prev, { draftId: draft.id, mode: draft.mode, title: tabTitle(draft), dirty: false }])
-      setActiveId(draft.id)
-      navigate('/compose')
-    },
-    [navigate],
-  )
+  const addTab = useCallback((draft: UserDraft) => {
+    setDrafts((prev) => ({ ...prev, [draft.id]: draft }))
+    setTabs((prev) => [...prev, { draftId: draft.id, mode: draft.mode, title: tabTitle(draft), dirty: false }])
+    setActiveCompose(draft.id)
+  }, [])
 
   // 防连点：创建请求在途时忽略再次点击
   const creatingRef = useRef(false)
@@ -128,6 +128,10 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     setTabs((prev) => prev.map((t) => (t.draftId === draftId ? { ...t, ...patch } : t)))
   }, [])
 
+  const cacheDraft = useCallback((draft: UserDraft) => {
+    setDrafts((prev) => ({ ...prev, [draft.id]: draft }))
+  }, [])
+
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
 
@@ -135,7 +139,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     const idx = tabsRef.current.findIndex((t) => t.draftId === draftId)
     const next = tabsRef.current.filter((t) => t.draftId !== draftId)
     setTabs(next)
-    setActiveId((cur) =>
+    setActiveCompose((cur) =>
       cur === draftId ? (next[Math.min(idx, next.length - 1)]?.draftId ?? null) : cur,
     )
     setPendingCloseId(null)
@@ -167,14 +171,11 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 
   const finishSent = useCallback(
     (draftId: number) => {
-      const wasLast = tabsRef.current.length <= 1
       removeTab(draftId)
       void queryClient.invalidateQueries({ queryKey: ['emails'] })
       void queryClient.invalidateQueries({ queryKey: ['folders'] })
-      // 最后一个标签发完 → 回收件箱
-      if (wasLast) navigate('/')
     },
-    [removeTab, queryClient, navigate],
+    [removeTab, queryClient],
   )
 
   // 有未保存草稿时拦截页面刷新/关闭
@@ -191,12 +192,14 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
 
   const value: ComposeContextValue = {
     tabs,
-    activeId,
     drafts,
+    accounts,
+    activeComposeId,
+    setActiveCompose,
     openNew,
     openReply,
-    setActive: setActiveId,
     updateTab,
+    cacheDraft,
     requestClose,
     pendingCloseId,
     settleClose,

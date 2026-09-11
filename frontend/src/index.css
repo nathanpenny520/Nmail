@@ -156,3 +156,40 @@ body.dragging-col {
   background: rgba(99, 102, 241, 0.12);
   pointer-events: none;
 }
+
+/* AI 写作结果预览（与编辑器内容同源的排版） */
+.mail-preview {
+  font-size: 14px;
+  line-height: 1.65;
+  color: #1f2937;
+  word-break: break-word;
+}
+.mail-preview p { margin: 0.35em 0; }
+.mail-preview h1, .mail-preview h2, .mail-preview h3 { font-weight: 600; margin: 0.6em 0 0.3em; }
+.mail-preview h1 { font-size: 1.5em; }
+.mail-preview h2 { font-size: 1.3em; }
+.mail-preview h3 { font-size: 1.15em; }
+.mail-preview ul, .mail-preview ol { padding-left: 1.4em; margin: 0.35em 0; }
+.mail-preview ul { list-style: disc; }
+.mail-preview ol { list-style: decimal; }
+.mail-preview blockquote {
+  border-left: 3px solid #e5e7eb;
+  padding-left: 12px;
+  margin: 0.5em 0;
+  color: #6b7280;
+}
+.mail-preview pre {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  overflow-x: auto;
+}
+.mail-preview code { background: #f3f4f6; border-radius: 4px; padding: 1px 4px; font-size: 0.92em; }
+.mail-preview pre code { background: none; padding: 0; }
+.mail-preview table { border-collapse: collapse; margin: 0.5em 0; }
+.mail-preview th, .mail-preview td { border: 1px solid #d1d5db; padding: 4px 10px; }
+.mail-preview th { background: #f9fafb; font-weight: 600; }
+.mail-preview img { max-width: 100%; border-radius: 4px; }
+.mail-preview a { color: #4f46e5; text-decoration: underline; }

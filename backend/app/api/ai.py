@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.ai import profiles, tasks
 from app.api.chats import append_message, require_session
+from app.core.mail_html import markdown_body_html, sanitize_outgoing_html
 from app.core.pipeline import classify_missing
 from app.db.database import get_conn
 
@@ -44,9 +45,10 @@ class ChatIn(BaseModel):
 
 class WriteIn(BaseModel):
     text: str
-    op: str  # polish|formal|casual|shorten|expand|translate_zh|translate_en|custom
+    op: str  # polish|formal|casual|shorten|expand|translate_zh|translate_en|custom|compose
     instruction: str | None = None
     profile_id: str | None = None
+    want_html: bool = False  # 置 true 时附带 markdown→HTML 转换结果（编辑器直插）
 
 
 class OrganizeIn(BaseModel):
@@ -248,7 +250,11 @@ def write(payload: WriteIn) -> dict:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"AI 调用失败：{exc}") from exc
-    return {"text": result}
+    resp: dict = {"text": result}
+    if payload.want_html:
+        html = markdown_body_html(result)
+        resp["html"] = sanitize_outgoing_html(html)
+    return resp
 
 
 @router.post("/organize")

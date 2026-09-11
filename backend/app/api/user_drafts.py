@@ -1,20 +1,22 @@
-"""写信工作台：用户手写草稿的增删改查与发送。
+"""写信工作台：用户手写草稿的增删改查、附件持久化、定时与发送。
 
 独立于 AI 待审草稿（api/drafts.py）。前端写信工作台的每个标签对应一条
-user_drafts 记录，编辑内容防抖自动保存（PATCH）；发送走 SMTP 通路并把
-status 置为 sent。正文存 HTML，发送前消毒并派生纯文本 alternative。
+user_drafts 记录，编辑内容防抖自动保存（PATCH）；附件上传即落盘
+（data_dir/drafts/<id>/），发送时从磁盘读取，定时发送由调度器到期触发
+（send_draft_now 供 API 与 scheduler 共用）。正文存 HTML，发送前消毒并
+派生纯文本 alternative。
 """
 from __future__ import annotations
 
 import shutil
-import tempfile
+from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.api.emails import _imap_for, re_split
+from app.config import get_data_dir
 from app.core import imap_client
 from app.core.mail_html import html_to_plain_text, sanitize_outgoing_html, wrap_email_body_html
 from app.db.database import get_conn
@@ -35,7 +37,28 @@ class UserDraftIn(BaseModel):
     body_html: str | None = None
 
 
+class ScheduleIn(BaseModel):
+    send_at: str  # ISO 本地时间（datetime-local），如 2026-09-11T15:30
+
+
+def _draft_dir(draft_id: int) -> Path:
+    return get_data_dir() / "drafts" / str(draft_id)
+
+
+def _att_dict(row) -> dict:  # noqa: ANN001
+    return {
+        "id": row["id"],
+        "draft_id": row["draft_id"],
+        "filename": row["filename"],
+        "mime": row["mime"],
+        "size": row["size"],
+    }
+
+
 def _draft_dict(row) -> dict:  # noqa: ANN001
+    atts = get_conn().execute(
+        "SELECT * FROM user_draft_attachments WHERE draft_id = ? ORDER BY id", (row["id"],)
+    ).fetchall()
     return {
         "id": row["id"],
         "account_id": row["account_id"],
@@ -47,16 +70,22 @@ def _draft_dict(row) -> dict:  # noqa: ANN001
         "subject": row["subject"],
         "body_html": row["body_html"],
         "status": row["status"],
+        "send_at": row["send_at"],
+        "attachments": [_att_dict(a) for a in atts],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
 
 
-def _get_draft(draft_id: int) -> Any:
+def _get_draft(draft_id: int):
     row = get_conn().execute("SELECT * FROM user_drafts WHERE id = ?", (draft_id,)).fetchone()
     if row is None:
         raise HTTPException(404, "草稿不存在")
     return row
+
+
+def _remove_draft_files(draft_id: int) -> None:
+    shutil.rmtree(_draft_dir(draft_id), ignore_errors=True)
 
 
 @router.post("")
@@ -122,14 +151,99 @@ def delete_draft(draft_id: int) -> dict:
     conn = get_conn()
     conn.execute("DELETE FROM user_drafts WHERE id = ?", (draft_id,))
     conn.commit()
+    _remove_draft_files(draft_id)  # 附件行随 FK 级联删除，磁盘文件手动清
     return {"ok": True}
 
 
-@router.post("/{draft_id}/send")
-async def send_draft(draft_id: int, files: list[UploadFile] = File(default=[])) -> dict:
-    """发送草稿。收发件人与正文取自已保存的草稿内容，附件随请求上传。"""
+# ── 附件持久化 ──────────────────────────────────────────────
+
+@router.post("/{draft_id}/attachments")
+async def upload_attachments(draft_id: int, files: list[UploadFile] = File(...)) -> dict:
+    _get_draft(draft_id)
+    conn = get_conn()
+    target_dir = _draft_dir(draft_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for f in files:
+        cur = conn.execute(
+            "INSERT INTO user_draft_attachments (draft_id, filename, mime, size, path)"
+            " VALUES (?, ?, ?, ?, '')",
+            (draft_id, f.filename, f.content_type or "", 0),
+        )
+        safe_name = Path(f.filename or "attachment").name  # 剥掉路径成分
+        target = target_dir / f"{cur.lastrowid}_{safe_name}"
+        data = await f.read()
+        target.write_bytes(data)
+        conn.execute(
+            "UPDATE user_draft_attachments SET size = ?, path = ? WHERE id = ?",
+            (len(data), str(target), cur.lastrowid),
+        )
+    conn.commit()
+    return {"draft": _draft_dict(_get_draft(draft_id))}
+
+
+@router.delete("/{draft_id}/attachments/{att_id}")
+def delete_attachment(draft_id: int, att_id: int) -> dict:
+    _get_draft(draft_id)
+    row = get_conn().execute(
+        "SELECT * FROM user_draft_attachments WHERE id = ? AND draft_id = ?",
+        (att_id, draft_id),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "附件不存在")
+    conn = get_conn()
+    conn.execute("DELETE FROM user_draft_attachments WHERE id = ?", (att_id,))
+    conn.commit()
+    try:
+        Path(row["path"]).unlink(missing_ok=True)
+    except OSError:
+        pass
+    return {"draft": _draft_dict(_get_draft(draft_id))}
+
+
+# ── 定时发送 ────────────────────────────────────────────────
+
+@router.post("/{draft_id}/schedule")
+def schedule_draft(draft_id: int, payload: ScheduleIn) -> dict:
     row = _get_draft(draft_id)
-    if row["status"] != "editing":
+    if row["status"] not in ("editing", "scheduled"):
+        raise HTTPException(400, "该草稿已发送或已丢弃")
+    try:
+        when = datetime.fromisoformat(payload.send_at)
+    except ValueError as exc:
+        raise HTTPException(400, "时间格式无效") from exc
+    if when <= datetime.now():
+        raise HTTPException(400, "定时时间必须晚于当前时间")
+    conn = get_conn()
+    conn.execute(
+        "UPDATE user_drafts SET status = 'scheduled', send_at = ?, updated_at = datetime('now')"
+        " WHERE id = ?",
+        (payload.send_at, draft_id),
+    )
+    conn.commit()
+    return {"draft": _draft_dict(_get_draft(draft_id))}
+
+
+@router.post("/{draft_id}/unschedule")
+def unschedule_draft(draft_id: int) -> dict:
+    row = _get_draft(draft_id)
+    if row["status"] != "scheduled":
+        raise HTTPException(400, "该草稿未在定时队列中")
+    conn = get_conn()
+    conn.execute(
+        "UPDATE user_drafts SET status = 'editing', send_at = NULL, updated_at = datetime('now')"
+        " WHERE id = ?",
+        (draft_id,),
+    )
+    conn.commit()
+    return {"draft": _draft_dict(_get_draft(draft_id))}
+
+
+# ── 发送 ────────────────────────────────────────────────────
+
+def send_draft_now(draft_id: int) -> None:
+    """发送草稿（同步核心，API 与调度器共用）。失败抛 HTTPException。"""
+    row = _get_draft(draft_id)
+    if row["status"] not in ("editing", "scheduled"):
         raise HTTPException(400, "该草稿已发送或已丢弃")
 
     to_list = re_split(row["to_addrs"])
@@ -154,38 +268,37 @@ async def send_draft(draft_id: int, files: list[UploadFile] = File(default=[])) 
         if mrow and mrow["message_id"]:
             in_reply_to = mrow["message_id"]
 
-    tmp_dir = None
+    paths = [
+        r["path"]
+        for r in get_conn().execute(
+            "SELECT path FROM user_draft_attachments WHERE draft_id = ? ORDER BY id", (draft_id,)
+        ).fetchall()
+        if Path(r["path"]).exists()
+    ]
+
     try:
-        if files:
-            tmp_dir = Path(tempfile.mkdtemp(prefix="nmail-send-"))
-            for f in files:
-                target = tmp_dir / f.filename
-                with open(target, "wb") as fh:
-                    fh.write(await f.read())
         sent_message = imap_client.send_email(
-            cfg,
-            to_list,
-            cc_list,
-            bcc_list,
-            row["subject"],
-            text,
-            html,
-            [str(tmp_dir / f.filename) for f in files] if tmp_dir else [],
+            cfg, to_list, cc_list, bcc_list, row["subject"], text, html, paths,
             in_reply_to=in_reply_to,
         )
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"发送失败：{exc}") from exc
-    finally:
-        if tmp_dir:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     imap_client.append_sent(cfg, sent_message)
     conn = get_conn()
     conn.execute(
-        "UPDATE user_drafts SET status = 'sent', updated_at = datetime('now') WHERE id = ?",
+        "UPDATE user_drafts SET status = 'sent', send_at = NULL, updated_at = datetime('now')"
+        " WHERE id = ?",
         (draft_id,),
     )
     conn.commit()
+    _remove_draft_files(draft_id)
+
+
+@router.post("/{draft_id}/send")
+def send_draft(draft_id: int) -> dict:
+    """立即发送草稿。收发件人、正文与附件均取自已保存内容。"""
+    send_draft_now(draft_id)
     return {"ok": True}

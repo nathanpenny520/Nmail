@@ -20,7 +20,7 @@
 
 ### S-0911-1315-写信台二期
 - 目标: 收件箱/写信同层标签切换（keep-alive）+ 附件持久化 + 定时发送 + 模板/签名 + AI 写作对话框（生成可用富文本）
-- 范围: backend 迁移 v9、api/user_drafts.py、api/ai.py、ai/tasks.py、ai/prompts.py、scheduler.py、core/mail_html.py；frontend Layout/ComposeContext/ComposeForm/RichEditor、compose/* 新组件；docs
+- 范围: backend 迁移 v9、api/user_drafts.py、api/compose_extras.py（新增）、api/ai.py、ai/tasks.py、scheduler.py、core/mail_html.py；frontend Layout、compose/*（AiWriteDialog/InsertDialogs/ui/ComposeWorkbench 新增）、App.tsx、types/client；docs
 - 开始: 2026-09-11 13:15
 - 状态: 进行中
 

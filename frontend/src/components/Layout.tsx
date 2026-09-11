@@ -1,6 +1,8 @@
-import { Archive, BarChart3, FilePenLine, Inbox, Settings, Sparkles } from 'lucide-react'
+import { Archive, BarChart3, FilePenLine, Inbox, Pencil, Plus, Settings, Sparkles, X } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useCompose } from './compose/ComposeContext'
+import ComposeWorkbench from './compose/ComposeWorkbench'
 import NotificationBell from './NotificationBell'
 
 const navItems = [
@@ -16,6 +18,70 @@ const NAV_MAX = 240
 const NAV_DEFAULT = 148
 const ICON_ONLY_BELOW = 132 // 窄于此宽度切换为纯图标模式
 
+/** 主区顶部的同层标签条：收件箱（固定）+ 各写信标签，一键互切（对齐网页邮箱）。 */
+function WorkspaceTabs() {
+  const { tabs, activeComposeId, setActiveCompose, openNew, requestClose } = useCompose()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const onMailRoute = location.pathname === '/' || location.pathname === '/archived'
+
+  // 无写信标签且不在邮件页时不占位（设置/摘要/总管家保持干净）
+  if (tabs.length === 0 && !onMailRoute) return null
+
+  const inboxActive = activeComposeId === null && onMailRoute
+  const mailLabel = location.pathname === '/archived' ? '已归档' : '收件箱'
+  const tabCls = (active: boolean) =>
+    `flex min-w-0 shrink-0 items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 t-sm transition-colors ${
+      active
+        ? 'border-gray-200 bg-white font-medium text-indigo-700'
+        : 'border-transparent text-gray-500 hover:bg-gray-200/60'
+    }`
+
+  return (
+    <div className="flex shrink-0 items-end gap-1 overflow-x-auto border-b border-gray-200 bg-gray-100 px-2 pt-1.5">
+      <button
+        className={tabCls(inboxActive)}
+        onClick={() => {
+          if (!onMailRoute) navigate('/')
+          setActiveCompose(null)
+        }}
+      >
+        <Inbox className="h-3.5 w-3.5 shrink-0" />
+        <span className="whitespace-nowrap">{mailLabel}</span>
+      </button>
+      {tabs.map((tab) => (
+        <div
+          key={tab.draftId}
+          onClick={() => setActiveCompose(tab.draftId)}
+          className={`${tabCls(tab.draftId === activeComposeId)} max-w-56 cursor-pointer group`}
+          title={tab.title}
+        >
+          {tab.dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" title="有未保存改动" />}
+          <Pencil className="h-3 w-3 shrink-0" />
+          <span className="truncate">{tab.title}</span>
+          <button
+            className="shrink-0 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation()
+              requestClose(tab.draftId)
+            }}
+            title="关闭标签"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+      <button
+        className="mb-1 flex shrink-0 items-center rounded-md p-1 text-gray-500 transition-colors hover:bg-gray-200/60 hover:text-indigo-600"
+        onClick={() => void openNew()}
+        title="新邮件"
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
 export default function Layout() {
   const [navWidth, setNavWidth] = useState(() => {
     const saved = Number(localStorage.getItem('nmail_nav_width'))
@@ -24,6 +90,8 @@ export default function Layout() {
   const dragging = useRef(false)
   const widthRef = useRef(navWidth)
   widthRef.current = navWidth
+  const { activeComposeId, setActiveCompose } = useCompose()
+  const composing = activeComposeId !== null
 
   // 侧栏从视口左缘开始，宽度即鼠标 X
   const startDrag = (e: ReactMouseEvent) => {
@@ -84,6 +152,7 @@ export default function Layout() {
               end={to === '/'}
               title={label}
               className={({ isActive }) => navLinkClass(isActive)}
+              onClick={() => setActiveCompose(null)}
             >
               <Icon className="h-4 w-4 shrink-0" />
               {!iconOnly && <span className="truncate">{label}</span>}
@@ -96,6 +165,7 @@ export default function Layout() {
             to="/settings"
             title="设置"
             className={({ isActive }) => `${navLinkClass(isActive)} flex-1`}
+            onClick={() => setActiveCompose(null)}
           >
             <Settings className="h-4 w-4 shrink-0" />
             {!iconOnly && <span className="truncate">设置</span>}
@@ -112,10 +182,22 @@ export default function Layout() {
           title="拖拽调整侧栏宽度（双击复位）"
         />
       </aside>
-      {/* 文档流页面（设置/摘要/总管家）依赖此滚动；邮件页自身 h-full 自管滚动 */}
-      <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-        <Outlet />
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <WorkspaceTabs />
+        {/* 收件箱等页面在写信时仅隐藏不卸载（keep-alive），切回即恢复列表与阅读状态 */}
+        <div className="relative min-h-0 flex-1">
+          <main
+            className={`h-full overflow-y-auto overflow-x-hidden ${composing ? 'hidden' : 'block'}`}
+          >
+            <Outlet />
+          </main>
+          {composing && (
+            <div className="absolute inset-0 z-20 min-h-0">
+              <ComposeWorkbench />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

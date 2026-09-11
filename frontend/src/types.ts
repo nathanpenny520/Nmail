@@ -188,6 +188,14 @@ export interface NotificationsResp {
 
 // ── 写信工作台（用户手写草稿）─────────────────────────────────
 
+export interface DraftAttachment {
+  id: number
+  draft_id: number
+  filename: string
+  mime: string
+  size: number
+}
+
 export interface UserDraft {
   id: number
   account_id: number
@@ -198,9 +206,28 @@ export interface UserDraft {
   bcc_addrs: string
   subject: string
   body_html: string
-  status: 'editing' | 'sent' | 'discarded' | string
+  status: 'editing' | 'scheduled' | 'sent' | 'discarded' | string
+  send_at: string | null
+  attachments: DraftAttachment[]
   created_at: string
   updated_at: string
+}
+
+/** 写信台模板/签名（Markdown 文本存储，插入时转 HTML） */
+export interface ComposeTemplate {
+  id: string
+  name: string
+  content: string
+}
+
+export interface ComposeSignature {
+  account_id: number
+  content: string
+}
+
+export interface ComposeExtras {
+  templates: ComposeTemplate[]
+  signatures: ComposeSignature[]
 }
 
 // ── P2 AI 层 ─────────────────────────────────────────────────

@@ -250,6 +250,23 @@ MIGRATIONS: list[tuple[int, str]] = [
             ON user_drafts(status, updated_at DESC);
         """,
     ),
+    (
+        9,
+        """
+        -- 写信台二期：附件持久化 + 定时发送
+        ALTER TABLE user_drafts ADD COLUMN send_at TEXT;
+        CREATE TABLE IF NOT EXISTS user_draft_attachments (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            draft_id   INTEGER NOT NULL REFERENCES user_drafts(id) ON DELETE CASCADE,
+            filename   TEXT NOT NULL,
+            mime       TEXT NOT NULL DEFAULT '',
+            size       INTEGER NOT NULL DEFAULT 0,
+            path       TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_draft_att ON user_draft_attachments(draft_id);
+        """,
+    ),
 ]
 
 

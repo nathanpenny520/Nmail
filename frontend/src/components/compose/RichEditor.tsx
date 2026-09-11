@@ -73,19 +73,6 @@ export function useMailEditor(initialHtml: string, onChange: (html: string) => v
   })
 }
 
-/** AI 辅助结果写入：有选区替换选区，否则整篇替换（与旧版弹框行为一致）。 */
-export function applyAiText(editor: Editor, text: string): void {
-  const html = text
-    .split(/\n{2,}/)
-    .filter((p) => p.trim())
-    .map((p) => `<p>${p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`)
-    .join('')
-  if (!html) return
-  const wholeDoc = editor.state.selection.empty && editor.state.doc.textContent.trim() !== ''
-  if (wholeDoc) editor.commands.setContent(html)
-  else editor.chain().focus().insertContent(html).run()
-}
-
 function Sep() {
   return <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200" />
 }
@@ -128,8 +115,8 @@ function pickColor(onPick: (color: string) => void, title: string, icon: React.R
   )
 }
 
-/** 富文本工具栏，对齐常见网页邮箱：撤销重做 / 清格式 / 字体字号 / BISU / 颜色高亮 / 列表缩进对齐 / 引用代码表格链接图片 */
-export function EditorToolbar({ editor }: { editor: Editor | null }) {
+/** 富文本工具栏，对齐常见网页邮箱：撤销重做 / 清格式 / 字体字号 / BISU / 颜色高亮 / 列表缩进对齐 / 引用代码表格链接图片；extra 渲染在行尾（模板/签名） */
+export function EditorToolbar({ editor, extra }: { editor: Editor | null; extra?: React.ReactNode }) {
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) =>
@@ -280,6 +267,13 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
         <TBtn title="删除当前表格" onClick={() => chain().deleteTable().run()}>
           <Trash2 className="h-4 w-4" />
         </TBtn>
+      )}
+      {extra && (
+        <>
+          <Sep />
+          <span className="flex-1" />
+          {extra}
+        </>
       )}
     </div>
   )

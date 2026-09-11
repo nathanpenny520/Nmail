@@ -7,6 +7,7 @@ import type {
   AIProfilesResp,
   ChatMessage,
   ChatSession,
+  ComposeExtras,
   Draft,
   EmailDetail,
   EmailListResp,
@@ -180,10 +181,37 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
-  sendUserDraft: (id: number, form: FormData) =>
-    request<{ ok: boolean }>(`/api/user-drafts/${id}/send`, { method: 'POST', body: form }),
+  sendUserDraft: (id: number) =>
+    request<{ ok: boolean }>(`/api/user-drafts/${id}/send`, { method: 'POST' }),
+  scheduleDraft: (id: number, sendAt: string) =>
+    request<{ draft: UserDraft }>(`/api/user-drafts/${id}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify({ send_at: sendAt }),
+    }),
+  unscheduleDraft: (id: number) =>
+    request<{ draft: UserDraft }>(`/api/user-drafts/${id}/unschedule`, { method: 'POST' }),
+  uploadDraftAttachments: (id: number, files: File[]) => {
+    const form = new FormData()
+    for (const f of files) form.append('files', f)
+    return request<{ draft: UserDraft }>(`/api/user-drafts/${id}/attachments`, {
+      method: 'POST',
+      body: form,
+    })
+  },
+  deleteDraftAttachment: (id: number, attId: number) =>
+    request<{ draft: UserDraft }>(`/api/user-drafts/${id}/attachments/${attId}`, { method: 'DELETE' }),
   deleteUserDraft: (id: number) =>
     request<{ ok: boolean }>(`/api/user-drafts/${id}`, { method: 'DELETE' }),
+
+  // ── 写信台模板/签名/Markdown 转换 ──
+  getComposeExtras: () => request<ComposeExtras>('/api/compose-extras'),
+  updateComposeExtras: (payload: ComposeExtras) =>
+    request<ComposeExtras>('/api/compose-extras', { method: 'PUT', body: JSON.stringify(payload) }),
+  markdownToHtml: (text: string) =>
+    request<{ html: string }>('/api/compose-extras/markdown', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
 
   // ── 通知 ──
   getNotifications: () => request<NotificationsResp>('/api/notifications'),
@@ -228,8 +256,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  aiWrite: (payload: { text: string; op: string; instruction?: string }) =>
-    request<{ text: string }>('/api/ai/write', {
+  aiWrite: (payload: { text: string; op: string; instruction?: string; want_html?: boolean }) =>
+    request<{ text: string; html?: string }>('/api/ai/write', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),

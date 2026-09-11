@@ -142,3 +142,10 @@ def markdown_to_email_html(markdown_text: str) -> str:
 
     body = md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables"])
     return wrap_email_body_html(body)
+
+
+def markdown_body_html(markdown_text: str) -> str:
+    """Markdown → 裸 HTML（无外层样式），供编辑器内插入/模板/签名转换用。"""
+    import markdown as md_lib
+
+    return md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables"])

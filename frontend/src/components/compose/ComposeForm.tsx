@@ -1,18 +1,15 @@
 import { useMutation } from '@tanstack/react-query'
-import { Loader2, Paperclip, Send, Sparkles, X } from 'lucide-react'
+import {
+  AlarmClock, Loader2, Paperclip, Send, Sparkles, X,
+} from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
-import type { Account, UserDraft } from '../../types'
+import type { Account, DraftAttachment, UserDraft } from '../../types'
 import { useCompose } from './ComposeContext'
-import { applyAiText, EditorSurface, EditorToolbar, useMailEditor } from './RichEditor'
-
-const WRITE_OPS = [
-  { key: 'polish', label: '润色' },
-  { key: 'formal', label: '更正式' },
-  { key: 'shorten', label: '更简短' },
-  { key: 'translate_zh', label: '译中' },
-  { key: 'translate_en', label: '译英' },
-]
+import AiWriteDialog from './AiWriteDialog'
+import { SignatureMenu, TemplateMenu, TemplateManager, SignatureEditor } from './InsertDialogs'
+import { EditorSurface, EditorToolbar, useMailEditor } from './RichEditor'
+import { Modal, toLocalInput } from './ui'
 
 const fieldInput =
   'min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1.5 t-md outline-none transition-colors placeholder:text-gray-300 hover:border-gray-200 focus:border-indigo-400 focus:bg-white'
@@ -23,12 +20,19 @@ function fmtSize(n: number): string {
   return `${n}B`
 }
 
+function fmtSendAt(iso: string): string {
+  return new Date(iso).toLocaleString('zh-CN', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+}
+
 /**
- * 单个写信标签的编辑表单。内容变化 1s 防抖自动保存到 user_drafts，
- * 卸载时兜底同步一次；发送前先 flush 确保后端拿到最新内容。
+ * 单个写信标签的编辑表单。内容变化 1s 防抖自动保存到 user_drafts；
+ * 附件选择即上传落盘（刷新/重启后随草稿恢复）；支持定时发送；
+ * AI 写作对话框生成富文本直插正文。
  */
 export default function ComposeForm({ draft, accounts }: { draft: UserDraft; accounts: Account[] }) {
-  const { updateTab, requestClose, finishSent } = useCompose()
+  const { updateTab, requestClose, finishSent, cacheDraft } = useCompose()
 
   const [accountId, setAccountId] = useState(draft.account_id)
   const [to, setTo] = useState(draft.to_addrs)
@@ -38,9 +42,14 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
   const [showCc, setShowCc] = useState(!!draft.cc_addrs.trim() || !!draft.bcc_addrs.trim())
   const [showBcc, setShowBcc] = useState(!!draft.bcc_addrs.trim())
   const [bodyHtml, setBodyHtml] = useState(draft.body_html)
-  const [files, setFiles] = useState<File[]>([])
-  const [assistBusy, setAssistBusy] = useState(false)
-  const [assistError, setAssistError] = useState('')
+  const [atts, setAtts] = useState<DraftAttachment[]>(draft.attachments ?? [])
+  const [attBusy, setAttBusy] = useState(false)
+  const [attError, setAttError] = useState('')
+  const [aiOpen, setAiOpen] = useState(false)
+  const [tplOpen, setTplOpen] = useState(false)
+  const [sigOpen, setSigOpen] = useState(false)
+  const [schedOpen, setSchedOpen] = useState(false)
+  const [schedAt, setSchedAt] = useState(toLocalInput(new Date(Date.now() + 30 * 60 * 1000)))
   const [savedAt, setSavedAt] = useState('')
   const [saveError, setSaveError] = useState(false)
 
@@ -89,7 +98,7 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
     saveTimer.current = window.setTimeout(() => void doSaveRef.current(), 1000)
   }, [accountId, to, cc, bcc, subject, bodyHtml, draft.id, updateTab])
 
-  // 卸载兜底：关标签/切换页面时把防抖窗口内的最后编辑同步上去
+  // 卸载兜底：切标签/收起工作台时把防抖窗口内的最后编辑同步上去
   useEffect(
     () => () => {
       window.clearTimeout(saveTimer.current)
@@ -102,9 +111,7 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
   const sendMutation = useMutation({
     mutationFn: async () => {
       await doSaveRef.current()
-      const form = new FormData()
-      for (const f of files) form.append('files', f)
-      return api.sendUserDraft(draft.id, form)
+      return api.sendUserDraft(draft.id)
     },
     onSuccess: () => finishSent(draft.id),
   })
@@ -113,24 +120,50 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
     if (!sendMutation.isPending) sendMutation.mutate()
   }
 
-  const editor = useMailEditor(draft.body_html, setBodyHtml, () => sendNowRef.current())
+  // ── 定时发送 ──
+  const scheduleMutation = useMutation({
+    mutationFn: async () => {
+      await doSaveRef.current()
+      return api.scheduleDraft(draft.id, schedAt)
+    },
+    onSuccess: ({ draft: updated }) => {
+      cacheDraft(updated)
+      setSchedOpen(false)
+    },
+  })
+  const unscheduleMutation = useMutation({
+    mutationFn: () => api.unscheduleDraft(draft.id),
+    onSuccess: ({ draft: updated }) => cacheDraft(updated),
+  })
 
-  const runAssist = async (op: string) => {
-    if (!editor || assistBusy) return
-    const text = editor.getText({ blockSeparator: '\n\n' })
-    if (!text.trim()) return
-    setAssistBusy(true)
-    setAssistError('')
+  // ── 附件（选择即上传落盘）──
+  const uploadAtts = async (files: File[]) => {
+    if (!files.length || attBusy) return
+    setAttBusy(true)
+    setAttError('')
     try {
-      const { text: result } = await api.aiWrite({ text, op })
-      applyAiText(editor, result)
+      const { draft: updated } = await api.uploadDraftAttachments(draft.id, files)
+      setAtts(updated.attachments)
+      cacheDraft(updated)
     } catch (err) {
-      setAssistError((err as Error).message)
+      setAttError(`附件上传失败：${(err as Error).message}`)
     } finally {
-      setAssistBusy(false)
+      setAttBusy(false)
+    }
+  }
+  const removeAtt = async (attId: number) => {
+    setAttError('')
+    try {
+      const { draft: updated } = await api.deleteDraftAttachment(draft.id, attId)
+      setAtts(updated.attachments)
+      cacheDraft(updated)
+    } catch (err) {
+      setAttError(`附件删除失败：${(err as Error).message}`)
     }
   }
 
+  const editor = useMailEditor(draft.body_html, setBodyHtml, () => sendNowRef.current())
+  const isScheduled = draft.status === 'scheduled' && !!draft.send_at
   const submitDisabled = !to.trim() || sendMutation.isPending
 
   return (
@@ -143,6 +176,24 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
         }
       }}
     >
+      {/* 已定时横幅 */}
+      {isScheduled && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-1.5 t-sm text-amber-700">
+          <AlarmClock className="h-3.5 w-3.5 shrink-0" />
+          已定时 {fmtSendAt(draft.send_at!)} 自动发送（发送前仍可继续编辑）
+          <button
+            className="ml-auto rounded-md border border-amber-300 px-2 py-0.5 t-xs text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+            onClick={() => unscheduleMutation.mutate()}
+            disabled={unscheduleMutation.isPending}
+          >
+            取消定时
+          </button>
+          {unscheduleMutation.isError && (
+            <span className="t-xs text-red-500">{(unscheduleMutation.error as Error).message}</span>
+          )}
+        </div>
+      )}
+
       {/* 字段区：收件人 / 抄送密送（默认折叠）/ 主题 / 附件 */}
       <div className="shrink-0 divide-y divide-gray-100 border-b border-gray-100">
         <div className="flex items-center gap-1.5 px-4 py-1.5">
@@ -152,7 +203,7 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
             value={to}
             onChange={(e) => setTo(e.target.value)}
             placeholder="多个地址用逗号分隔"
-            autoFocus
+            autoFocus={draft.mode === 'new' && !to && !subject && !bodyHtml}
           />
           {!showCc && (
             <button
@@ -195,57 +246,71 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
         </div>
         <div className="flex flex-wrap items-center gap-1.5 px-4 py-1.5">
           <label className="flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 t-sm text-gray-500 hover:text-indigo-600">
-            <Paperclip className="h-3.5 w-3.5" />
+            {attBusy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Paperclip className="h-3.5 w-3.5" />
+            )}
             添加附件
             <input
               type="file"
               multiple
               className="hidden"
               onChange={(e) => {
-                setFiles((fs) => [...fs, ...Array.from(e.target.files ?? [])])
+                void uploadAtts(Array.from(e.target.files ?? []))
                 e.target.value = ''
               }}
             />
           </label>
-          {files.map((f, i) => (
+          {atts.map((a) => (
             <span
-              key={`${f.name}-${i}`}
+              key={a.id}
               className="inline-flex max-w-52 items-center gap-1 rounded-md bg-gray-100 px-2 py-0.5 t-xs text-gray-600"
             >
-              <span className="truncate" title={f.name}>
-                {f.name}
+              <span className="truncate" title={a.filename}>
+                {a.filename}
               </span>
-              <span className="shrink-0 text-gray-400">{fmtSize(f.size)}</span>
+              <span className="shrink-0 text-gray-400">{fmtSize(a.size)}</span>
               <button
                 className="shrink-0 text-gray-400 hover:text-red-500"
-                onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))}
+                onClick={() => void removeAtt(a.id)}
+                title="删除附件"
               >
                 <X className="h-3 w-3" />
               </button>
             </span>
           ))}
+          {attError && <span className="t-xs text-red-500">{attError}</span>}
         </div>
       </div>
 
-      {/* AI 辅助行 */}
-      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-gray-100 px-3 py-1 t-xs">
-        <Sparkles className="h-3 w-3 text-violet-500" />
-        <span className="mr-1 text-gray-400">智能写作：</span>
-        {WRITE_OPS.map((op) => (
-          <button
-            key={op.key}
-            className="rounded-md border border-violet-200 px-1.5 py-0.5 text-violet-600 transition-colors hover:bg-violet-50 disabled:opacity-40"
-            disabled={assistBusy || !editor?.getText().trim()}
-            onClick={() => void runAssist(op.key)}
-          >
-            {op.label}
-          </button>
-        ))}
-        {assistBusy && <Loader2 className="h-3 w-3 animate-spin text-violet-500" />}
-        {assistError && <span className="text-red-500">{assistError}</span>}
+      {/* AI 写作入口行 */}
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-gray-100 px-3 py-1">
+        <button
+          className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 t-sm font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+          onClick={() => setAiOpen(true)}
+          disabled={!editor}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          AI 写作
+        </button>
+        <span className="t-xs text-gray-400">按指令整篇生成，或对现有正文润色/翻译</span>
       </div>
 
-      <EditorToolbar editor={editor} />
+      <EditorToolbar
+        editor={editor}
+        extra={
+          <>
+            <TemplateMenu editor={editor} onManage={() => setTplOpen(true)} />
+            <SignatureMenu
+              editor={editor}
+              accounts={accounts}
+              accountId={accountId}
+              onManage={() => setSigOpen(true)}
+            />
+          </>
+        }
+      />
       <EditorSurface editor={editor} />
 
       {/* 底部操作条 */}
@@ -271,6 +336,14 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
         >
           存草稿
         </button>
+        <button
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-700 transition-colors hover:bg-gray-100"
+          onClick={() => setSchedOpen(true)}
+          title="定时发送：到点由后台自动发出"
+        >
+          <AlarmClock className="h-3.5 w-3.5" />
+          定时
+        </button>
         <span className="flex-1" />
         {saveError ? (
           <span className="t-xs text-red-500">自动保存失败，请检查后端服务</span>
@@ -295,6 +368,46 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
           ))}
         </select>
       </div>
+
+      {/* AI 写作对话框 */}
+      {aiOpen && editor && <AiWriteDialog editor={editor} onClose={() => setAiOpen(false)} />}
+      {tplOpen && <TemplateManager onClose={() => setTplOpen(false)} />}
+      {sigOpen && <SignatureEditor accounts={accounts} onClose={() => setSigOpen(false)} />}
+
+      {/* 定时发送对话框 */}
+      {schedOpen && (
+        <Modal title="定时发送" onClose={() => setSchedOpen(false)} width="max-w-sm">
+          <div className="space-y-3">
+            <input
+              type="datetime-local"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 t-sm outline-none focus:border-indigo-500"
+              value={schedAt}
+              onChange={(e) => setSchedAt(e.target.value)}
+            />
+            <p className="t-xs text-gray-400">
+              到点由后台自动发送并通知你；发送前可继续编辑，也可随时取消定时。修改后会自动保存当前内容。
+            </p>
+            {scheduleMutation.isError && (
+              <div className="t-sm text-red-500">{(scheduleMutation.error as Error).message}</div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                className="rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50"
+                onClick={() => setSchedOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                className="rounded-lg bg-indigo-600 px-4 py-1.5 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                onClick={() => scheduleMutation.mutate()}
+                disabled={!schedAt || scheduleMutation.isPending}
+              >
+                {scheduleMutation.isPending ? '设置中…' : '确定定时'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

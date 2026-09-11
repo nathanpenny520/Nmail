@@ -224,8 +224,29 @@ def chat_with_context_stream(
 
 def write_assist(text: str, op: str, instruction: str | None = None,
                  profile_id: str | None = None) -> str:
-    """写作辅助：润色/正式/随意/缩短/扩充/翻译。"""
+    """写作辅助：润色/正式/随意/缩短/扩充/翻译/按指令写邮件（compose）。"""
     base_url, model, api_key = _ai_config(profile_id)
+    if op == "compose":
+        # 按指令写邮件：instruction 必填，text 作为可选背景/草稿上下文
+        if not instruction or not instruction.strip():
+            raise ValueError("请先描述要让 AI 写什么")
+        system = (
+            "你是邮件写作助手。根据用户的指令直接撰写邮件正文：只输出内容本身，"
+            "不要解释或复述指令。用 Markdown 格式组织排版（可用加粗、列表、分段），"
+            "语言跟随指令（未指明则用中文）。称呼与落款仅在指令给出相关信息时才写。"
+        )
+        context = f"\n\n可参考的背景/已有草稿：\n{text[:4000]}" if text.strip() else ""
+        user = f"{instruction.strip()}{context}"
+        try:
+            result, usage = llm.chat(base_url, model, api_key, system, user)
+            log_usage("write", model,
+                      usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
+                      True, "compose", None)
+        except Exception as exc:  # noqa: BLE001
+            log_usage("write", model, 0, 0, False, str(exc)[:200], None)
+            raise
+        return result.strip()
+
     if op == "custom":
         head = instruction or "润色"
     else:

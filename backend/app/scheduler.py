@@ -46,6 +46,45 @@ def _parse_iso(value: str | None) -> datetime | None:
         return None
 
 
+def _notify(title: str, body: str) -> None:
+    get_conn().execute(
+        "INSERT INTO notifications (type, title, body) VALUES ('compose', ?, ?)",
+        (title, body),
+    )
+    get_conn().commit()
+
+
+def send_due_drafts() -> None:
+    """定时发送到期草稿；成功/失败均写通知，失败退回编辑态。"""
+    from app.api.user_drafts import send_draft_now
+
+    rows = get_conn().execute(
+        "SELECT id, subject, to_addrs, send_at FROM user_drafts"
+        " WHERE status = 'scheduled' AND send_at IS NOT NULL"
+    ).fetchall()
+    now = datetime.now()
+    for row in rows:
+        try:
+            due = datetime.fromisoformat(row["send_at"])
+        except ValueError:
+            due = None
+        if due is None or due > now:
+            continue
+        try:
+            send_draft_now(row["id"])
+            _notify("定时邮件已发送", f"「{row['subject'] or '（无主题）'}」已按计划发出")
+            logger.info("scheduled draft %s sent", row["id"])
+        except Exception as exc:  # noqa: BLE001 — 单封失败不阻塞其他定时任务
+            get_conn().execute(
+                "UPDATE user_drafts SET status = 'editing', send_at = NULL,"
+                " updated_at = datetime('now') WHERE id = ?",
+                (row["id"],),
+            )
+            get_conn().commit()
+            _notify("定时发送失败，草稿已退回写信台", f"「{row['subject'] or '（无主题）'}」：{exc}")
+            logger.exception("scheduled draft %s failed", row["id"])
+
+
 def poll_due_accounts() -> None:
     interval_minutes = int(get_setting("poll_interval_minutes", 5) or 5)
     now = datetime.now(timezone.utc)
@@ -65,6 +104,11 @@ def poll_due_accounts() -> None:
                 logger.info("poll sync failed for %s: %s", row["email"], result.get("error"))
         except Exception:  # noqa: BLE001 — 单账号失败不影响其他账号
             logger.exception("poll sync crashed for %s", row["email"])
+
+    try:
+        send_due_drafts()
+    except Exception:  # noqa: BLE001
+        logger.exception("scheduled draft dispatch crashed")
 
     if _digest_due():
         try:
