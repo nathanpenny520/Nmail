@@ -19,7 +19,7 @@ try:
 
     APP_VERSION = version("nmail-app")
 except PackageNotFoundError:
-    APP_VERSION = "0.1.0"
+    APP_VERSION = "0.2.0"
 
 
 def get_data_dir() -> Path:
