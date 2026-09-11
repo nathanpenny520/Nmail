@@ -113,16 +113,17 @@ def chat_manager(payload: ManagerChatIn) -> dict:
 def chat_manager_stream(payload: ManagerChatIn):
     """「AI 总管家」流式版本：SSE 逐段返回。"""
     context = _manager_context(payload)
+    try:
+        tasks._ai_config(payload.profile_id)  # 先验配置：未配置/停用时用户消息不能先落库成孤儿
+    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
+        raise HTTPException(400, str(exc)) from None
     if payload.session_id is not None:
         require_session(payload.session_id)
         append_message(payload.session_id, "user", payload.question)
-    try:
-        gen = tasks.chat_with_context_stream(
-            context, payload.question, history=payload.history,
-            profile_id=payload.profile_id,
-        )
-    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
-        raise HTTPException(400, str(exc)) from None
+    gen = tasks.chat_with_context_stream(
+        context, payload.question, history=payload.history,
+        profile_id=payload.profile_id,
+    )
     if payload.session_id is not None:
         gen = _persist_stream(gen, payload.session_id, _record_model(payload.profile_id))
     return _sse(gen)
