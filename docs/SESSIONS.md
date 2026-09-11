@@ -18,13 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-### S-0911-1249-写信工作台
-- 目标: 写信从弹框改为全页多标签工作台 + user_drafts 自动存草稿 + TipTap 富文本编辑器（P1+P2 合并一次提交）
-- 范围: backend/app/db/database.py（迁移v8）、backend/app/api/user_drafts.py（新增）、backend/app/api/emails.py、backend/app/core/mail_html.py；frontend/src/pages/ComposePage.tsx（新增）、components/compose/*（新增）、App.tsx、MailBrowser.tsx、api/client.ts、types.ts；docs
-- 开始: 2026-09-11 12:49
-- 状态: 进行中
-
 ## 已完成
+
+### S-0911-1249-写信工作台 ✅
+- 目标: 写信从弹框改为全页多标签工作台 + user_drafts 自动存草稿 + TipTap 富文本编辑器（P1+P2 合并一次提交）
+- 范围: backend/app/db/database.py（迁移v8）、backend/app/api/user_drafts.py（新增）、backend/app/core/mail_html.py；frontend/src/pages/ComposePage.tsx（新增）、components/compose/*（新增）、App.tsx、MailBrowser.tsx、api/client.ts、types.ts、index.css；docs
+- 产出: 提交 6bfaaca——写信工作台（/compose 多标签、1s 防抖自动保存、关闭确认、刷新恢复）、TipTap v3 富文本工具栏（字体字号/BISU/颜色高亮/列表对齐/引用代码表格链接图片）、发信消毒+纯文本派生+In-Reply-To 串线；npm build + ruff --select F 通过，隔离实例 curl 全往返通过
+- 遗留: ① 用户后端进程需重启生效（run.py，迁移 v8 首次启动自动补跑）② 真实账号 SMTP 发送一封验证（含回复串线）③ 附件不持久化（刷新需重选，P3 候选）④ 插入模板/签名/分别发送/定时发送未做（P3 候选）
+- 时间: 2026-09-11 13:10 完成
 
 ### S-0911-1224-外链与正文高度 ✅
 - 目标: 修复邮件内 http(s) 外链在沙箱 iframe 内导航被目标站拒绝嵌入（「拒绝连接」）+ 正文高度测量滞后导致显示不全
