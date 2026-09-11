@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from app.db.database import get_conn, tx
 

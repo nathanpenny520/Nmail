@@ -10,6 +10,7 @@ import socket
 import threading
 import time
 import webbrowser
+from contextlib import suppress
 
 DEFAULT_PORT = 8720
 
@@ -28,10 +29,8 @@ def find_free_port(start: int) -> int:
 
 def open_browser_later(url: str) -> None:
     time.sleep(1.5)
-    try:
-        webbrowser.open(url)
-    except OSError:
-        pass  # 无图形环境时静默跳过
+    with suppress(OSError):
+        webbrowser.open(url)  # 无图形环境时静默跳过
 
 
 def main(argv: list[str] | None = None) -> None:

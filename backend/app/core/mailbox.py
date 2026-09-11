@@ -11,7 +11,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from email.message import EmailMessage
-from typing import Iterator
+from collections.abc import Iterator
 
 from imap_tools import MailBox
 

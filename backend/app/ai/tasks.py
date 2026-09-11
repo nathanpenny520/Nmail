@@ -9,8 +9,9 @@ import json
 import logging
 import re
 from contextlib import contextmanager
-from datetime import datetime, timezone
-from typing import Any, Iterator
+from datetime import datetime, UTC
+from typing import Any
+from collections.abc import Iterator
 
 from app.ai import llm, profiles, prompts
 from app.ai.categories import CATEGORY_KEYS
@@ -73,7 +74,7 @@ def log_usage(task_type: str, model: str, prompt_tokens: int, completion_tokens:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _extract_json(text: str) -> Any:

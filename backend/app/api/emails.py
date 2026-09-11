@@ -301,7 +301,7 @@ def email_action(email_id: int, payload: EmailActionIn) -> dict:
     try:
         handle = mailbox.load_account(row["account_id"])
     except mailbox.MailError as exc:
-        raise mail_error_to_http(exc)
+        raise mail_error_to_http(exc) from exc
     new_uid: int | None = None
     try:
         with mailbox.open_imap(handle) as mb:

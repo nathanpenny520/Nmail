@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from bs4 import BeautifulSoup
 
@@ -58,7 +58,7 @@ def _body_head(row) -> str:  # noqa: ANN001
 def _apply_classification(results: list[dict]) -> tuple[int, int]:
     """写回分类结果，执行营销自动归档。返回 (归档数, 需回复数)。"""
     conn = get_conn()
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = datetime.now(UTC).isoformat(timespec="seconds")
     archived = 0
     need_reply = 0
     for r in results:

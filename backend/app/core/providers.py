@@ -185,8 +185,8 @@ def _tcp_probe(domain: str) -> ProviderPreset | None:
     all_cands = imap_cands + smtp_cands
     with ThreadPoolExecutor(max_workers=len(all_cands)) as pool:
         results = list(pool.map(lambda c: _reachable(*c), all_cands))
-    imap = next((h for (h, _p), ok in zip(imap_cands, results[:2]) if ok), None)
-    smtp = next((h for (h, _p), ok in zip(smtp_cands, results[2:]) if ok), None)
+    imap = next((h for (h, _p), ok in zip(imap_cands, results[:2], strict=False) if ok), None)
+    smtp = next((h for (h, _p), ok in zip(smtp_cands, results[2:], strict=False) if ok), None)
     if imap and smtp:
         return ProviderPreset(
             name=f"自动探测 · {domain}", domains=(domain,),

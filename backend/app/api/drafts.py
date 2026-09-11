@@ -105,7 +105,7 @@ def draft_action(draft_id: int, payload: DraftActionIn) -> dict:
     try:
         handle = mailbox.load_account(int(row["account_id"]))
     except mailbox.MailError as exc:
-        raise mail_error_to_http(exc)
+        raise mail_error_to_http(exc) from exc
 
     try:
         mailbox.send_message(
@@ -117,7 +117,7 @@ def draft_action(draft_id: int, payload: DraftActionIn) -> dict:
             in_reply_to=(row["message_id"] or "").strip() or None,
         )
     except mailbox.MailError as exc:  # smtp_missing 等
-        raise mail_error_to_http(exc)
+        raise mail_error_to_http(exc) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"发送失败：{exc}") from exc
 

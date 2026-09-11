@@ -14,9 +14,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from contextlib import contextmanager
-from datetime import datetime, timezone
-from typing import Any, Iterator
+from contextlib import contextmanager, suppress
+from datetime import datetime, UTC
+from typing import Any
+from collections.abc import Iterator
 
 from app.config import get_db_path
 
@@ -343,10 +344,8 @@ def tx() -> Iterator[sqlite3.Connection]:
             yield conn
             conn.execute("COMMIT")
         except BaseException:
-            try:
-                conn.execute("ROLLBACK")
-            except sqlite3.OperationalError:
-                pass  # 事务已被 SQLite 自动回滚
+            with suppress(sqlite3.OperationalError):
+                conn.execute("ROLLBACK")  # 事务已被 SQLite 自动回滚时忽略
             raise
 
 
@@ -378,8 +377,8 @@ def run_migrations() -> None:
             try:
                 dt = datetime.fromisoformat(row["date"])
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                sort_val = dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+                    dt = dt.replace(tzinfo=UTC)
+                sort_val = dt.astimezone(UTC).isoformat(timespec="seconds")
             except ValueError:
                 continue
             conn.execute("UPDATE emails SET date_sort = ? WHERE id = ?", (sort_val, row["id"]))

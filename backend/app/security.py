@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+from contextlib import suppress
 
 from app.config import get_secrets_path
 
@@ -28,10 +29,8 @@ def _write_all(data: dict[str, str]) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, path)
-    try:
+    with suppress(OSError):
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # POSIX 下收紧权限，Windows 忽略
-    except OSError:
-        pass
 
 
 def get_secret(key: str) -> str | None:

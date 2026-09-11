@@ -15,7 +15,7 @@ import logging
 import re
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 
 from imap_tools.errors import MailboxLoginError
@@ -46,7 +46,7 @@ def add_notification(n_type: str, title: str, body: str = "", ref_id: str | None
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _safe_filename(name: str, index: int) -> str:
@@ -89,7 +89,7 @@ def _norm_date(dt: datetime | None) -> tuple[str | None, str | None]:
     if dt is None:
         return None, None
     try:
-        return dt.isoformat(timespec="seconds"), dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+        return dt.isoformat(timespec="seconds"), dt.astimezone(UTC).isoformat(timespec="seconds")
     except Exception:  # noqa: BLE001 — 单封畸形日期不阻塞同步
         try:
             return dt.isoformat(), None

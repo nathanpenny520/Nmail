@@ -75,8 +75,8 @@ def _account_dict(row) -> dict[str, Any]:  # noqa: ANN001
         "smtp_server": row["smtp_server"],
         "smtp_port": row["smtp_port"],
         "color": row["color"],
-        "ai_permission": row["ai_permission"] if "ai_permission" in row.keys() else "draft_review",
-        "style_prompt": row["style_prompt"] if "style_prompt" in row.keys() else None,
+        "ai_permission": row["ai_permission"] if "ai_permission" in row.keys() else "draft_review",  # noqa: SIM118 — sqlite3.Row 的 in 语义是值不是键
+        "style_prompt": row["style_prompt"] if "style_prompt" in row.keys() else None,  # noqa: SIM118 — 同上
         "status": row["status"],
         "status_detail": row["status_detail"],
         "last_sync_at": row["last_sync_at"],
@@ -244,7 +244,7 @@ def list_account_folders(account_id: int) -> dict:
     try:
         handle = mailbox.load_account(account_id)
     except mailbox.MailError as exc:
-        raise mail_error_to_http(exc)
+        raise mail_error_to_http(exc) from exc
     try:
         with mailbox.open_imap(handle) as mb:
             return {"folders": imap_client.list_folders(mb)}
@@ -265,7 +265,7 @@ def create_folder(account_id: int, payload: FolderCreateIn) -> dict:
     try:
         handle = mailbox.load_account(account_id)
     except mailbox.MailError as exc:
-        raise mail_error_to_http(exc)
+        raise mail_error_to_http(exc) from exc
     try:
         with mailbox.open_imap(handle) as mb:
             existing = {f.name for f in mb.folder.list()}

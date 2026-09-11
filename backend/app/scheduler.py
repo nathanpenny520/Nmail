@@ -7,7 +7,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from contextlib import suppress
+from datetime import datetime, timedelta, UTC
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -41,7 +42,7 @@ def _parse_iso(value: str | None) -> datetime | None:
     try:
         dt = datetime.fromisoformat(value)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt
     except ValueError:
         return None
@@ -86,7 +87,7 @@ def send_due_drafts() -> None:
 
 def poll_due_accounts() -> None:
     interval_minutes = int(get_setting("poll_interval_minutes", 5) or 5)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     rows = get_conn().execute("SELECT * FROM accounts ORDER BY id").fetchall()
     for row in rows:
         last = _parse_iso(row["last_sync_at"])
@@ -137,7 +138,5 @@ class MailScheduler:
         logger.info("mail scheduler started (tick %ss)", TICK_SECONDS)
 
     def shutdown(self) -> None:
-        try:
+        with suppress(Exception):
             self._scheduler.shutdown(wait=False)
-        except Exception:  # noqa: BLE001
-            pass

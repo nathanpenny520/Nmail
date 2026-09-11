@@ -5,8 +5,8 @@ import email.utils
 import logging
 import re
 import smtplib
-import socket
 import time
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from email.message import EmailMessage
@@ -82,7 +82,7 @@ def test_connection(cfg: MailConfig) -> tuple[bool, str]:
         return True, "IMAP 登录成功"
     except MailboxLoginError:
         return False, "登录被拒绝：请检查邮箱地址与密码（多数服务商要求使用授权码/应用密码，而非网页登录密码）"
-    except (TimeoutError, ConnectionRefusedError, socket.error, OSError):
+    except (TimeoutError, ConnectionRefusedError, OSError):
         return False, f"无法连接服务器 {cfg.imap_server}:{cfg.imap_port}，请检查服务器地址、端口与网络"
     except Exception as exc:  # noqa: BLE001 — 统一转为用户可读的错误说明
         return False, f"连接失败：{exc}"
@@ -154,13 +154,13 @@ def iter_new_mail(mb: MailBox, folder: str, last_uid: int,
         window = pending[start : start + chunk_size]
         parsed: list[ParsedMessage] = []
 
-        def _fetch_one(criteria_str: str) -> None:
+        def _fetch_one(criteria_str: str, out: list[ParsedMessage]) -> None:
             for msg in mb.fetch(criteria_str, mark_seen=False, bulk=True):
                 # 部分版本 imap-tools 返回 str 型 uid，统一转 int
                 uid = int(msg.uid) if msg.uid is not None else None
                 if uid is None or uid <= last_uid:
                     continue
-                parsed.append(_parse_message(msg, uid))
+                out.append(_parse_message(msg, uid))
 
         # 稠密集合（如收件箱：UID 与日期同调）→ 区间 FETCH 一批拉回；
         # 稀疏集合（如「已删除/已发送」：邮件为移入、日期与 UID 不单调）——
@@ -169,10 +169,10 @@ def iter_new_mail(mb: MailBox, folder: str, last_uid: int,
         # 只能逐 UID 精确拉取
         span = window[-1] - window[0] + 1
         if span <= len(window) * 2 + 5:
-            _fetch_one(f"UID {window[0]}:{window[-1]}")
+            _fetch_one(f"UID {window[0]}:{window[-1]}", parsed)
         else:
             for uid in window:
-                _fetch_one(f"UID {uid}")
+                _fetch_one(f"UID {uid}", parsed)
         time.sleep(0.2)  # 块间轻微节流，降低触发服务商频控的概率
         yield parsed
 
@@ -298,10 +298,8 @@ def send_email(
         server.login(cfg.email, cfg.password)
         server.send_message(msg)
     finally:
-        try:
+        with suppress(Exception):
             server.quit()
-        except Exception:  # noqa: BLE001
-            pass
     return msg
 
 

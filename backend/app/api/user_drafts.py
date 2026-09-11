@@ -9,6 +9,7 @@ user_drafts 记录，编辑内容防抖自动保存（PATCH）；附件上传即
 from __future__ import annotations
 
 import shutil
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 
@@ -152,7 +153,7 @@ def delete_draft(draft_id: int) -> dict:
 # ── 附件持久化 ──────────────────────────────────────────────
 
 @router.post("/{draft_id}/attachments")
-async def upload_attachments(draft_id: int, files: list[UploadFile] = File(...)) -> dict:
+async def upload_attachments(draft_id: int, files: list[UploadFile] = File(...)) -> dict:  # noqa: B008 — FastAPI 依赖注入惯用法
     _get_draft(draft_id)
     conn = get_conn()
     target_dir = outbox.draft_dir(draft_id)
@@ -187,10 +188,8 @@ def delete_attachment(draft_id: int, att_id: int) -> dict:
     conn = get_conn()
     conn.execute("DELETE FROM user_draft_attachments WHERE id = ?", (att_id,))
     conn.commit()
-    try:
+    with suppress(OSError):
         Path(row["path"]).unlink(missing_ok=True)
-    except OSError:
-        pass
     return {"draft": _draft_dict(_get_draft(draft_id))}
 
 
@@ -240,5 +239,5 @@ def send_draft(draft_id: int) -> dict:
     try:
         outbox.send_user_draft(draft_id)
     except mailbox.MailError as exc:
-        raise mail_error_to_http(exc)
+        raise mail_error_to_http(exc) from exc
     return {"ok": True}

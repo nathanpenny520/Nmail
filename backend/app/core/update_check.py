@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 import httpx
 
@@ -37,7 +37,7 @@ def _is_newer(latest: str | None, current: str) -> bool:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _fresh(state: dict) -> bool:
@@ -46,7 +46,7 @@ def _fresh(state: dict) -> bool:
         last = datetime.fromisoformat(checked_at)
     except ValueError:
         return False
-    return datetime.now(timezone.utc) - last < timedelta(hours=CHECK_INTERVAL_HOURS)
+    return datetime.now(UTC) - last < timedelta(hours=CHECK_INTERVAL_HOURS)
 
 
 def _fetch_latest() -> dict | None:

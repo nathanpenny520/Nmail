@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, UTC
 
 from app.ai import tasks
 from app.ai.categories import CATEGORY_ORDER as CATEGORIES
@@ -23,7 +23,7 @@ def _to_local_dt(iso: str | None) -> datetime | None:
     try:
         dt = datetime.fromisoformat(iso)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt.astimezone()
     except (ValueError, OSError, OverflowError):
         # Windows 上极值年份的本地时区换算抛 OSError [Errno 22]，畸形日期不参与摘要
