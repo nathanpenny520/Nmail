@@ -3,12 +3,17 @@ import type {
   AITestResult,
   Account,
   AccountAddPayload,
+  AIProfile,
+  AIProfilesResp,
+  ChatMessage,
+  ChatSession,
   Draft,
   EmailDetail,
   EmailListResp,
   FolderInfo,
   NotificationsResp,
   OrganizeResult,
+  ProbeResult,
   ProvidersResp,
   SenderListEntry,
   Settings,
@@ -84,8 +89,39 @@ export const api = {
   testAI: (payload: AITestPayload) =>
     request<AITestResult>('/api/ai/test', { method: 'POST', body: JSON.stringify(payload) }),
 
+  // ── AI 配置档案（多模型 / 多 Key）──
+  getAIProfiles: () => request<AIProfilesResp>('/api/ai/profiles'),
+  createAIProfile: (payload: { name: string; base_url: string; model: string; api_key?: string }) =>
+    request<{ profile: AIProfile }>('/api/ai/profiles', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateAIProfile: (
+    id: string,
+    payload: { name?: string; base_url?: string; model?: string; api_key?: string },
+  ) =>
+    request<{ profile: AIProfile }>(`/api/ai/profiles/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  deleteAIProfile: (id: string) =>
+    request<{ ok: boolean }>(`/api/ai/profiles/${id}`, { method: 'DELETE' }),
+  activateAIProfile: (id: string) =>
+    request<{ ok: boolean; active_profile_id: string }>(`/api/ai/profiles/${id}/activate`, {
+      method: 'PUT',
+    }),
+  getAIModels: (profileId: string) =>
+    request<{ ok: boolean; models: string[]; error: string | null }>(
+      `/api/ai/models?profile_id=${encodeURIComponent(profileId)}`,
+    ),
+
   // ── 账号 ──
   getProviders: () => request<ProvidersResp>('/api/providers'),
+  probeAccount: (email: string) =>
+    request<ProbeResult>('/api/accounts/probe', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
   getAccounts: () => request<{ accounts: Account[] }>('/api/accounts'),
   testAccount: (payload: AccountAddPayload) =>
     request<{ ok: boolean; detail: string; provider: string | null }>('/api/accounts/test', {
@@ -164,6 +200,23 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   aiUsage: () => request<UsageStats>('/api/ai/usage'),
+
+  // ── AI 会话历史 ──
+  getChats: () => request<{ sessions: ChatSession[] }>('/api/ai/chats'),
+  createChat: (payload?: { title?: string; account_id?: number | null }) =>
+    request<{ session: ChatSession }>('/api/ai/chats', {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    }),
+  getChat: (id: number) =>
+    request<{ session: ChatSession; messages: ChatMessage[] }>(`/api/ai/chats/${id}`),
+  updateChat: (id: number, payload: { title?: string; pinned?: boolean }) =>
+    request<{ session: ChatSession }>(`/api/ai/chats/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  deleteChat: (id: number) =>
+    request<{ ok: boolean }>(`/api/ai/chats/${id}`, { method: 'DELETE' }),
 
   // ── 白/黑名单 ──
   getSenderLists: () =>

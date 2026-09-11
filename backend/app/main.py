@@ -1,9 +1,11 @@
 """Nmail 本地服务入口。
 
-仅绑定 127.0.0.1，托管 /api 与已构建的前端静态文件（frontend/dist）。
+仅绑定 127.0.0.1，托管 /api 与已构建的前端静态文件。
+前端目录按运行形态解析：wheel 安装（app/static）→ PyInstaller 冻结资源 → 源码开发（frontend/dist）。
 """
 from __future__ import annotations
 
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,8 +18,21 @@ from app.config import APP_NAME, APP_VERSION
 from app.db.database import run_migrations
 from app.scheduler import MailScheduler
 
-ROOT = Path(__file__).resolve().parents[2]
-DIST_DIR = ROOT / "frontend" / "dist"
+
+def _find_dist_dir() -> Path | None:
+    here = Path(__file__).resolve().parent  # .../app（源码或 site-packages）
+    candidates = [here / "static"]  # wheel 内打包的前端产物
+    if getattr(sys, "frozen", False):  # PyInstaller 单文件解包目录
+        base = Path(getattr(sys, "_MEIPASS", None) or Path(sys.executable).parent)
+        candidates.append(base / "app" / "static")
+    candidates.append(here.parents[1] / "frontend" / "dist")  # 源码开发
+    for p in candidates:
+        if p.is_dir():
+            return p
+    return None
+
+
+DIST_DIR = _find_dist_dir()
 
 scheduler = MailScheduler()
 
@@ -51,6 +66,6 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
 app.include_router(api_router)
 
-if DIST_DIR.is_dir():
+if DIST_DIR is not None:
     # 路由先于挂载注册，/api 不受影响；html=True 使 / 直接返回 index.html
     app.mount("/", SPAStaticFiles(directory=DIST_DIR, html=True), name="frontend")

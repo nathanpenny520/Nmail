@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { CheckCircle2, ChevronDown, Loader2, X, XCircle } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { CheckCircle2, ChevronDown, Loader2, Radar, X, XCircle } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import type { AccountAddPayload, ProviderPreset } from '../types'
 
@@ -30,6 +30,30 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
     if (!domain) return null
     return providers.find((p) => p.domains.includes(domain)) ?? null
   }, [email, providers])
+
+  // 未命中预设时自动探测服务器配置（autoconfig / 常见主机名试连），探到即预填
+  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())
+  const probeQuery = useQuery({
+    queryKey: ['account-probe', email.trim().toLowerCase()],
+    queryFn: () => api.probeAccount(email.trim()),
+    enabled: emailValid && !detected,
+    staleTime: Infinity,
+  })
+  const probed = probeQuery.data?.found ? probeQuery.data : null
+
+  useEffect(() => {
+    if (!probed) return
+    if (!imapServer && probed.imap_server) {
+      setImapServer(probed.imap_server)
+      setImapPort(probed.imap_port ?? 993)
+    }
+    if (!smtpServer && probed.smtp_server) {
+      setSmtpServer(probed.smtp_server)
+      setSmtpPort(probed.smtp_port ?? 465)
+    }
+    setShowAdvanced(true) // 探测结果展示在高级区，自动展开供确认
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [probeQuery.data])
 
   const payload = (): AccountAddPayload => ({
     email: email.trim(),
@@ -85,7 +109,7 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
           {email.includes('@') && (
             <div
               className={`rounded-xl border p-3 text-xs leading-relaxed ${
-                detected
+                detected || probed
                   ? 'border-indigo-200 bg-indigo-50 text-indigo-800'
                   : 'border-amber-200 bg-amber-50 text-amber-800'
               }`}
@@ -95,6 +119,22 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
                   <b>已识别：{detected.name}</b>
                   <p className="mt-1">{detected.note}</p>
                 </>
+              ) : probed ? (
+                <>
+                  <b className="inline-flex items-center gap-1">
+                    <Radar className="h-3.5 w-3.5" /> 已自动探测到服务器配置
+                  </b>
+                  <p className="mt-1">
+                    IMAP <code>{probed.imap_server}:{probed.imap_port}</code> · SMTP{' '}
+                    <code>{probed.smtp_server}:{probed.smtp_port}</code>
+                    （已填入下方高级选项，可修改）
+                  </p>
+                  {probed.note && <p className="mt-1 text-indigo-600/80">{probed.note}</p>}
+                </>
+              ) : probeQuery.isFetching ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> 正在自动探测服务器配置…
+                </span>
               ) : (
                 <>
                   <b>未识别的服务商</b>

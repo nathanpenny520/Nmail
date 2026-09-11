@@ -11,9 +11,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from app.ai import llm, prompts
-from app.db.database import get_conn, get_setting
-from app.security import get_secret
+from app.ai import llm, profiles, prompts
+from app.db.database import get_conn
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +21,12 @@ class AINotConfigured(Exception):
     pass
 
 
-def _ai_config() -> tuple[str, str, str]:
-    base_url = (get_setting("ai_base_url", "") or "").strip()
-    model = (get_setting("ai_model", "") or "").strip()
-    api_key = get_secret("ai_api_key")
-    if not base_url or not model:
-        raise AINotConfigured("未配置 AI 端点，请在 设置-AI 端点 中填写")
-    return base_url, model, api_key
+def _ai_config(profile_id: str | None = None) -> tuple[str, str, str | None]:
+    """解析目标档案的 (base_url, model, api_key)；未配置/不完整时抛 AINotConfigured。"""
+    try:
+        return profiles.resolve_config(profile_id)
+    except profiles.ProfileNotConfigured as exc:
+        raise AINotConfigured(str(exc)) from None
 
 
 def log_usage(task_type: str, model: str, prompt_tokens: int, completion_tokens: int,
@@ -67,12 +65,13 @@ def _extract_json(text: str) -> Any:
         raise
 
 
-def classify_batch(items: list[dict], account_id: int | None = None) -> list[dict]:
+def classify_batch(items: list[dict], account_id: int | None = None,
+                   profile_id: str | None = None) -> list[dict]:
     """批量分类邮件。items: [{id, subject, sender, body_head}]，返回同序结果列表。
 
     单封解析失败时跳过并记日志，不影响其他邮件。
     """
-    base_url, model, api_key = _ai_config()
+    base_url, model, api_key = _ai_config(profile_id)
     email_lines = []
     for it in items:
         body = (it["body_head"] or "").replace("\n", " ").strip()
@@ -123,9 +122,10 @@ def generate_reply_draft(
     my_email: str,
     instruction: str | None = None,
     account_id: int | None = None,
+    profile_id: str | None = None,
 ) -> str:
     """为一封来信生成回复草稿正文（Markdown）；已学习 Tone DNA 时注入风格。"""
-    base_url, model, api_key = _ai_config()
+    base_url, model, api_key = _ai_config(profile_id)
     system = prompts.DRAFT_SYSTEM
     if account_id is not None:
         row = get_conn().execute(
@@ -167,9 +167,10 @@ def chat_with_context(
     question: str,
     history: list[dict] | None = None,
     account_id: int | None = None,
+    profile_id: str | None = None,
 ) -> str:
     """基于邮件上下文回答问题（非流式）。history: [{role, content}]"""
-    base_url, model, api_key = _ai_config()
+    base_url, model, api_key = _ai_config(profile_id)
     messages = _chat_messages(context_text, question, history)
     try:
         text, usage = llm.chat_messages(base_url, model, api_key, messages)
@@ -198,9 +199,10 @@ def chat_with_context_stream(
     question: str,
     history: list[dict] | None = None,
     account_id: int | None = None,
+    profile_id: str | None = None,
 ):
     """流式版问答：返回一个 yield 文本增量的生成器；结束时写用量日志。"""
-    base_url, model, api_key = _ai_config()
+    base_url, model, api_key = _ai_config(profile_id)
     messages = _chat_messages(context_text, question, history)
     usage: dict = {"prompt_tokens": 0, "completion_tokens": 0}
 
@@ -220,9 +222,10 @@ def chat_with_context_stream(
     return generate()
 
 
-def write_assist(text: str, op: str, instruction: str | None = None) -> str:
+def write_assist(text: str, op: str, instruction: str | None = None,
+                 profile_id: str | None = None) -> str:
     """写作辅助：润色/正式/随意/缩短/扩充/翻译。"""
-    base_url, model, api_key = _ai_config()
+    base_url, model, api_key = _ai_config(profile_id)
     if op == "custom":
         head = instruction or "润色"
     else:
@@ -242,9 +245,10 @@ def write_assist(text: str, op: str, instruction: str | None = None) -> str:
     return result.strip()
 
 
-def digest_overview(user: str, account_id: int | None = None) -> str:
+def digest_overview(user: str, account_id: int | None = None,
+                    profile_id: str | None = None) -> str:
     """每日摘要的 AI 综述段落。"""
-    base_url, model, api_key = _ai_config()
+    base_url, model, api_key = _ai_config(profile_id)
     try:
         text, usage = llm.chat(
             base_url, model, api_key,
@@ -260,9 +264,10 @@ def digest_overview(user: str, account_id: int | None = None) -> str:
     return text.strip()
 
 
-def generate_tone_dna(samples: list[str], account_id: int | None = None) -> str:
+def generate_tone_dna(samples: list[str], account_id: int | None = None,
+                      profile_id: str | None = None) -> str:
     """从已发邮件样本总结用户的写作风格（Tone DNA）。"""
-    base_url, model, api_key = _ai_config()
+    base_url, model, api_key = _ai_config(profile_id)
     joined = "\n\n----\n\n".join(s[:1500] for s in samples if s.strip())
     user = (
         "以下是用户发出的若干封真实邮件，请总结这个人的写作风格，"

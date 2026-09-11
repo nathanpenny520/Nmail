@@ -172,6 +172,33 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE accounts ADD COLUMN tone_dna TEXT;
         """,
     ),
+    (
+        5,
+        """
+        -- P4：AI 会话持久化（总管家对话，后续单邮件问答共用）
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            title      TEXT NOT NULL DEFAULT '新对话',
+            kind       TEXT NOT NULL DEFAULT 'manager',
+            account_id INTEGER,
+            pinned     INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+            role       TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+            content    TEXT NOT NULL,
+            model      TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+            ON chat_messages(session_id, id);
+        CREATE INDEX IF NOT EXISTS idx_chat_sessions_list
+            ON chat_sessions(pinned DESC, updated_at DESC);
+        """,
+    ),
 ]
 
 

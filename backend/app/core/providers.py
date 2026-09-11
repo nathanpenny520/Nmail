@@ -1,10 +1,16 @@
-"""服务商预设库。
+"""服务商预设库与未收录域名的自动探测。
 
-数据为各服务商公开的 IMAP/SMTP 服务器事实性配置，供添加账号时按邮箱域名自动匹配。
+预设数据为各服务商公开的 IMAP/SMTP 服务器事实性配置，供添加账号时按邮箱域名自动匹配；
+未命中预设时走 probe_server()：Mozilla autoconfig 标准接口 → 常见主机名 TCP 试连。
 """
 from __future__ import annotations
 
+import socket
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+
+import httpx
 
 # (名称, 域名元组, IMAP服务器, IMAP端口, SMTP服务器, SMTP端口, 添加账号时展示的提示)
 _PRESET_ROWS: list[tuple[str, tuple[str, ...], str, int, str, int, str]] = [
@@ -26,6 +32,9 @@ _PRESET_ROWS: list[tuple[str, tuple[str, ...], str, int, str, int, str]] = [
     ("搜狐邮箱", ("sohu.com",),
      "imap.sohu.com", 993, "smtp.sohu.com", 465,
      "需开启 POP3/IMAP/SMTP 服务；密码填授权码"),
+    ("移动 139 邮箱", ("139.com",),
+     "imap.139.com", 993, "smtp.139.com", 465,
+     "需在网页版设置中开启 IMAP/SMTP 服务；密码填客户端授权码"),
     ("Gmail", ("gmail.com", "googlemail.com"),
      "imap.gmail.com", 993, "smtp.gmail.com", 465,
      "需开启两步验证并使用应用专用密码（Google 账号-安全-应用密码）；OAuth 支持在远期版本提供"),
@@ -94,3 +103,103 @@ def match_provider(email: str) -> ProviderPreset | None:
         if domain in preset.domains:
             return preset
     return None
+
+
+# ── 未收录域名的自动探测 ─────────────────────────────────────────
+
+_AUTOCONFIG_URLS = (
+    "https://autoconfig.{domain}/mail/config-v1.1.xml",           # Mozilla 标准托管位
+    "https://{domain}/.well-known/autoconfig/mail/config-v1.1.xml",  # RFC 8414 风格自托管位
+)
+_AUTOCONFIG_TIMEOUT = 3.0
+_PROBE_TIMEOUT = 2.5
+# 只认加密端口：明文 143/25 不收集，与全库预设口径一致
+_PROBE_IMAP_HOSTS = ("imap.{d}", "mail.{d}")
+_PROBE_SMTP_HOSTS = ("smtp.{d}", "mail.{d}")
+_PROBE_NOTE = "已自动探测服务器配置（来源：{source}），建议点「测试连接」确认后再保存"
+
+
+def _server_from_xml(node: ET.Element, default_port: int) -> tuple[str, int] | None:
+    hostname = (node.findtext("hostname") or "").strip()
+    if not hostname:
+        return None
+    socket_type = (node.findtext("socketType") or "").strip().upper()
+    try:
+        port = int(node.findtext("port") or default_port)
+    except ValueError:
+        port = default_port
+    if socket_type not in ("SSL", "TLS", "STARTTLS") and port not in (993, 465, 587):
+        return None  # 明文端口不收
+    return hostname, port
+
+
+def _autoconfig(domain: str) -> ProviderPreset | None:
+    """从 Mozilla autoconfig 标准接口读取服务器配置（Thunderbird 同源数据）。"""
+    for url_tpl in _AUTOCONFIG_URLS:
+        try:
+            resp = httpx.get(url_tpl.format(domain=domain), timeout=_AUTOCONFIG_TIMEOUT,
+                             follow_redirects=True)
+        except httpx.HTTPError:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            root = ET.fromstring(resp.text)
+        except ET.ParseError:
+            continue
+        imap = smtp = None
+        for node in root.iter("incomingServer"):
+            if node.get("type") == "imap":
+                found = _server_from_xml(node, 993)
+                if found:
+                    imap = found
+                    break
+        for node in root.iter("outgoingServer"):
+            if node.get("type") == "smtp":
+                found = _server_from_xml(node, 465)
+                if found:
+                    smtp = found
+                    break
+        if imap and smtp:
+            return ProviderPreset(
+                name=f"自动探测 · {domain}", domains=(domain,),
+                imap_server=imap[0], imap_port=imap[1],
+                smtp_server=smtp[0], smtp_port=smtp[1],
+                note=_PROBE_NOTE.format(source="autoconfig"),
+            )
+    return None
+
+
+def _reachable(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=_PROBE_TIMEOUT):
+            return True
+    except OSError:
+        return False
+
+
+def _tcp_probe(domain: str) -> ProviderPreset | None:
+    """按常见主机名并发试连 993/465，全通才算找到。"""
+    imap_cands = [(tpl.format(d=domain), 993) for tpl in _PROBE_IMAP_HOSTS]
+    smtp_cands = [(tpl.format(d=domain), 465) for tpl in _PROBE_SMTP_HOSTS]
+    all_cands = imap_cands + smtp_cands
+    with ThreadPoolExecutor(max_workers=len(all_cands)) as pool:
+        results = list(pool.map(lambda c: _reachable(*c), all_cands))
+    imap = next((h for (h, _p), ok in zip(imap_cands, results[:2]) if ok), None)
+    smtp = next((h for (h, _p), ok in zip(smtp_cands, results[2:]) if ok), None)
+    if imap and smtp:
+        return ProviderPreset(
+            name=f"自动探测 · {domain}", domains=(domain,),
+            imap_server=imap, imap_port=993,
+            smtp_server=smtp, smtp_port=465,
+            note=_PROBE_NOTE.format(source="主机名试连"),
+        )
+    return None
+
+
+def probe_server(email: str) -> ProviderPreset | None:
+    """未命中预设时的兜底探测：autoconfig 标准接口 → 常见主机名试连；失败返回 None。"""
+    domain = email.rsplit("@", 1)[-1].strip().lower()
+    if not domain or "." not in domain:
+        return None
+    return _autoconfig(domain) or _tcp_probe(domain)

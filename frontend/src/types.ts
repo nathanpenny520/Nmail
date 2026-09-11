@@ -1,11 +1,17 @@
-export interface AISettings {
+export interface AIProfile {
+  id: string
+  name: string
   base_url: string
   model: string
   api_key_set: boolean
 }
 
+export interface AIProfilesResp {
+  profiles: AIProfile[]
+  active_profile_id: string | null
+}
+
 export interface Settings {
-  ai: AISettings
   poll_interval_minutes: number
   digest_time: string
   ui_font: 'compact' | 'standard' | 'large'
@@ -13,12 +19,6 @@ export interface Settings {
 }
 
 export interface SettingsPayload {
-  ai?: {
-    base_url?: string
-    model?: string
-    /** 空字符串表示清除已存密钥；省略表示保持不变 */
-    api_key?: string
-  }
   poll_interval_minutes?: number
   digest_time?: string
   ui_font?: 'compact' | 'standard' | 'large'
@@ -70,6 +70,15 @@ export interface ProviderPreset {
 export interface ProvidersResp {
   providers: ProviderPreset[]
   manual_note: string
+}
+
+export interface ProbeResult {
+  found: boolean
+  imap_server?: string
+  imap_port?: number
+  smtp_server?: string
+  smtp_port?: number
+  note: string | null
 }
 
 export interface FolderInfo {
@@ -246,4 +255,25 @@ export interface DigestData {
 export interface DigestResp {
   dates: string[]
   digest: DigestData | null
+}
+
+// ── P4 AI 会话持久化 ─────────────────────────────────────────
+
+export interface ChatSession {
+  id: number
+  title: string
+  kind: 'manager' | string
+  account_id: number | null
+  pinned: boolean
+  message_count?: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatMessage {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  model: string
+  created_at: string
 }

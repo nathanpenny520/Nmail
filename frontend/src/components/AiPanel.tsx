@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, Send, Sparkles, X } from 'lucide-react'
+import { api } from '../api/client'
 import { streamChat } from '../api/stream'
 import type { EmailDetail } from '../types'
 import Markdown from './Markdown'
@@ -19,9 +21,13 @@ const QUICK_PROMPTS = ['总结这封邮件', '翻译成中文', '提取关键信
 export default function AiPanel({ email, onClose }: AiPanelProps) {
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [input, setInput] = useState('')
+  const [profileId, setProfileId] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  const profilesQuery = useQuery({ queryKey: ['ai-profiles'], queryFn: api.getAIProfiles })
+  const profiles = profilesQuery.data?.profiles ?? []
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
@@ -39,7 +45,7 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
     try {
       await streamChat(
         '/api/ai/chat/stream',
-        { email_id: email.id, question: q, history },
+        { email_id: email.id, question: q, history, profile_id: profileId || undefined },
         (delta) => {
           received = true
           setMessages((m) => {
@@ -59,10 +65,25 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
 
   return (
     <div className="fixed inset-y-0 right-0 z-30 flex w-96 flex-col border-l border-gray-200 bg-white shadow-2xl">
-      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-        <span className="flex items-center gap-2 text-sm font-semibold text-violet-700">
-          <Sparkles className="h-4 w-4" /> AI 助手 · 本封邮件
+      <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+        <span className="flex shrink-0 items-center gap-2 text-sm font-semibold text-violet-700">
+          <Sparkles className="h-4 w-4" /> AI 助手
         </span>
+        {profiles.length > 1 && (
+          <select
+            className="rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] outline-none focus:border-violet-500"
+            value={profileId}
+            onChange={(e) => setProfileId(e.target.value)}
+            title="本次对话使用的 AI 配置"
+          >
+            <option value="">默认模型</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
         <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
           <X className="h-5 w-5" />
         </button>

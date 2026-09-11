@@ -1,0 +1,73 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  # ① wheel 发布到 PyPI —— 用户可用 uvx nmail / pipx install nmail 一条命令运行
+  python-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 构建前端并同步进包
+        run: bash scripts/sync_frontend.sh
+      - name: 构建 wheel / sdist
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+      - name: 发布到 PyPI
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nmail-wheel
+          path: dist/*.whl
+
+  # ② 三平台单文件可执行 —— 双击即用，挂到 GitHub Release
+  binaries:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: nmail-windows-x64, ext: .exe }
+          - { os: macos-latest, name: nmail-macos-arm64, ext: "" }
+          - { os: ubuntu-latest, name: nmail-linux-x64, ext: "" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 构建前端并同步进包
+        run: bash scripts/sync_frontend.sh
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt pyinstaller
+      - name: PyInstaller 打包
+        run: pyinstaller nmail.spec
+      - name: 重命名产物
+        shell: bash
+        run: mv dist/nmail${{ matrix.ext }} "${{ matrix.name }}${{ matrix.ext }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}${{ matrix.ext }}
+      - name: 附加到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.name }}${{ matrix.ext }}

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core import imap_client, sync as sync_engine
-from app.core.providers import MANUAL_NOTE, PRESETS
+from app.core.providers import MANUAL_NOTE, PRESETS, match_provider, probe_server
 from app.db.database import get_conn
 from app.security import get_secret, set_secret
 
@@ -36,14 +36,15 @@ class AccountPatchIn(BaseModel):
     ai_permission: str | None = None  # readonly | draft_review
 
 
+class ProbeIn(BaseModel):
+    email: str
+
+
 def _resolve_config(payload: AccountIn) -> tuple[imap_client.MailConfig, str | None]:
     """按预设自动补全服务器配置，返回 (MailConfig, 匹配到的预设名)。"""
     email = payload.email.strip()
     if not EMAIL_RE.match(email):
         raise HTTPException(400, "邮箱地址格式不正确")
-    preset = None
-    from app.core.providers import match_provider
-
     preset = match_provider(email)
     imap_server = payload.imap_server or (preset.imap_server if preset else "")
     smtp_server = payload.smtp_server or (preset.smtp_server if preset else "")
@@ -104,6 +105,30 @@ def test_account(payload: AccountIn) -> dict:
     cfg, preset_name = _resolve_config(payload)
     ok, detail = imap_client.test_connection(cfg)
     return {"ok": ok, "detail": detail, "provider": preset_name}
+
+
+@router.post("/accounts/probe")
+def probe_account_server(payload: ProbeIn) -> dict:
+    """未命中预设时按邮箱域名探测 IMAP/SMTP（autoconfig → 常见主机名试连）。
+
+    命中预设的域名直接返回 found=False（前端已有预填，无需探测）。
+    """
+    email = payload.email.strip()
+    if not EMAIL_RE.match(email):
+        raise HTTPException(400, "邮箱地址格式不正确")
+    if match_provider(email):
+        return {"found": False, "note": None}
+    preset = probe_server(email)
+    if preset is None:
+        return {"found": False, "note": None}
+    return {
+        "found": True,
+        "imap_server": preset.imap_server,
+        "imap_port": preset.imap_port,
+        "smtp_server": preset.smtp_server,
+        "smtp_port": preset.smtp_port,
+        "note": preset.note,
+    }
 
 
 @router.post("/accounts")

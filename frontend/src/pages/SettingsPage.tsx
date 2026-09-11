@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, MailPlus, RefreshCw, Trash2 } from 'lucide-react'
+import { BadgeCheck, Loader2, MailPlus, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
-import type { Account, AITestResult, Settings } from '../types'
+import type { Account, AITestResult, AIProfile, Settings } from '../types'
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
@@ -19,9 +19,6 @@ export default function SettingsPage() {
   const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings })
 
-  const [baseUrl, setBaseUrl] = useState('')
-  const [model, setModel] = useState('')
-  const [apiKey, setApiKey] = useState('')
   const [pollMinutes, setPollMinutes] = useState(5)
   const [digestTime, setDigestTime] = useState('08:30')
   const [uiFont, setUiFont] = useState<'compact' | 'standard' | 'large'>('compact')
@@ -29,11 +26,10 @@ export default function SettingsPage() {
 
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [accountMessage, setAccountMessage] = useState<string | null>(null)
+  const [showNewProfile, setShowNewProfile] = useState(false)
 
   useEffect(() => {
     if (!data) return
-    setBaseUrl(data.ai.base_url)
-    setModel(data.ai.model)
     setPollMinutes(data.poll_interval_minutes)
     setDigestTime(data.digest_time)
     setUiFont(data.ui_font)
@@ -44,13 +40,13 @@ export default function SettingsPage() {
     mutationFn: api.updateSettings,
     onSuccess: (saved: Settings) => {
       queryClient.setQueryData(['settings'], saved)
-      setApiKey('')
     },
   })
 
-  const testMutation = useMutation({
-    mutationFn: api.testAI,
-  })
+  // ── AI 配置档案 ──
+  const profilesQuery = useQuery({ queryKey: ['ai-profiles'], queryFn: api.getAIProfiles })
+  const profiles = profilesQuery.data?.profiles ?? []
+  const activeProfileId = profilesQuery.data?.active_profile_id ?? null
 
   // ── 账号管理 ──
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
@@ -99,24 +95,11 @@ export default function SettingsPage() {
 
   const handleSave = () => {
     saveMutation.mutate({
-      ai: { base_url: baseUrl, model, ...(apiKey ? { api_key: apiKey } : {}) },
       poll_interval_minutes: pollMinutes,
       digest_time: digestTime,
       ui_font: uiFont,
       body_font: bodyFont,
     })
-  }
-
-  const handleTest = () => {
-    testMutation.mutate({
-      base_url: baseUrl,
-      model,
-      ...(apiKey ? { api_key: apiKey } : {}),
-    })
-  }
-
-  const handleClearKey = () => {
-    saveMutation.mutate({ ai: { api_key: '' } })
   }
 
   if (isLoading) {
@@ -252,92 +235,41 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* AI 端点 */}
+      {/* AI 配置档案 */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="font-semibold">AI 端点（OpenAI 兼容）</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">AI 配置（OpenAI 兼容）</h2>
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700"
+            onClick={() => setShowNewProfile((v) => !v)}
+          >
+            <Plus className="h-3.5 w-3.5" /> 新增配置
+          </button>
+        </div>
         <p className="mt-1 text-xs leading-relaxed text-gray-500">
-          填入任意 OpenAI 兼容服务：OpenAI、DeepSeek、OpenRouter，或本地 Ollama / LM Studio
-          （如 <code>http://localhost:11434/v1</code>，密钥可留空）。云端端点会收到邮件正文；
-          指向本地端点则 0 外发。
+          可保存多套端点配置（如 DeepSeek 快速、强模型写草稿、本地 Ollama），标「使用中」的配置供所有
+          AI 功能默认使用；对话界面可临时切换。云端端点会收到邮件正文，本地端点则 0 外发。
         </p>
 
-        <div className="mt-4 space-y-4">
-          <label className="block">
-            <span className="mb-1 block text-sm text-gray-600">Base URL</span>
-            <input
-              className={inputClass}
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://api.openai.com/v1"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-sm text-gray-600">
-              API Key{' '}
-              {data?.ai.api_key_set && (
-                <span className="ml-1 text-xs text-emerald-600">已保存（留空则保持不变）</span>
-              )}
-            </span>
-            <input
-              className={inputClass}
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={data?.ai.api_key_set ? '••••••••' : 'sk-…（本地模型可留空）'}
-              autoComplete="off"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-sm text-gray-600">模型名</span>
-            <input
-              className={inputClass}
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="gpt-4o-mini / deepseek-chat / qwen3:8b"
-            />
-          </label>
-        </div>
-
-        <div className="mt-5 flex items-center gap-3">
-          <button
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
-            onClick={handleSave}
-            disabled={saveMutation.isPending}
-          >
-            {saveMutation.isPending ? '保存中…' : '保存'}
-          </button>
-          <button
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-            onClick={handleTest}
-            disabled={testMutation.isPending}
-          >
-            {testMutation.isPending ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" /> 测试中…
-              </span>
-            ) : (
-              '测试连接'
-            )}
-          </button>
-          {data?.ai.api_key_set && (
-            <button
-              className="text-xs text-gray-400 underline-offset-2 hover:text-red-500 hover:underline"
-              onClick={handleClearKey}
-            >
-              清除已存密钥
-            </button>
+        <div className="mt-4 space-y-3">
+          {profilesQuery.isLoading && <div className="text-sm text-gray-400">加载中…</div>}
+          {!profilesQuery.isLoading && profiles.length === 0 && !showNewProfile && (
+            <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-400">
+              还没有 AI 配置。点「新增配置」填入 Base URL + API Key + 模型名。
+            </div>
           )}
-          {saveMutation.isSuccess && !saveMutation.isPending && (
-            <span className="text-xs text-emerald-600">已保存</span>
+          {profiles.map((p) => (
+            <ProfileCard key={p.id} profile={p} isActive={p.id === activeProfileId} />
+          ))}
+          {showNewProfile && (
+            <NewProfileCard onDone={() => setShowNewProfile(false)} />
           )}
-          {saveMutation.isError && (
-            <span className="text-xs text-red-600">保存失败：{(saveMutation.error as Error).message}</span>
+          {profilesQuery.isError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+              加载失败：{(profilesQuery.error as Error).message}
+            </div>
           )}
         </div>
-
-        {testMutation.data && <TestResult result={testMutation.data} />}
       </section>
 
       {/* 通用 */}
@@ -398,6 +330,21 @@ export default function SettingsPage() {
               <option value="large">大</option>
             </select>
           </label>
+        </div>
+        <div className="mt-5 flex items-center gap-3">
+          <button
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+            onClick={handleSave}
+            disabled={saveMutation.isPending}
+          >
+            {saveMutation.isPending ? '保存中…' : '保存'}
+          </button>
+          {saveMutation.isSuccess && !saveMutation.isPending && (
+            <span className="text-xs text-emerald-600">已保存</span>
+          )}
+          {saveMutation.isError && (
+            <span className="text-xs text-red-600">保存失败：{(saveMutation.error as Error).message}</span>
+          )}
         </div>
       </section>
 
@@ -469,6 +416,312 @@ function TestResult({ result }: { result: AITestResult }) {
     <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
       <p className="font-medium">连接失败</p>
       <p className="mt-1 break-all text-xs">{result.error}</p>
+    </div>
+  )
+}
+
+/** 档案卡片的公共字段（编辑卡与新建卡共用一套渲染）。 */
+function ProfileFields(props: {
+  name: string
+  baseUrl: string
+  model: string
+  apiKey: string
+  apiKeySet: boolean
+  models: string[] | null
+  modelsError: string
+  onName: (v: string) => void
+  onBaseUrl: (v: string) => void
+  onModel: (v: string) => void
+  onApiKey: (v: string) => void
+}) {
+  return (
+    <>
+      <div className="grid grid-cols-[1fr_2fr] gap-3">
+        <label className="block">
+          <span className="mb-1 block text-xs text-gray-500">名称</span>
+          <input
+            className={inputClass}
+            value={props.name}
+            onChange={(e) => props.onName(e.target.value)}
+            placeholder="如 DeepSeek 快速"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs text-gray-500">Base URL</span>
+          <input
+            className={inputClass}
+            value={props.baseUrl}
+            onChange={(e) => props.onBaseUrl(e.target.value)}
+            placeholder="https://api.deepseek.com/v1 或 http://localhost:11434/v1"
+          />
+        </label>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className="mb-1 block text-xs text-gray-500">模型名</span>
+          <input
+            className={inputClass}
+            value={props.model}
+            onChange={(e) => props.onModel(e.target.value)}
+            placeholder="deepseek-chat / gpt-4o-mini / qwen3:8b"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs text-gray-500">
+            API Key{' '}
+            {props.apiKeySet && (
+              <span className="ml-1 text-emerald-600">已保存（留空不变）</span>
+            )}
+          </span>
+          <input
+            className={inputClass}
+            type="password"
+            value={props.apiKey}
+            onChange={(e) => props.onApiKey(e.target.value)}
+            placeholder={props.apiKeySet ? '••••••••' : 'sk-…（本地模型可留空）'}
+            autoComplete="off"
+          />
+        </label>
+      </div>
+      {props.models !== null && props.models.length > 0 && (
+        <div className="mt-2 flex max-h-28 flex-wrap gap-1 overflow-y-auto rounded-lg bg-gray-50 p-2">
+          {props.models.map((m) => (
+            <button
+              key={m}
+              className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-600 hover:border-violet-300 hover:text-violet-700"
+              onClick={() => props.onModel(m)}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      )}
+      {props.modelsError && (
+        <p className="mt-2 break-all text-[11px] text-red-500">{props.modelsError}</p>
+      )}
+    </>
+  )
+}
+
+function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: boolean }) {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState(profile.name)
+  const [baseUrl, setBaseUrl] = useState(profile.base_url)
+  const [model, setModel] = useState(profile.model)
+  const [apiKey, setApiKey] = useState('')
+  const [models, setModels] = useState<string[] | null>(null)
+  const [modelsError, setModelsError] = useState('')
+
+  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['ai-profiles'] })
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      api.updateAIProfile(profile.id, {
+        name,
+        base_url: baseUrl,
+        model,
+        ...(apiKey ? { api_key: apiKey } : {}), // 留空 = 不改动已存密钥
+      }),
+    onSuccess: () => {
+      setApiKey('')
+      invalidate()
+    },
+  })
+  const clearKeyMutation = useMutation({
+    mutationFn: () => api.updateAIProfile(profile.id, { api_key: '' }),
+    onSuccess: invalidate,
+  })
+  const activateMutation = useMutation({
+    mutationFn: () => api.activateAIProfile(profile.id),
+    onSuccess: invalidate,
+  })
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteAIProfile(profile.id),
+    onSuccess: invalidate,
+  })
+  const testMutation = useMutation({ mutationFn: api.testAI })
+
+  const fetchModels = async () => {
+    setModelsError('')
+    try {
+      const r = await api.getAIModels(profile.id) // 按已保存的 Base URL / 密钥获取
+      if (!r.ok) {
+        setModelsError(r.error || '获取模型列表失败')
+        setModels([])
+      } else {
+        setModels(r.models)
+      }
+    } catch (err) {
+      setModelsError((err as Error).message)
+    }
+  }
+
+  return (
+    <div
+      className={`rounded-xl border p-4 ${
+        isActive ? 'border-violet-300 bg-violet-50/40' : 'border-gray-200 bg-gray-50/40'
+      }`}
+    >
+      <div className="mb-3 flex items-center gap-2">
+        {isActive ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-violet-600 px-2 py-0.5 text-[11px] font-medium text-white">
+            <BadgeCheck className="h-3 w-3" /> 使用中
+          </span>
+        ) : (
+          <button
+            className="rounded-full border border-violet-200 bg-white px-2.5 py-0.5 text-[11px] text-violet-600 hover:bg-violet-50 disabled:opacity-40"
+            onClick={() => activateMutation.mutate()}
+            disabled={activateMutation.isPending}
+          >
+            设为使用中
+          </button>
+        )}
+        <div className="flex-1" />
+        <button
+          className="rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:bg-white hover:text-red-500 disabled:opacity-40"
+          title="删除此配置"
+          onClick={() => {
+            if (confirm(`删除 AI 配置「${profile.name}」？已存密钥一并清除。`)) {
+              deleteMutation.mutate()
+            }
+          }}
+          disabled={deleteMutation.isPending}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <ProfileFields
+        name={name}
+        baseUrl={baseUrl}
+        model={model}
+        apiKey={apiKey}
+        apiKeySet={profile.api_key_set}
+        models={models}
+        modelsError={modelsError}
+        onName={setName}
+        onBaseUrl={setBaseUrl}
+        onModel={setModel}
+        onApiKey={setApiKey}
+      />
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          className="rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? '保存中…' : '保存'}
+        </button>
+        <button
+          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          onClick={() =>
+            testMutation.mutate({
+              base_url: baseUrl,
+              model,
+              ...(apiKey ? { api_key: apiKey } : {}),
+            })
+          }
+          disabled={testMutation.isPending}
+        >
+          {testMutation.isPending ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> 测试中…
+            </span>
+          ) : (
+            '测试连接'
+          )}
+        </button>
+        <button
+          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          onClick={() => void fetchModels()}
+          title="按已保存的 Base URL / 密钥拉取可用模型列表"
+        >
+          获取模型列表
+        </button>
+        {profile.api_key_set && (
+          <button
+            className="text-xs text-gray-400 underline-offset-2 hover:text-red-500 hover:underline"
+            onClick={() => clearKeyMutation.mutate()}
+            disabled={clearKeyMutation.isPending}
+          >
+            清除已存密钥
+          </button>
+        )}
+        {saveMutation.isSuccess && !saveMutation.isPending && (
+          <span className="text-xs text-emerald-600">已保存</span>
+        )}
+        {(saveMutation.isError || deleteMutation.isError || activateMutation.isError) && (
+          <span className="text-xs text-red-600">
+            操作失败：
+            {((saveMutation.error ?? deleteMutation.error ?? activateMutation.error) as Error).message}
+          </span>
+        )}
+      </div>
+
+      {testMutation.data && <TestResult result={testMutation.data} />}
+    </div>
+  )
+}
+
+function NewProfileCard({ onDone }: { onDone: () => void }) {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [model, setModel] = useState('')
+  const [apiKey, setApiKey] = useState('')
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      api.createAIProfile({
+        name: name.trim() || '未命名',
+        base_url: baseUrl,
+        model,
+        ...(apiKey ? { api_key: apiKey } : {}),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ai-profiles'] })
+      onDone()
+    },
+  })
+
+  const canCreate = name.trim() !== '' && baseUrl.trim() !== '' && model.trim() !== ''
+
+  return (
+    <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/30 p-4">
+      <div className="mb-3 text-xs font-medium text-violet-700">新增 AI 配置</div>
+      <ProfileFields
+        name={name}
+        baseUrl={baseUrl}
+        model={model}
+        apiKey={apiKey}
+        apiKeySet={false}
+        models={null}
+        modelsError=""
+        onName={setName}
+        onBaseUrl={setBaseUrl}
+        onModel={setModel}
+        onApiKey={setApiKey}
+      />
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          className="rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+          onClick={() => createMutation.mutate()}
+          disabled={!canCreate || createMutation.isPending}
+        >
+          {createMutation.isPending ? '创建中…' : '创建'}
+        </button>
+        <button
+          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+          onClick={onDone}
+        >
+          取消
+        </button>
+        {!canCreate && <span className="text-[11px] text-gray-400">名称、Base URL、模型名必填</span>}
+        {createMutation.isError && (
+          <span className="text-xs text-red-600">创建失败：{(createMutation.error as Error).message}</span>
+        )}
+      </div>
     </div>
   )
 }

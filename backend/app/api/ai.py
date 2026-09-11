@@ -9,7 +9,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.ai import tasks
+from app.ai import profiles, tasks
+from app.api.chats import append_message, require_session
 from app.core.pipeline import classify_missing
 from app.db.database import get_conn
 
@@ -38,12 +39,14 @@ class ChatIn(BaseModel):
     email_ids: list[int] | None = None  # 可选：多封（如搜索结果）作为上下文
     question: str
     history: list[dict] | None = None
+    profile_id: str | None = None  # 可选：本次对话使用指定 AI 配置档案
 
 
 class WriteIn(BaseModel):
     text: str
     op: str  # polish|formal|casual|shorten|expand|translate_zh|translate_en|custom
     instruction: str | None = None
+    profile_id: str | None = None
 
 
 class OrganizeIn(BaseModel):
@@ -57,6 +60,30 @@ class ManagerChatIn(BaseModel):
     history: list[dict] | None = None
     account_id: int | None = None
     days: int = 7
+    session_id: int | None = None  # 提供时落库（会话持久化），否则保持旧的无痕行为
+    profile_id: str | None = None  # 可选：本次对话使用指定 AI 配置档案
+
+
+def _record_model(profile_id: str | None) -> str:
+    """会话落库用的模型名：解析失败（未配置）时留空即可，不影响主流程。"""
+    try:
+        return profiles.resolve(profile_id).get("model") or ""
+    except profiles.ProfileNotConfigured:
+        return ""
+
+
+def _persist_stream(gen, session_id: int, model: str):
+    """包裹流式生成器：结束后把完整回复落库；中途异常保留已生成部分再抛出。"""
+    chunks: list[str] = []
+    try:
+        for delta in gen:
+            chunks.append(delta)
+            yield delta
+    except Exception:
+        if chunks:
+            append_message(session_id, "assistant", "".join(chunks), model=model)
+        raise
+    append_message(session_id, "assistant", "".join(chunks), model=model)
 
 
 @router.post("/chat-manager")
@@ -64,11 +91,19 @@ def chat_manager(payload: ManagerChatIn) -> dict:
     """「AI 总管家」非流式版本（保留兼容）。"""
     context = _manager_context(payload)
     try:
-        answer = tasks.chat_with_context(context, payload.question, history=payload.history)
+        answer = tasks.chat_with_context(
+            context, payload.question, history=payload.history,
+            profile_id=payload.profile_id,
+        )
     except tasks.AINotConfigured:
         raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"AI 调用失败：{exc}") from exc
+    if payload.session_id is not None:
+        require_session(payload.session_id)
+        append_message(payload.session_id, "user", payload.question)
+        append_message(payload.session_id, "assistant", answer,
+                       model=_record_model(payload.profile_id))
     return {"answer": answer}
 
 
@@ -76,12 +111,18 @@ def chat_manager(payload: ManagerChatIn) -> dict:
 def chat_manager_stream(payload: ManagerChatIn):
     """「AI 总管家」流式版本：SSE 逐段返回。"""
     context = _manager_context(payload)
+    if payload.session_id is not None:
+        require_session(payload.session_id)
+        append_message(payload.session_id, "user", payload.question)
     try:
         gen = tasks.chat_with_context_stream(
             context, payload.question, history=payload.history,
+            profile_id=payload.profile_id,
         )
     except tasks.AINotConfigured:
         raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
+    if payload.session_id is not None:
+        gen = _persist_stream(gen, payload.session_id, _record_model(payload.profile_id))
     return _sse(gen)
 
 
@@ -161,6 +202,7 @@ def chat(payload: ChatIn) -> dict:
         answer = tasks.chat_with_context(
             "\n\n".join(contexts), payload.question,
             history=payload.history, account_id=account_id,
+            profile_id=payload.profile_id,
         )
     except tasks.AINotConfigured:
         raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
@@ -179,6 +221,7 @@ def chat_stream(payload: ChatIn):
         gen = tasks.chat_with_context_stream(
             "\n\n".join(contexts), payload.question,
             history=payload.history, account_id=account_id,
+            profile_id=payload.profile_id,
         )
     except tasks.AINotConfigured:
         raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
@@ -197,7 +240,8 @@ def _chat_contexts(ids: list[int]) -> tuple[list[str], int | None]:
 @router.post("/write")
 def write(payload: WriteIn) -> dict:
     try:
-        result = tasks.write_assist(payload.text, payload.op, payload.instruction)
+        result = tasks.write_assist(payload.text, payload.op, payload.instruction,
+                                    profile_id=payload.profile_id)
     except tasks.AINotConfigured:
         raise HTTPException(400, "未配置 AI 端点，请在设置中填写") from None
     except ValueError as exc:

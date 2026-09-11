@@ -1,21 +1,19 @@
 """设置读写与 AI 端点连通性测试。
 
-API key 永不回传前端，只返回 api_key_set 布尔值。
+AI 端点配置已迁移到「配置档案」（见 api/profiles.py），此处仅保留通用设置；
+测试端点字段省略时回退到激活档案。
 """
 from __future__ import annotations
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
 
-from app.ai import llm
+from app.ai import llm, profiles
 from app.db.database import get_setting, set_setting
-from app.security import get_secret, has_secret, set_secret
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
 DEFAULT_SETTINGS: dict[str, object] = {
-    "ai_base_url": "",
-    "ai_model": "",
     "poll_interval_minutes": 5,
     "digest_time": "08:30",
     "ui_font": "compact",     # compact | standard | large
@@ -23,15 +21,7 @@ DEFAULT_SETTINGS: dict[str, object] = {
 }
 
 
-class AISettingsIn(BaseModel):
-    base_url: str | None = None
-    model: str | None = None
-    # 仅在用户主动修改时提交：空字符串表示清除已存密钥，省略表示保持不变
-    api_key: str | None = None
-
-
 class SettingsIn(BaseModel):
-    ai: AISettingsIn | None = None
     poll_interval_minutes: int | None = Field(default=None, ge=1, le=60)
     digest_time: str | None = None
     ui_font: str | None = None
@@ -65,18 +55,9 @@ class SettingsIn(BaseModel):
         return v
 
 
-def _ai_state() -> dict:
-    return {
-        "base_url": get_setting("ai_base_url", DEFAULT_SETTINGS["ai_base_url"]),
-        "model": get_setting("ai_model", DEFAULT_SETTINGS["ai_model"]),
-        "api_key_set": has_secret("ai_api_key"),
-    }
-
-
 @router.get("/settings")
 def read_settings() -> dict:
     return {
-        "ai": _ai_state(),
         "poll_interval_minutes": get_setting(
             "poll_interval_minutes", DEFAULT_SETTINGS["poll_interval_minutes"]
         ),
@@ -88,13 +69,6 @@ def read_settings() -> dict:
 
 @router.put("/settings")
 def update_settings(payload: SettingsIn) -> dict:
-    if payload.ai is not None:
-        if payload.ai.base_url is not None:
-            set_setting("ai_base_url", payload.ai.base_url.strip())
-        if payload.ai.model is not None:
-            set_setting("ai_model", payload.ai.model.strip())
-        if payload.ai.api_key is not None:
-            set_secret("ai_api_key", payload.ai.api_key.strip() or None)
     if payload.poll_interval_minutes is not None:
         set_setting("poll_interval_minutes", payload.poll_interval_minutes)
     if payload.digest_time is not None:
@@ -107,7 +81,7 @@ def update_settings(payload: SettingsIn) -> dict:
 
 
 class AITestIn(BaseModel):
-    """字段省略时使用已保存的配置。"""
+    """字段省略时回退到激活档案的已存配置。"""
 
     base_url: str | None = None
     model: str | None = None
@@ -116,9 +90,13 @@ class AITestIn(BaseModel):
 
 @router.post("/ai/test")
 def test_ai(payload: AITestIn) -> dict:
-    base_url = payload.base_url if payload.base_url is not None else get_setting("ai_base_url", "")
-    model = payload.model if payload.model is not None else get_setting("ai_model", "")
-    api_key = payload.api_key if payload.api_key is not None else get_secret("ai_api_key")
+    try:
+        p_base_url, p_model, p_api_key = profiles.resolve_config()
+    except profiles.ProfileNotConfigured:
+        p_base_url, p_model, p_api_key = "", "", None
+    base_url = payload.base_url if payload.base_url is not None else p_base_url
+    model = payload.model if payload.model is not None else p_model
+    api_key = payload.api_key if payload.api_key is not None else p_api_key
     if not base_url or not model:
         return {
             "ok": False,

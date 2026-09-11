@@ -2,24 +2,26 @@
 __pycache__/
 *.py[cod]
 .venv/
+*.egg-info/
+build/
+dist/
+build-test/
 
-# Node
-node_modules/
+# 打包中间产物（由 scripts/sync_frontend.sh 生成，不入库）
+backend/app/static/
+
+# 前端
+frontend/node_modules/
 frontend/dist/
 
-# 本地数据与密钥（正常情况在系统数据目录，此处仅防误放）
+# 运行与工具
+.ruff_cache/
+.DS_Store
+Thumbs.db
+
+# 个人数据与敏感文件（严禁入库/推送）
+personal-data/
+secrets.json
 *.db
 *.db-wal
 *.db-shm
-secrets.json
-.data/
-personal-data
-
-# 环境与 IDE
-.env
-.idea/
-.vscode/
-
-# OS
-Thumbs.db
-.DS_Store
