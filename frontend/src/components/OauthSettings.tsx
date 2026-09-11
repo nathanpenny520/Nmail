@@ -187,7 +187,8 @@ export function OauthConfigCard() {
             <ul className="mt-1 list-disc space-y-0.5 pl-4">
               <li><b>Gmail</b>：Google Cloud 控制台 → 启用 Gmail API → OAuth 客户端 ID（选「桌面应用」类型，回环地址自动放行；Web 类型需登记回调并填写 client_secret）</li>
               <li><b>Outlook</b>：Microsoft Entra 管理中心 → 应用注册 → 账户类型选「任何组织目录 + 个人 Microsoft 账户」→ 平台选「移动和桌面应用」并添加下方回调地址</li>
-              <li>个人 Outlook 账号还需在 Outlook 网页版 设置 → 邮件 → 同步电子邮件，开启「让设备和应用使用 POP/IMAP」与「经过身份验证的 SMTP」</li>
+              <li>个人 Outlook 账号还需在 Outlook 网页版 设置 → 邮件 → 同步电子邮件，开启「让设备和应用使用 POP/IMAP」与「经过身份验证的 SMTP」（每个邮箱各一次）</li>
+              <li>完整步骤与报错对照表见项目仓库 <b>docs/OAuth2 使用指南.md</b>（GitHub 仓库 docs 目录）</li>
             </ul>
             <div className="mt-2 flex items-center gap-2">
               <code className="flex-1 truncate rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-700">{redirectUri}</code>

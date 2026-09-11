@@ -3,6 +3,11 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — docs: OAuth2 使用指南（面向使用者的实操手册）
+- 新增 docs/OAuth2 使用指南.md：三层配置总览（OAuth 客户端 → Nmail 授权 → Outlook 邮箱侧开关）、Gmail/Outlook 客户端注册步骤（含桌面型 vs Web 型选择）、大陆网络与代理策略、**11 条排错对照表**——全部为本日真实踩坑（org_internal / redirect_uri_mismatch / client_secret missing / assertion required / 10061 / authenticated but not connected / 535 / WRONG_VERSION_NUMBER 等）
+- 起因：用户单日连续踩完上述全部坑后的总结诉求；每个 Outlook 邮箱需单独开 POP/IMAP（应用侧链路正确时仍报 authenticated but not connected 的唯一原因）
+- 设置页 OAuth 卡片步骤列表补指南指引；npm build 通过
+
 ## 5d633f0 — fix: SMTP XOAUTH2 认证回调契约（Gmail 发信必败修复）
 - 用户真实发信首测即中：smtplib.auth 的 authobject **首次是无参调用**（取 SASL 初始响应），lambda 带一个必选参数直接 TypeError（`_smtp_auth.<locals>.<lambda>() missing 1 required positional argument`）——Gmail OAuth 发信 100% 失败
 - 修正回调签名：`lambda _challenge=None: auth_str if _challenge is None else ""`——无参调用回初始响应串；服务器 334 挑战（XOAUTH2 错误应答约定）回空串让服务器给出最终错误。IMAP 侧不受影响（imaplib 的 authenticate 恒带参调用）

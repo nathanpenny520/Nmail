@@ -18,6 +18,12 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-2230-OAuth使用指南 ✅
+- 目标: 用户单日踩完全部 OAuth 坑后要求总结——写面向使用者的实操手册
+- 范围: docs/OAuth2 使用指南.md（新增）、OauthSettings.tsx（卡片补指引）、CHANGELOG；纯文档无代码变更
+- 产出: 三层配置总览 + 客户端注册步骤 + 代理策略 + 11 条真实踩坑排错表；顺带当日排障结论——Outlook「authenticated but not connected」= 各邮箱网页版 POP/IMAP 未开（非应用问题，nathanpenny520@outlook.com 正常佐证）；Gmail 10061 = 代理工具未运行
+- 时间: 2026-09-12 完成
+
 ### S-0912-HHMM-网络代理 ✅
 - 目标: 大陆直连 Gmail/Outlook IMAP/SMTP 被墙（实测 10054/10060，httpx 走代理环境变量所以 OAuth 能通而裸 socket 不通）——加「网络代理」：全局代理地址设置（PySocks）+ 账号级「走代理」开关，OAuth 令牌交换自动跟随全局代理
 - 范围: backend（core/netproxy.py 新增、迁移 v14、imap_client/mailbox/accounts/settings/oauth、requirements/pyproject）、frontend（SettingsPage/client/types）、docs
