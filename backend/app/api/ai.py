@@ -131,7 +131,8 @@ def chat_manager_stream(payload: ManagerChatIn):
 def _manager_context(payload: ManagerChatIn) -> str:
     conn = get_conn()
     since = (datetime.now() - timedelta(days=max(1, payload.days))).isoformat(timespec="seconds")
-    where = " WHERE e.date >= ?"
+    # date_sort 为统一 UTC 的排序键（迁移 v7）；混合时区的 e.date 字符串比较会漏算/多算日界
+    where = " WHERE COALESCE(e.date_sort, e.date) >= ?"
     params: list = [since]
     if payload.account_id is not None:
         where += " AND e.account_id = ?"
@@ -140,7 +141,7 @@ def _manager_context(payload: ManagerChatIn) -> str:
         "SELECT e.subject, e.sender_name, e.sender_email, e.date, e.category,"
         " e.importance, e.needs_reply, e.archived_local, e.snippet, a.email AS account_email"
         f" FROM emails e JOIN accounts a ON a.id = e.account_id{where}"
-        " ORDER BY e.date DESC LIMIT 150",
+        " ORDER BY COALESCE(e.date_sort, e.date) DESC LIMIT 150",
         params,
     ).fetchall()
 

@@ -39,11 +39,12 @@ def _collect_stats() -> dict:
 
     rows = conn.execute(
         "SELECT e.id, e.account_id, e.subject, e.sender_name, e.sender_email, e.date,"
+        " COALESCE(e.date_sort, e.date) AS date_key,"
         " e.is_read, e.archived_local, e.category, e.importance, e.needs_reply, e.reply_reason,"
         " a.email AS account_email, a.color AS account_color"
         " FROM emails e JOIN accounts a ON a.id = e.account_id"
-        " WHERE e.date >= ? OR e.date IS NULL"
-        " ORDER BY e.date DESC",
+        " WHERE COALESCE(e.date_sort, e.date) >= ? OR e.date IS NULL"
+        " ORDER BY date_key DESC",
         ((week_ago - timedelta(days=1)).isoformat(),),
     ).fetchall()
 
@@ -88,6 +89,7 @@ def _collect_stats() -> dict:
             "subject": row["subject"],
             "sender": row["sender_name"] or row["sender_email"],
             "date": row["date"],
+            "date_key": row["date_key"] or "",
         }
         if row["needs_reply"] and row["id"] not in sent_ids:
             need_reply.append({**item, "reason": row["reply_reason"] or "", "has_draft": _has_draft(row["id"])})
@@ -95,7 +97,7 @@ def _collect_stats() -> dict:
             important.append({**item, "category": row["category"], "importance": row["importance"],
                               "reason": row["reply_reason"] or ""})
 
-    important.sort(key=lambda x: (x["importance"] != "critical", x["date"] or ""), reverse=False)
+    important.sort(key=lambda x: (x["importance"] != "critical", x["date_key"]), reverse=False)
 
     return {
         "date": today.isoformat(),
