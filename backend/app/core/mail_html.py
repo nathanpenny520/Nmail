@@ -3,6 +3,10 @@
 两层防护：
 1. nh3（ammonia）白名单清洗：剔除 script/iframe/事件属性/javascript: URL 等；
 2. 远程图片控制：默认移除 http(s) 图片并统计拦截数；cid 内联图按需转 data URL。
+
+另外 http(s) 链接强制 target="_blank"（rel=noopener 由 nh3 link_rel 添加）：
+前端在 sandbox iframe 里渲染正文，若链接在 iframe 内导航，多数站点以
+X-Frame-Options / CSP frame-ancestors 拒绝被内嵌（浏览器显示「拒绝连接」）。
 """
 from __future__ import annotations
 
@@ -85,6 +89,11 @@ def sanitize_email_html(
             img.decompose()
         elif src == "":
             img.decompose()
+
+    for a in soup.find_all("a"):
+        href = (a.get("href") or "").strip()
+        if href.startswith(("http://", "https://", "//")):
+            a.attrs["target"] = "_blank"
 
     return str(soup), blocked
 

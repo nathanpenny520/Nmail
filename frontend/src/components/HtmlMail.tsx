@@ -7,14 +7,18 @@ interface HtmlMailProps {
 }
 
 /**
- * HTML 邮件沙箱渲染：sandbox 仅 allow-same-origin（禁止脚本/表单/弹窗），
- * 后端已消毒；允许父级读取 scrollHeight 以自适应高度。
+ * HTML 邮件沙箱渲染：sandbox 仅 allow-same-origin + allow-popups（禁止脚本/表单/顶层导航），
+ * 后端已消毒且 http(s) 链接强制 target="_blank"——点击在新标签打开（escaped sandbox），
+ * 避免 iframe 内导航被目标站 X-Frame-Options 拒绝（「拒绝连接」）。
+ * 允许父级读取 scrollHeight 以自适应高度：body 挂 ResizeObserver，
+ * 图片等异步资源加载改变高度时即时复测（定时复测仅兜底）。
  * 正文字号缩放独立于界面字号（zoom 注入沙箱）。
  */
 const BODY_ZOOM: Record<string, number> = { small: 0.85, standard: 1, large: 1.15 }
 
 export default function HtmlMail({ html }: HtmlMailProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const observerRef = useRef<ResizeObserver | null>(null)
   const [height, setHeight] = useState(320)
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -35,8 +39,16 @@ export default function HtmlMail({ html }: HtmlMailProps) {
   }, [])
 
   const handleLoad = () => {
-    // 图片等资源异步加载会改变文档高度，加载后多次复测
-    for (const delay of [0, 500, 1200, 2500, 4000]) {
+    remeasure()
+    // 图片等资源异步加载会改变文档高度：ResizeObserver 即时复测，定时复测兜底
+    const doc = iframeRef.current?.contentDocument
+    observerRef.current?.disconnect()
+    if (doc?.body && typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(remeasure)
+      observer.observe(doc.body)
+      observerRef.current = observer
+    }
+    for (const delay of [500, 1200, 2500, 4000]) {
       setTimeout(remeasure, delay)
     }
   }
@@ -44,7 +56,10 @@ export default function HtmlMail({ html }: HtmlMailProps) {
   // 窗口尺寸变化时复测（换行数变化会改变文档高度）
   useEffect(() => {
     window.addEventListener('resize', remeasure)
-    return () => window.removeEventListener('resize', remeasure)
+    return () => {
+      window.removeEventListener('resize', remeasure)
+      observerRef.current?.disconnect()
+    }
   }, [remeasure])
 
   const style: CSSProperties = { height, width: '100%', border: 'none' }
@@ -54,7 +69,7 @@ export default function HtmlMail({ html }: HtmlMailProps) {
       ref={iframeRef}
       title="邮件正文"
       style={style}
-      sandbox="allow-same-origin"
+      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
       srcDoc={`<style>html{zoom:${zoom}}</style>` + html}
       onLoad={handleLoad}
     />

@@ -16,7 +16,13 @@
 
 ## 进行中
 
-（无——有新会话开工时按下方模板登记）
+### S-0911-1224-外链与正文高度
+- 目标: 修复邮件内 http(s) 外链在沙箱 iframe 内导航被目标站拒绝嵌入（「拒绝连接」）+ 正文高度测量滞后导致显示不全
+- 范围: backend/app/core/mail_html.py、frontend/src/components/HtmlMail.tsx、docs
+- 开始: 2026-09-11 12:24
+- 状态: 进行中
+
+<!-- 有新会话开工时按下方模板登记 -->
 
 ```markdown
 ### S-MMDD-HHmm-<主题>

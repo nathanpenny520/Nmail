@@ -58,7 +58,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | 部分 | 内容 |
 |------|------|
 | `pages/` | InboxPage/ArchivedPage（共用 MailBrowser，分屏+可拖拽）、DraftsPage（草稿分屏）、DigestPage（ECharts 摘要）、ManagerPage（AI 总管家，SSE 流式）、SettingsPage |
-| `components/` | MailBrowser（三态：列表/分屏/全屏）、EmailReader（消毒 iframe+操作栏+AI 面板）、HtmlMail（sandbox=allow-same-origin，高度自适应+zoom 注入）、ComposeModal（Markdown+AI 辅助）、AddAccountModal、AiPanel、NotificationBell（浏览器通知）、Markdown（react-markdown+gfm） |
+| `components/` | MailBrowser（三态：列表/分屏/全屏）、EmailReader（消毒 iframe+操作栏+AI 面板）、HtmlMail（sandbox=allow-same-origin+allow-popups，外链新标签打开，ResizeObserver 高度自适应+zoom 注入）、ComposeModal（Markdown+AI 辅助）、AddAccountModal、AiPanel、NotificationBell（浏览器通知）、Markdown（react-markdown+gfm） |
 | `api/` | `client.ts`（REST 封装，FormData 不设 JSON 头）、`stream.ts`（SSE 解析，错误可见） |
 | 字号系统 | `index.css` 三档 CSS 变量（`--fs-xs/sm/md/lg`），`<html data-font>` 切换（FontApplier 读设置应用）；`t-xs/sm/md/lg` 工具类；正文字号独立经 iframe zoom 注入 |
 
@@ -78,7 +78,7 @@ UID 增量拉取 → 落库+附件落盘 → 白名单(留收件箱)/黑名单(�
 ```
 
 ### 安全模型
-- HTML 邮件：nh3 白名单 → 远程图默认拦截（计数）→ 前端 sandbox iframe（仅 allow-same-origin，无脚本）
+- HTML 邮件：nh3 白名单（http(s) 链接强制 target=_blank + rel=noopener）→ 远程图默认拦截（计数）→ 前端 sandbox iframe（allow-same-origin+allow-popups-to-escape-sandbox，无脚本；外链点击在新标签由浏览器正常打开，不在 iframe 内导航）
 - 发信：multipart/alternative（Markdown→HTML + 纯文本兜底）；草稿 approve 带 In-Reply-To 并归档 Sent
 - 密钥：本地 `secrets.json`（POSIX chmod 600）；AI key 按档案存放（`ai_profile_key:{id}`）且不回传；服务仅 127.0.0.1
 
