@@ -26,6 +26,13 @@
 
 ## 已完成
 
+### S-0911-1230-发版自动化
+- 目标: 发版压成一条命令并沉淀手册，供未来 AI 会话直接使用
+- 范围: scripts/release.sh、docs/RELEASE.md、CLAUDE.md（常用命令）、README、ARCHITECTURE 分发表、CHANGELOG
+- 产出: 提交 ddf3d0d——release.sh（预检→双文件版本号→tag→盯 CI 全绿→取 exe SHA256→自动提 winget 版本 PR；--dry-run 已实测通过）；RELEASE.md 沉淀 winget 全部实战踩坑；**下次发版 = bash scripts/release.sh X.Y.Z，收尾清单见手册**
+- 遗留: 脚本未跑过完整真流程（dry-run 已验），首次真实使用若有出入按 RELEASE.md 故障表修
+- 时间: 2026-09-11 完成
+
 ### S-0911-1249-写信工作台 ✅
 - 目标: 写信从弹框改为全页多标签工作台 + user_drafts 自动存草稿 + TipTap 富文本编辑器（P1+P2 合并一次提交）
 - 范围: backend/app/db/database.py（迁移v8）、backend/app/api/user_drafts.py（新增）、backend/app/core/mail_html.py；frontend/src/pages/ComposePage.tsx（新增）、components/compose/*（新增）、App.tsx、MailBrowser.tsx、api/client.ts、types.ts、index.css；docs
