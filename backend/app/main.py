@@ -17,7 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import api_router
 from app.config import APP_NAME, APP_VERSION
-from app.core import pipeline  # noqa: F401 — 导入即注册 jobs runner（organize）
+from app.core import batch_ops, pipeline  # noqa: F401 — 导入即注册 jobs runner（organize/imap_batch）
 from app.db.database import run_migrations
 from app.scheduler import MailScheduler
 

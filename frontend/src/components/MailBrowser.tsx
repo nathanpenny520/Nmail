@@ -9,7 +9,7 @@ import { useAIEnabled } from '../api/useAI'
 import { useJob } from '../api/useJob'
 import { categoryBadgeMap, useCategories } from '../api/useMeta'
 import {
-  type EmailDetail, type EmailSummary, type FolderInfo, type OrganizeResult,
+  type EmailDetail, type EmailSummary, type FolderInfo, type JobInfo, type OrganizeResult,
 } from '../types'
 import { useCompose } from './compose/ComposeContext'
 import EmailReader from './EmailReader'
@@ -18,6 +18,24 @@ const PAGE_SIZE = 50
 
 const batchBtn =
   'rounded-md border border-indigo-200 bg-white px-1.5 py-0.5 t-sm text-gray-600 transition-colors hover:text-indigo-700 disabled:opacity-50'
+
+/** 后台任务进度条（列表工具条内联显示；job 为 null 或已终态时不渲染）。 */
+function JobProgressBar({ job, label }: { job: JobInfo | null; label: string }) {
+  if (!job || job.status !== 'running') return null
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="h-1.5 w-28 overflow-hidden rounded-full bg-indigo-100">
+        <span
+          className="block h-full rounded-full bg-indigo-500 transition-all duration-500"
+          style={{ width: `${Math.max(5, Math.round(job.progress * 100))}%` }}
+        />
+      </span>
+      <span className="t-xs text-indigo-500">
+        {label} {Math.round(job.progress * 100)}%{job.detail ? ` · ${job.detail}` : ''}
+      </span>
+    </span>
+  )
+}
 
 /**
  * 邮件浏览主界面（聚合收件箱 / 已归档 共用）。
@@ -325,12 +343,29 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   const toggleAll = () =>
     setSelectedIds(allSelected ? [] : [...new Set([...selectedIds, ...items.map((i) => i.id)])])
 
+  // 批量 trash/move：后端转后台 job（打标/归档类仍同步返回）
+  const { job: batchJob, start: startBatchJob } = useJob((finished) => {
+    invalidateMail()
+    if (finished.status === 'failed') {
+      setSyncMessage(`批量操作失败：${finished.detail || '未知错误'}`)
+    } else {
+      const r = (finished.result ?? {}) as { updated?: number; failed?: number }
+      const failedNote = (r.failed ?? 0) > 0 ? `，${r.failed} 封失败` : ''
+      setSyncMessage(`批量操作完成：${r.updated ?? 0} 封${failedNote}`)
+    }
+    setTimeout(() => setSyncMessage(null), 5000)
+  })
+
   const batchMutation = useMutation({
     mutationFn: ({ action, folder: dest }: { action: string; folder?: string }) =>
       api.batchAction(selectedIds, action, dest),
     onSuccess: (result) => {
-      invalidateMail()
       setSelectedIds([])
+      if (result.job_id != null) {
+        startBatchJob(result.job_id)
+        return
+      }
+      invalidateMail()
       const failedNote = result.failed > 0 ? `，${result.failed} 封失败` : ''
       setSyncMessage(`批量操作完成：${result.updated} 封${failedNote}`)
       setTimeout(() => setSyncMessage(null), 5000)
@@ -340,6 +375,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
       setTimeout(() => setSyncMessage(null), 6000)
     },
   })
+  const batchBusy = batchMutation.isPending || batchJob?.status === 'running'
   const runBatch = (action: string, folder?: string) =>
     batchMutation.mutate({ action, folder })
 
@@ -527,21 +563,21 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             <div className="flex flex-wrap items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50/70 px-2 py-1.5">
               <span className="t-sm font-medium text-indigo-700">已选 {selectedIds.length} 封</span>
               <span className="flex-1" />
-              <button className={batchBtn} onClick={() => runBatch('read')} disabled={batchMutation.isPending}>已读</button>
-              <button className={batchBtn} onClick={() => runBatch('unread')} disabled={batchMutation.isPending}>未读</button>
-              <button className={batchBtn} onClick={() => runBatch('star')} disabled={batchMutation.isPending}>星标</button>
+              <button className={batchBtn} onClick={() => runBatch('read')} disabled={batchBusy}>已读</button>
+              <button className={batchBtn} onClick={() => runBatch('unread')} disabled={batchBusy}>未读</button>
+              <button className={batchBtn} onClick={() => runBatch('star')} disabled={batchBusy}>星标</button>
               {!archived && (
-                <button className={batchBtn} onClick={() => runBatch('archive')} disabled={batchMutation.isPending}>归档</button>
+                <button className={batchBtn} onClick={() => runBatch('archive')} disabled={batchBusy}>归档</button>
               )}
               {archived && (
-                <button className={batchBtn} onClick={() => runBatch('unarchive')} disabled={batchMutation.isPending}>恢复</button>
+                <button className={batchBtn} onClick={() => runBatch('unarchive')} disabled={batchBusy}>恢复</button>
               )}
               {accountId != null && (
                 <select
                   className="rounded-md border border-gray-300 bg-white px-1.5 py-1 t-sm text-gray-600 outline-none focus:border-indigo-400 disabled:opacity-50"
                   value=""
                   onChange={(e) => e.target.value && runBatch('move', e.target.value)}
-                  disabled={batchMutation.isPending}
+                  disabled={batchBusy}
                   title="移动到文件夹"
                 >
                   <option value="">移动到…</option>
@@ -555,11 +591,11 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               <button
                 className={`${batchBtn} hover:text-red-600`}
                 onClick={() => runBatch('trash')}
-                disabled={batchMutation.isPending}
+                disabled={batchBusy}
               >
                 删除
               </button>
-              <button className={batchBtn} onClick={() => setSelectedIds([])} disabled={batchMutation.isPending}>
+              <button className={batchBtn} onClick={() => setSelectedIds([])} disabled={batchBusy}>
                 取消
               </button>
               {batchMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500" />}
@@ -581,19 +617,8 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               {folderSyncing && ' · 同步中…'}
             </span>
             {syncMessage && <span className="text-indigo-500">{syncMessage}</span>}
-            {organizeJob && organizeJob.status === 'running' && (
-              <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-28 overflow-hidden rounded-full bg-indigo-100">
-                  <span
-                    className="block h-full rounded-full bg-indigo-500 transition-all duration-500"
-                    style={{ width: `${Math.max(5, Math.round(organizeJob.progress * 100))}%` }}
-                  />
-                </span>
-                <span className="t-xs text-indigo-500">
-                  AI 整理 {Math.round(organizeJob.progress * 100)}%{organizeJob.detail ? ` · ${organizeJob.detail}` : ''}
-                </span>
-              </span>
-            )}
+            <JobProgressBar job={organizeJob} label="AI 整理" />
+            <JobProgressBar job={batchJob} label="批量操作" />
           </div>
         </div>
 

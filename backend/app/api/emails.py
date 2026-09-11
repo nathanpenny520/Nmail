@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.api.deps import mail_error_to_http
-from app.core import imap_client, mailbox
+from app.core import imap_client, jobs, mailbox
 from app.core.mail_html import sanitize_email_html
 from app.db.database import get_conn
 
@@ -31,7 +31,8 @@ class BatchActionIn(BaseModel):
 
 @router.post("/emails/batch-action")
 def batch_action(payload: BatchActionIn) -> dict:
-    """批量操作：归档类纯本地；IMAP 类按账号分组共用连接，文件夹内合并打标。"""
+    """批量操作：归档类纯本地、打标类按账号同步执行；trash/move（较慢）提交
+    后台任务立即返回 job_id（进度/结果经 /api/jobs/* 轮询）。"""
     if not payload.ids:
         raise HTTPException(400, "ids 为空")
     ids = list(dict.fromkeys(payload.ids))
@@ -41,12 +42,16 @@ def batch_action(payload: BatchActionIn) -> dict:
     if action == "move" and not payload.folder:
         raise HTTPException(400, "move 需要目标文件夹")
 
+    # trash/move：逐账号 IMAP 操作，耗时随批量线性增长——异步化（§3.4）
+    if action in ("trash", "move"):
+        job_id = jobs.submit("imap_batch", ids=ids, action=action, folder=payload.folder)
+        return {"ok": True, "job_id": job_id}
+
     conn = get_conn()
     placeholders = ",".join("?" for _ in ids)
     rows = conn.execute(
-        f"SELECT e.id, e.account_id, e.folder, e.uid, a.email AS account_email,"
-        f" a.imap_server, a.imap_port FROM emails e"
-        f" JOIN accounts a ON a.id = e.account_id WHERE e.id IN ({placeholders})",
+        f"SELECT e.id, e.account_id, e.folder, e.uid FROM emails e"
+        f" WHERE e.id IN ({placeholders})",
         ids,
     ).fetchall()
 
@@ -60,7 +65,7 @@ def batch_action(payload: BatchActionIn) -> dict:
         conn.commit()
         return {"ok": True, "updated": len(rows), "failed": 0}
 
-    # IMAP 类：按账号分组，每账号一条连接
+    # 打标类：按账号分组，每账号一条连接，文件夹内合并打标
     by_account: dict[int, list] = {}
     for r in rows:
         by_account.setdefault(r["account_id"], []).append(r)
@@ -71,6 +76,7 @@ def batch_action(payload: BatchActionIn) -> dict:
         "star": (imap_client.FLAGGED_FLAG, True),
         "unstar": (imap_client.FLAGGED_FLAG, False),
     }
+    flag, value = flag_map[action]
 
     updated = 0
     failed = 0
@@ -82,41 +88,20 @@ def batch_action(payload: BatchActionIn) -> dict:
             continue
         try:
             with mailbox.open_imap(handle) as mb:
-                if action in flag_map:
-                    flag, value = flag_map[action]
-                    by_folder: dict[str, list[str]] = {}
-                    for r in account_rows:
-                        by_folder.setdefault(r["folder"], []).append(str(r["uid"]))
-                    for folder, uid_list in by_folder.items():
-                        mb.folder.set(folder)
-                        mb.flag(uid_list, [flag], value)
-                    id_list = [r["id"] for r in account_rows]
-                    col = "is_read" if action in ("read", "unread") else "starred"
-                    val = 1 if action in ("read", "star") else 0
-                    ph = ",".join("?" for _ in id_list)
-                    conn.execute(
-                        f"UPDATE emails SET {col} = ? WHERE id IN ({ph})",
-                        (val, *id_list),
-                    )
-                elif action == "trash":
-                    for r in account_rows:
-                        imap_client.trash_email(mb, r["folder"], r["uid"])
-                    id_list = [r["id"] for r in account_rows]
-                    ph = ",".join("?" for _ in id_list)
-                    conn.execute(f"DELETE FROM emails WHERE id IN ({ph})", id_list)
-                elif action == "move":
-                    for r in account_rows:
-                        new_uid = imap_client.move_email(mb, r["folder"], r["uid"], payload.folder or "")
-                        if new_uid is None:
-                            # 服务器未回新 UID 时不能把旧 uid 带进新文件夹：
-                            # 撞 (account, folder, uid) UNIQUE 且增量同步会跳过它——
-                            # 删除本地行，交下次增量同步按服务器状态重建
-                            conn.execute("DELETE FROM emails WHERE id = ?", (r["id"],))
-                        else:
-                            conn.execute(
-                                "UPDATE emails SET folder = ?, uid = ? WHERE id = ?",
-                                (payload.folder, new_uid, r["id"]),
-                            )
+                by_folder: dict[str, list[str]] = {}
+                for r in account_rows:
+                    by_folder.setdefault(r["folder"], []).append(str(r["uid"]))
+                for folder, uid_list in by_folder.items():
+                    mb.folder.set(folder)
+                    mb.flag(uid_list, [flag], value)
+                id_list = [r["id"] for r in account_rows]
+                col = "is_read" if action in ("read", "unread") else "starred"
+                val = 1 if action in ("read", "star") else 0
+                ph = ",".join("?" for _ in id_list)
+                conn.execute(
+                    f"UPDATE emails SET {col} = ? WHERE id IN ({ph})",
+                    (val, *id_list),
+                )
             updated += len(account_rows)
         except Exception:  # noqa: BLE001 — 单账号失败不影响其他账号
             failed += len(account_rows)

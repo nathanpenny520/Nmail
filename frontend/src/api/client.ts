@@ -171,7 +171,7 @@ export const api = {
       body: JSON.stringify({ action, folder }),
     }),
   batchAction: (ids: number[], action: string, folder?: string) =>
-    request<{ ok: boolean; updated: number; failed: number }>('/api/emails/batch-action', {
+    request<{ ok: boolean; updated: number; failed: number; job_id?: number }>('/api/emails/batch-action', {
       method: 'POST',
       body: JSON.stringify({ ids, action, ...(folder ? { folder } : {}) }),
     }),
