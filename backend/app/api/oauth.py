@@ -7,19 +7,21 @@
 
 client_id 由用户自建 OAuth 客户端后填入设置页（教程：docs/
 自建邮箱客户端 Gmail+Outlook OAuth2 完整教程.md）。回调地址 =
-http://localhost:{端口}/oauth/callback——端口随进程监听端口动态生成
-（run.py 端口被占时会顺延），桌面型 OAuth 客户端对 localhost 回环不校验端口。
+http://localhost:{端口}{客户端登记路径}——端口随进程监听端口动态生成
+（run.py 端口被占时会顺延），桌面型 OAuth 客户端对 localhost 回环不校验端口；
+路径不豁免，登记为根路径的客户端（如公开桌面端凭据）走 "/" 回调（见回调节）。
 """
 from __future__ import annotations
 
 import html
 import re
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from app.api.accounts import COLOR_PALETTE
+from app.config import DIST_DIR
 from app.core import oauth, sync as sync_engine
 from app.db.database import get_conn
 
@@ -29,15 +31,15 @@ callback_router = APIRouter(tags=["oauth"])
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-def _redirect_uri(request: Request) -> str:
+def _redirect_uri(request: Request, path: str = oauth.CALLBACK_PATH) -> str:
     server = request.scope.get("server")
     port = server[1] if server else 8720
-    return f"http://localhost:{port}{oauth.CALLBACK_PATH}"
+    return f"http://localhost:{port}{path}"
 
 
 @router.get("/status")
 def oauth_status(request: Request) -> dict:
-    """各服务商配置状态 + 应登记的回调地址（设置页展示与复制）。"""
+    """各服务商配置状态 + 各自应登记的回调地址（设置页展示与复制）。"""
     providers = []
     for provider in oauth.PROVIDERS.values():
         client = oauth.get_client(provider.key)
@@ -46,22 +48,26 @@ def oauth_status(request: Request) -> dict:
         if client_id:
             masked = (f"{client_id[:6]}…{client_id[-8:]}"
                       if len(client_id) > 18 else client_id)
+        path = oauth.callback_path(client)
         providers.append({
             "key": provider.key,
             "name": provider.name,
             "configured": client is not None,
             "client_id_masked": masked,
+            "redirect_path": path,
+            "redirect_uri": _redirect_uri(request, path),
             "domains": list(provider.domains),
             "imap_server": provider.imap_server,
             "smtp_server": provider.smtp_server,
         })
-    return {"redirect_uri": _redirect_uri(request), "providers": providers}
+    return {"providers": providers}
 
 
 class OauthConfigIn(BaseModel):
     provider: str
     client_id: str = ""
     client_secret: str = ""
+    redirect_path: str = ""  # 客户端控制台登记的回调路径；空 = 默认 /oauth/callback
 
 
 @router.put("/config")
@@ -71,7 +77,11 @@ def save_oauth_config(payload: OauthConfigIn) -> dict:
         raise HTTPException(400, "未知的服务商")
     if payload.client_id.strip() and payload.client_id.strip() == payload.client_secret.strip():
         raise HTTPException(400, "client_secret 不能与 client_id 相同")
-    oauth.save_client(payload.provider, payload.client_id, payload.client_secret)
+    path = payload.redirect_path.strip() or oauth.CALLBACK_PATH
+    if not path.startswith("/") or path.startswith("//") \
+            or any(c.isspace() or c in "?#" for c in path):
+        raise HTTPException(400, "回调路径需以 / 开头，且不含空格与 ? #（登记为根路径的客户端填 /）")
+    oauth.save_client(payload.provider, payload.client_id, payload.client_secret, path)
     return {"ok": True, "configured": oauth.configured(payload.provider)}
 
 
@@ -95,7 +105,7 @@ def start_authorization(payload: OauthAuthorizeIn, request: Request) -> dict:
     if client is None:
         raise HTTPException(400, f"尚未配置 {provider.name} 的 OAuth 客户端，"
                                  "请先到 设置-邮箱账号-OAuth2 登录 填写 client_id")
-    redirect_uri = _redirect_uri(request)
+    redirect_uri = _redirect_uri(request, oauth.callback_path(client))
     state, flow = oauth.create_flow(email, payload.provider, redirect_uri)
     auth_url = oauth.build_auth_url(
         provider, client_id=client["client_id"], redirect_uri=redirect_uri,
@@ -118,6 +128,21 @@ def flow_status(state: str) -> dict:
 
 
 # ── 回环回调（非 /api 前缀，浏览器直接导航）──────────────────────
+
+@callback_router.get(oauth.ROOT_CALLBACK_PATH)
+def root_or_oauth_callback(code: str = "", state: str = "", error: str = "") -> Response:
+    """根路径双身份：带 state 的是回环 OAuth 回调，不带的是 SPA 首页。
+
+    登记为 loopback 根路径的客户端（公开桌面端凭据）授权重定向落在 "/"，
+    与前端首页同路径——授权重定向必带 state，据此分流；api_router 先于 SPA
+    挂载注册，此路由只在精确 "/" 上拦截，其余路径仍由前端接管。
+    """
+    if state:
+        return oauth_callback(code=code, state=state, error=error)
+    if DIST_DIR is not None and (DIST_DIR / "index.html").is_file():
+        return FileResponse(DIST_DIR / "index.html")
+    raise HTTPException(404, "前端未构建")
+
 
 @callback_router.get(oauth.CALLBACK_PATH)
 def oauth_callback(code: str = "", state: str = "", error: str = "") -> HTMLResponse:

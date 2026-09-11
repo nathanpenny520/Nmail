@@ -269,7 +269,7 @@ export interface paths {
         };
         /**
          * Oauth Status
-         * @description 各服务商配置状态 + 应登记的回调地址（设置页展示与复制）。
+         * @description 各服务商配置状态 + 各自应登记的回调地址（设置页展示与复制）。
          */
         get: operations["oauth_status_api_oauth_status_get"];
         put?: never;
@@ -332,6 +332,30 @@ export interface paths {
          * @description 前端轮询授权结果：pending | done | error。未知/过期 state 返回 404。
          */
         get: operations["flow_status_api_oauth_flow__state__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Root Or Oauth Callback
+         * @description 根路径双身份：带 state 的是回环 OAuth 回调，不带的是 SPA 首页。
+         *
+         *     登记为 loopback 根路径的客户端（公开桌面端凭据）授权重定向落在 "/"，
+         *     与前端首页同路径——授权重定向必带 state，据此分流；api_router 先于 SPA
+         *     挂载注册，此路由只在精确 "/" 上拦截，其余路径仍由前端接管。
+         */
+        get: operations["root_or_oauth_callback__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1305,6 +1329,11 @@ export interface components {
              * @default
              */
             client_secret: string;
+            /**
+             * Redirect Path
+             * @default
+             */
+            redirect_path: string;
         };
         /** OrganizeIn */
         OrganizeIn: {
@@ -2123,6 +2152,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    root_or_oauth_callback__get: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

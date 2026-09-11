@@ -1,13 +1,11 @@
 """Nmail 本地服务入口。
 
 仅绑定 127.0.0.1，托管 /api 与已构建的前端静态文件。
-前端目录按运行形态解析：wheel 安装（app/static）→ PyInstaller 冻结资源 → 源码开发（frontend/dist）。
+前端目录解析（DIST_DIR）在 config.py——api 层根路径 OAuth 回调也要读它。
 """
 from __future__ import annotations
 
-import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
@@ -16,30 +14,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import api_router
-from app.config import APP_NAME, APP_VERSION
+from app.config import APP_NAME, APP_VERSION, DIST_DIR
 from app.core import batch_ops, pipeline  # noqa: F401 — 导入即注册 jobs runner（organize/imap_batch）
 from app.db.database import cleanup_retention, run_migrations
 from app.scheduler import MailScheduler
-
-
-def _find_dist_dir() -> Path | None:
-    here = Path(__file__).resolve().parent  # .../app（源码或 site-packages）
-    candidates: list[Path] = []
-    if getattr(sys, "frozen", False):  # PyInstaller 单文件：只用随包资源
-        base = Path(getattr(sys, "_MEIPASS", None) or Path(sys.executable).parent)
-        candidates.append(base / "app" / "static")
-    else:
-        # 源码开发：frontend/dist 优先（跟随每次构建），app/static 是打包快照，
-        # 两者并存时若优先 static 会让开发者一直看到旧界面
-        candidates.append(here.parents[1] / "frontend" / "dist")
-        candidates.append(here / "static")
-    for p in candidates:
-        if p.is_dir():
-            return p
-    return None
-
-
-DIST_DIR = _find_dist_dir()
 
 scheduler = MailScheduler()
 

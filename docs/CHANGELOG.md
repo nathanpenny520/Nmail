@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — OAuth 回调路径按客户端可配置（loopback 根路径兼容）
+- 背景：用户拟内置公开桌面客户端凭据实现一键授权（方案文档含凭据值，审核后仅存本机不入库）。经审核：**凭据值不入仓库**（TB 源码明文禁止复用——"Don't copy these values for your own application"；公开仓库即分发，Google/Mozilla 均扫描公开代码），只采纳其技术基座——回调路径可配置；凭据由用户在各机设置页自行粘贴（secrets.json 随数据目录持久化，双机各配一次）
+- 后端：`oauth_client:{provider}` 存储新增 `redirect_path`（缺省 `/oauth/callback`，坏值兜底回退默认；默认值不落盘保持旧配置结构不变）；授权 URL 与令牌交换按客户端路径拼装回调地址；`GET /` 新增根路径回调——按 state 参数与 SPA 首页分流（授权重定向必带 state），api_router 先于 SPA 挂载注册故仅拦截精确 `/`；`DIST_DIR` 解析从 main.py 移至 config.py（api 层需读取，避免循环导入）
+- 前端：回调地址下沉到各服务商行内（地址随登记路径变化，带复制按钮），编辑面板新增「回调路径」输入；`/api/oauth/status` 响应移除顶层 `redirect_uri`、改为逐服务商 `redirect_path` + `redirect_uri`（**接口变更**，openapi.json 快照与 schema.d.ts 已同步再生成）
+- 动机（技术事实）：Google/微软对 localhost 回环只豁免端口、不豁免路径——登记为根路径 `http://localhost` 的客户端（公开桌面端凭据均如此）必须以 `/` 回调，原固定 `/oauth/callback` 必报 redirect_uri_mismatch
+- 验证：pytest 88 例全绿（新增 redirect_path 往返/坏值兜底/状态端点契约/根路径分流 5 例）；ruff（app 门禁）通过；npm build（含 tsc）通过；隔离实例冒烟——根路径无 state 出 SPA、带 state 出回调页、SPA 子路由不受影响、未构建时 404
+- 遗留：真实凭据端到端授权待用户双机（Windows/macOS）各粘贴一次后验证；tests/ 目录 3 处既有 ruff 提示（F841/SIM117 等，官方门禁只查 app/）不属本变更
+
 ## 58c2216 — docs: OAuth2 使用指南（面向使用者的实操手册）
 - 新增 docs/OAuth2 使用指南.md：三层配置总览（OAuth 客户端 → Nmail 授权 → Outlook 邮箱侧开关）、Gmail/Outlook 客户端注册步骤（含桌面型 vs Web 型选择）、大陆网络与代理策略、**11 条排错对照表**——全部为本日真实踩坑（org_internal / redirect_uri_mismatch / client_secret missing / assertion required / 10061 / authenticated but not connected / 535 / WRONG_VERSION_NUMBER 等）
 - 起因：用户单日连续踩完上述全部坑后的总结诉求；每个 Outlook 邮箱需单独开 POP/IMAP（应用侧链路正确时仍报 authenticated but not connected 的唯一原因）

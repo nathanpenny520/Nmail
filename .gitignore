@@ -25,6 +25,8 @@ secrets.json
 *.db
 *.db-wal
 *.db-shm
+# 含第三方 OAuth 凭据值的方案文档（审核结论：凭据值永不入库）
+docs/内置公开OAuth凭证一键授权方案.md
 
 # 参考代码
 reference/

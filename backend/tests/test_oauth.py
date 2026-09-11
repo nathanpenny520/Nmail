@@ -95,6 +95,26 @@ def test_save_client_roundtrip_and_clear():
         set_secret(oauth.client_key("gmail"), None)
 
 
+def test_save_client_redirect_path_roundtrip():
+    """根路径登记的公开桌面客户端：redirect_path 落盘；默认路径不落盘；坏值兜底回退默认。"""
+    try:
+        oauth.save_client("gmail", "cid-rp", redirect_path="/")
+        assert oauth.get_client("gmail") == {
+            "client_id": "cid-rp", "client_secret": "", "redirect_path": "/"}
+        assert oauth.callback_path(oauth.get_client("gmail")) == "/"
+
+        oauth.save_client("gmail", "cid-rp", redirect_path=" /oauth/callback ")
+        assert oauth.get_client("gmail") == {"client_id": "cid-rp", "client_secret": ""}
+        assert oauth.callback_path(oauth.get_client("gmail")) == oauth.CALLBACK_PATH
+
+        assert oauth.callback_path(None) == oauth.CALLBACK_PATH  # 未配置
+        assert oauth.callback_path({"client_id": "x"}) == oauth.CALLBACK_PATH  # 旧配置缺字段
+        for bad in ("http://evil.com", "//evil.com", "/a b", "/x?y=1", "/x#z"):
+            assert oauth.callback_path({"redirect_path": bad}) == oauth.CALLBACK_PATH
+    finally:
+        set_secret(oauth.client_key("gmail"), None)
+
+
 # ── 令牌存储与刷新（httpx 打桩，不出网）──────────────────────
 
 def _seed_token(account_id: int, *, expires_in: float, refresh: str = "rt-old") -> None:
@@ -242,28 +262,45 @@ def test_api_status_and_config_roundtrip():
     resp = client.get("/api/oauth/status")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["redirect_uri"].startswith("http://localhost:")
-    assert data["redirect_uri"].endswith("/oauth/callback")
+    assert "redirect_uri" not in data  # 回调地址随各客户端登记路径逐服务商给出
     keys = {p["key"] for p in data["providers"]}
     assert keys == {"gmail", "outlook"}
+    for p in data["providers"]:  # 未配置 → 默认路径
+        assert p["redirect_path"] == "/oauth/callback"
+        assert p["redirect_uri"].startswith("http://localhost:")
+        assert p["redirect_uri"].endswith("/oauth/callback")
 
     try:
         assert client.put("/api/oauth/config", json={
             "provider": "gmail", "client_id": "api-cid"}).json()["configured"] is True
+        # 根路径登记的客户端：redirect_path 落盘且回调地址随之变化
+        assert client.put("/api/oauth/config", json={
+            "provider": "outlook", "client_id": "api-ms", "redirect_path": "/"}).json()["configured"] is True
         status = client.get("/api/oauth/status").json()
         gmail = next(p for p in status["providers"] if p["key"] == "gmail")
+        outlook = next(p for p in status["providers"] if p["key"] == "outlook")
         assert gmail["configured"] is True
         assert "api-cid" in gmail["client_id_masked"]
+        assert gmail["redirect_uri"].endswith("/oauth/callback")
+        assert outlook["redirect_path"] == "/"
+        assert outlook["redirect_uri"].endswith("/")
         assert client.put("/api/oauth/config", json={
             "provider": "gmail", "client_id": "", "client_secret": ""}).json()["configured"] is False
+        assert client.put("/api/oauth/config", json={
+            "provider": "outlook", "client_id": "", "client_secret": ""}).json()["configured"] is False
     finally:
         set_secret(oauth.client_key("gmail"), None)
+        set_secret(oauth.client_key("outlook"), None)
 
 
 def test_api_config_rejects_unknown_provider_and_same_secret():
     assert client.put("/api/oauth/config", json={"provider": "yandex", "client_id": "x"}).status_code == 400
     assert client.put("/api/oauth/config", json={
         "provider": "gmail", "client_id": "same", "client_secret": "same"}).status_code == 400
+    for bad in ("oauth/callback", "//x", "/a b", "/x?y"):  # 路径需以 / 开头且无空白/?#
+        resp = client.put("/api/oauth/config", json={
+            "provider": "gmail", "client_id": "c", "redirect_path": bad})
+        assert resp.status_code == 400
 
 
 def test_api_authorize_requires_configured_client():
@@ -285,6 +322,21 @@ def test_api_authorize_rejects_bad_email_or_domain():
         set_secret(oauth.client_key("gmail"), None)
 
 
+def test_api_authorize_uses_client_redirect_path():
+    """授权 URL 的 redirect_uri 按客户端登记路径拼装（根路径客户端 → http://localhost:{port}/）。"""
+    oauth.save_client("gmail", "cid-path", redirect_path="/")
+    try:
+        resp = client.post("/api/oauth/authorize", json={"email": "u@gmail.com", "provider": "gmail"})
+        assert resp.status_code == 200
+        state = resp.json()["state"]
+        qs = parse_qs(urlsplit(resp.json()["auth_url"]).query)
+        assert qs["redirect_uri"][0].startswith("http://localhost:")
+        assert qs["redirect_uri"][0].endswith("/")
+        assert oauth.get_flow(state)["redirect_uri"] == qs["redirect_uri"][0]
+    finally:
+        set_secret(oauth.client_key("gmail"), None)
+
+
 def test_api_flow_poll_unknown_state_404():
     assert client.get("/api/oauth/flow/nope").status_code == 404
 
@@ -293,6 +345,22 @@ def test_api_callback_invalid_state_page():
     resp = client.get("/oauth/callback", params={"code": "x", "state": "invalid"})
     assert resp.status_code == 200
     assert "授权回调无效" in resp.text
+
+
+def test_api_root_path_routes_oauth_callback():
+    """根路径带 state → OAuth 回调页（loopback 根路径登记的客户端走这里，与 SPA 分流）。"""
+    resp = client.get("/", params={"code": "x", "state": "invalid"})
+    assert resp.status_code == 200
+    assert "授权回调无效" in resp.text
+
+
+def test_api_root_without_state_serves_spa_or_404():
+    """根路径不带 state → 前端首页（已构建时）；绝不能落进回调页文案。"""
+    resp = client.get("/")
+    if resp.status_code == 200:
+        assert "授权回调无效" not in resp.text
+    else:
+        assert resp.status_code == 404  # 前端未构建（CI 只跑后端时）
 
 
 def test_api_callback_error_marks_flow():

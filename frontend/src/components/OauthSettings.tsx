@@ -68,10 +68,17 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
   const [editing, setEditing] = useState(false)
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
+  const [redirectPath, setRedirectPath] = useState('/')
+  const [copied, setCopied] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
   const saveMutation = useMutation({
-    mutationFn: () => api.saveOauthConfig({ provider: provider.key, client_id: clientId.trim(), client_secret: clientSecret.trim() }),
+    mutationFn: () => api.saveOauthConfig({
+      provider: provider.key,
+      client_id: clientId.trim(),
+      client_secret: clientSecret.trim(),
+      redirect_path: redirectPath.trim(),
+    }),
     onSuccess: (result) => {
       setEditing(false)
       setMessage(result.configured ? '已保存' : '已清除配置')
@@ -107,7 +114,14 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
         <button
           className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-white hover:text-indigo-600"
           onClick={() => {
-            setEditing((v) => !v)
+            setEditing((v) => {
+              if (!v) {
+                setRedirectPath(provider.redirect_path)
+                setClientId('')
+                setClientSecret('')
+              }
+              return !v
+            })
             setMessage(null)
           }}
         >
@@ -131,6 +145,28 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
             placeholder="client_secret（桌面应用/纯 PKCE 可留空）"
             autoComplete="off"
           />
+          <input
+            className={inputClass}
+            value={redirectPath}
+            onChange={(e) => setRedirectPath(e.target.value)}
+            placeholder="回调路径：自建客户端用 /oauth/callback，登记为根路径的公开桌面客户端用 /"
+            autoComplete="off"
+          />
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-700">{provider.redirect_uri}</code>
+            <button
+              className="inline-flex shrink-0 items-center gap-1 rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+              disabled={!provider.redirect_uri}
+              onClick={() => {
+                void navigator.clipboard.writeText(provider.redirect_uri)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+              }}
+            >
+              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {copied ? '已复制' : '复制'}
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             <button
               className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
@@ -162,9 +198,7 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
 export function OauthConfigCard() {
   const statusQuery = useQuery({ queryKey: ['oauth-status'], queryFn: api.getOauthStatus })
   const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
   const providers = statusQuery.data?.providers ?? []
-  const redirectUri = statusQuery.data?.redirect_uri ?? ''
   const anyConfigured = providers.some((p) => p.configured)
 
   return (
@@ -183,28 +217,14 @@ export function OauthConfigCard() {
       {open && (
         <div className="mt-3 space-y-3">
           <div className="rounded-lg bg-white/70 px-3 py-2 text-xs leading-relaxed text-gray-600">
-            <div className="font-medium text-gray-700">一次性配置：把下方回调地址登记到你的 OAuth 客户端，再把 client_id 填进来</div>
+            <div className="font-medium text-gray-700">一次性配置：在对应服务商行点「配置」，把行内显示的回调地址登记到你的 OAuth 客户端，再把 client_id 填进来</div>
             <ul className="mt-1 list-disc space-y-0.5 pl-4">
               <li><b>Gmail</b>：Google Cloud 控制台 → 启用 Gmail API → OAuth 客户端 ID（选「桌面应用」类型，回环地址自动放行；Web 类型需登记回调并填写 client_secret）</li>
-              <li><b>Outlook</b>：Microsoft Entra 管理中心 → 应用注册 → 账户类型选「任何组织目录 + 个人 Microsoft 账户」→ 平台选「移动和桌面应用」并添加下方回调地址</li>
+              <li><b>Outlook</b>：Microsoft Entra 管理中心 → 应用注册 → 账户类型选「任何组织目录 + 个人 Microsoft 账户」→ 平台选「移动和桌面应用」并添加行内回调地址</li>
+              <li><b>回调路径</b>：自建客户端默认 <code>/oauth/callback</code>；使用登记为根路径 <code>/</code> 的公开桌面客户端时，把路径改成 <code>/</code>（Google/微软只豁免端口不豁免路径）</li>
               <li>个人 Outlook 账号还需在 Outlook 网页版 设置 → 邮件 → 同步电子邮件，开启「让设备和应用使用 POP/IMAP」与「经过身份验证的 SMTP」（每个邮箱各一次）</li>
               <li>完整步骤与报错对照表见项目仓库 <b>docs/OAuth2 使用指南.md</b>（GitHub 仓库 docs 目录）</li>
             </ul>
-            <div className="mt-2 flex items-center gap-2">
-              <code className="flex-1 truncate rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-700">{redirectUri}</code>
-              <button
-                className="inline-flex shrink-0 items-center gap-1 rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
-                disabled={!redirectUri}
-                onClick={() => {
-                  void navigator.clipboard.writeText(redirectUri)
-                  setCopied(true)
-                  setTimeout(() => setCopied(false), 2000)
-                }}
-              >
-                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                {copied ? '已复制' : '复制回调地址'}
-              </button>
-            </div>
           </div>
           {providers.map((p) => <ProviderRow key={p.key} provider={p} />)}
         </div>

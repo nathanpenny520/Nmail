@@ -89,14 +89,16 @@ export interface OauthProviderStatus {
   name: string
   configured: boolean
   client_id_masked: string
+  /** 该客户端登记的回调路径（缺省 /oauth/callback；根路径登记的客户端为 /） */
+  redirect_path: string
+  /** 按监听端口与回调路径拼好的完整回环地址，登记到 OAuth 客户端时使用 */
+  redirect_uri: string
   domains: string[]
   imap_server: string
   smtp_server: string
 }
 
 export interface OauthStatusResp {
-  /** 本进程监听端口对应的回环回调地址，登记到 OAuth 客户端时使用 */
-  redirect_uri: string
   providers: OauthProviderStatus[]
 }
 

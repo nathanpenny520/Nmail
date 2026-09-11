@@ -39,7 +39,7 @@
 
 ## 2. 填进 Nmail 并授权
 
-1. **设置 → 邮箱账号 → OAuth2 授权登录**：对应服务商行点「修改」→ 填 client_id（Web 型再加 client_secret）→ 保存
+1. **设置 → 邮箱账号 → OAuth2 授权登录**：对应服务商行点「修改」→ 填 client_id（Web 型再加 client_secret）→ 保存。**回调路径**保持默认 `/oauth/callback`，并按行内显示的完整地址去控制台登记（Google/微软对 localhost 回环只豁免端口、不豁免路径）；使用登记为根路径的公开桌面客户端时把路径改为 `/`
 2. **添加账号**：输入邮箱地址 → 点「使用 Google/Microsoft 账号授权登录」→ 浏览器完成登录 → 自动建号并后台同步
 3. 已有 OAuth 账号令牌失效时，账号列表点「**重新授权**」即可，不用删号重建
 
@@ -67,7 +67,7 @@
 | 报错 | 原因 | 解法 |
 |---|---|---|
 | `403 org_internal` | 同意屏幕用户类型选了「内部」 | 改「外部」，并把你的邮箱加进测试用户 |
-| `redirect_uri_mismatch` / `invalid_request: redirect_uri ... not valid` | 回调地址没登记或不一致 | 控制台登记 Nmail 设置页显示的回调地址（逐字一致：协议/主机/端口/路径） |
+| `redirect_uri_mismatch` / `invalid_request: redirect_uri ... not valid` | 回调地址没登记或不一致 | 控制台登记 Nmail 设置页显示的回调地址（逐字一致：协议/主机/端口/路径）；路径不对时在设置页对应服务商行内改「回调路径」再重试 |
 | `client_secret is missing` | Web 型客户端没填 secret | 设置页补填 client_secret，或改用桌面型客户端 |
 | `invalid_client` | client_id / secret 填错 | 核对后重填（注意 Entra 密钥复制的是「值」不是「ID」） |
 | `client assertion required` | 桌面流但没开公共客户端 | Entra → 高级设置 → 允许公共客户端流 = 是 |

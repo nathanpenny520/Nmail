@@ -6,8 +6,10 @@
 Gmail+Outlook OAuth2 完整教程.md），Nmail 不内置凭据。
 
 存储约定（secrets.json）：
-- oauth_client:{provider} → JSON {client_id, client_secret?}（secret 可选：桌面型
-  客户端走纯 PKCE 不需要；Web 型客户端必填）
+- oauth_client:{provider} → JSON {client_id, client_secret?, redirect_path?}
+  （secret 可选：桌面型客户端走纯 PKCE 不需要；Web 型客户端必填。redirect_path
+  为该客户端在服务商控制台登记的回调路径，缺省 CALLBACK_PATH——登记为
+  loopback 根路径的公开桌面客户端填 "/"，Google/微软只豁免端口不豁免路径）
 - oauth_token:{account_id} → JSON {provider, email, access_token, refresh_token,
   expires_at}（expires_at 为本地 Unix 时间戳，提前 _TOKEN_MARGIN 秒刷新；
   微软 v2 端点轮换 refresh_token，轮换值随保存覆盖）
@@ -33,6 +35,23 @@ from app.security import get_secret, has_secret, set_secret
 
 CALLBACK_PATH = "/oauth/callback"
 FLOW_TTL = 600  # 授权流程状态有效期（秒），过期即弃
+# 根路径（TB 等公开桌面客户端的 loopback 登记）。api 层据此在 "/" 上挂回调，
+# 以 state 参数与 SPA 首页分流
+ROOT_CALLBACK_PATH = "/"
+
+
+def callback_path(client: dict | None) -> str:
+    """客户端登记的回调路径；未配置或旧配置缺省时用默认值。
+
+    校验宽松放行：仅接受以单个 / 开头、无空白/查询串的路径，其余一律回退默认——
+    坏值不应让授权流程瘫痪，且用户能从设置页回显的完整地址立刻看出问题。
+    """
+    if client:
+        path = str(client.get("redirect_path") or "").strip()
+        if path.startswith("/") and not path.startswith("//") \
+                and not any(c.isspace() or c in "?#" for c in path):
+            return path
+    return CALLBACK_PATH
 _TOKEN_MARGIN = 120  # access_token 提前刷新余量（秒）
 
 _TOKEN_ERR_HINT = {
@@ -131,14 +150,19 @@ def configured(provider_key: str) -> bool:
     return get_client(provider_key) is not None
 
 
-def save_client(provider_key: str, client_id: str, client_secret: str = "") -> None:
+def save_client(provider_key: str, client_id: str, client_secret: str = "",
+                redirect_path: str = "") -> None:
     if not client_id.strip() and not client_secret.strip():
         set_secret(client_key(provider_key), None)  # 双空 = 清除配置
         return
-    set_secret(client_key(provider_key), json.dumps({
+    record = {
         "client_id": client_id.strip(),
         "client_secret": client_secret.strip(),
-    }))
+    }
+    path = redirect_path.strip()
+    if path and path != CALLBACK_PATH:
+        record["redirect_path"] = path  # 默认路径不落盘，保持旧配置结构不变
+    set_secret(client_key(provider_key), json.dumps(record))
 
 
 # ── PKCE 与授权 URL ──────────────────────────────────────────────

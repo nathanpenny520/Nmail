@@ -322,7 +322,7 @@ export const api = {
 
   // ── OAuth2 授权登录（Gmail / Outlook）──
   getOauthStatus: () => request<OauthStatusResp>('/api/oauth/status'),
-  saveOauthConfig: (payload: { provider: string; client_id: string; client_secret?: string }) =>
+  saveOauthConfig: (payload: { provider: string; client_id: string; client_secret?: string; redirect_path?: string }) =>
     request<{ ok: boolean; configured: boolean }>('/api/oauth/config', {
       method: 'PUT',
       body: JSON.stringify(payload),

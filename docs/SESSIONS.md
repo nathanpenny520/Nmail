@@ -18,6 +18,12 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0911-2351-OAuth回调路径
+- 目标: OAuth 回调路径按客户端可配置（`redirect_path` 字段）——兼容登记为 loopback 根路径 `/` 的公开桌面客户端（自用粘贴 TB 凭据场景，**凭据值不进仓库**）；根路径回调与 SPA 首页共存（按 state 参数分流）
+- 范围: backend(config.py 移入 DIST_DIR、main.py、core/oauth.py、api/oauth.py)、frontend(types/client/OauthSettings)、backend/tests/test_oauth.py、docs（ARCHITECTURE/CHANGELOG/OAuth2 使用指南/内置凭据方案审核结论）
+- 备注: 方案文档《内置公开OAuth凭证一键授权方案.md》经审核只采纳 redirect_path 基座部分；内置凭据因 TB 源码明文禁止复用（"Don't copy these values"）且公开仓库即分发，凭据由用户在各机设置页自行粘贴
+- 开工: 2026-09-11 23:51
+
 ### S-0912-2230-OAuth使用指南 ✅
 - 目标: 用户单日踩完全部 OAuth 坑后要求总结——写面向使用者的实操手册
 - 范围: docs/OAuth2 使用指南.md（新增）、OauthSettings.tsx（卡片补指引）、CHANGELOG；纯文档无代码变更
