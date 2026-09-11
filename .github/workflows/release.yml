@@ -5,6 +5,10 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# 创建 Release 并附加二进制需要 GITHUB_TOKEN 的写权限（默认只读）
+permissions:
+  contents: write
+
 jobs:
   # ① wheel 发布到 PyPI —— 用户可用 uvx nmail / pipx install nmail 一条命令运行
   python-package:

@@ -22,10 +22,10 @@ AI 驱动的本地聚合邮箱客户端 · 本地优先 · 隐私自持 · MIT �
 安装 [uv](https://docs.astral.sh/uv/getting-started/installation/) 后执行：
 
 ```bash
-uvx nmail
+uvx --from nmail-app nmail
 ```
 
-uv 自动准备 Python 运行时，无需手动安装 Python / Node。也可 `pip install nmail` 后直接运行 `nmail`。
+uv 自动准备 Python 运行时，无需手动安装 Python / Node。也可 `pip install nmail-app` 后直接运行 `nmail`（PyPI 发行名为 `nmail-app`——`nmail` 已被第三方占用；命令名与产品名不变）。
 
 **③ 源码开发**
 

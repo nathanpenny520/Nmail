@@ -86,7 +86,7 @@ UID 增量拉取 → 落库+附件落盘 → 白名单(留收件箱)/黑名单(�
 | 产物 | 路径 | 说明 |
 |------|------|------|
 | 源码开发 | `python run.py` | 注入 `backend/` 路径后调 `app.cli:main` |
-| PyPI 包 | `pyproject.toml` | 包名 `nmail`，console script `nmail = app.cli:main`；版本需与 `app/config.py` 的 APP_VERSION 同步；前端产物经 `scripts/sync_frontend.sh` 同步进 `backend/app/static` 打入 wheel |
+| PyPI 包 | `pyproject.toml` | 发行名 `nmail-app`（"nmail" 在 PyPI 已被占用），console script `nmail = app.cli:main`；版本需与 `app/config.py` 的 APP_VERSION 同步；前端产物经 `scripts/sync_frontend.sh` 同步进 `backend/app/static` 打入 wheel |
 | 三平台单文件 | `nmail.spec` | PyInstaller onefile；hiddenimports 显式声明 uvicorn 延迟导入子模块；前端资源随包 |
 | 发布流水线 | `.github/workflows/release.yml` | 打 tag `v*` → wheel 发 PyPI（用户 `uvx nmail`）+ Windows/macOS/Linux 二进制挂 GitHub Release |
 

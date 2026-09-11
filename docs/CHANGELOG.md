@@ -3,6 +3,11 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix：发布流水线两项修复（首轮 CI 失败复盘）
+- 发行包名 `nmail` → `nmail-app`：PyPI 上 "nmail" 已被第三方占用（Roman Solyanik 的 SMTP 发信工具），上传 403 "isn't allowed to upload to project"；产品名/命令名不变，uvx 改用 `uvx --from nmail-app nmail`
+- release.yml 顶层加 `permissions: contents: write`：修复三平台 "附加到 GitHub Release" 403（默认 GITHUB_TOKEN 只读）
+- v0.1.0 tag 将重指向修复提交（首轮发布均未成功，无版本号被占用）
+
 ## 98b34f8 — fix：设置页无法下滑
 - 根因：侧栏重构时主容器误设 overflow-hidden，文档流页面（设置/摘要/总管家）超出视口被直接裁掉
 - 主容器改 overflow-y-auto（邮件页自身 h-full 自管滚动，不受影响）
@@ -16,7 +21,7 @@
 
 ## 待提交 — 图标：apple-touch-icon 按 Apple 规范重排
 - 原实现把母版圆角方块+外阴影整幅贴进 180 画布、四角单色填充：iOS 再裁一次圆角会出现「图标套图标」双层圆角与角部接缝，违背 HIG「图内不要自带圆角与阴影，系统自行裁切」
-- gen_icons.py 改为满幅重排：背景按方块自身逐行边缘中位色重建垂直渐变，前景以色距软 alpha 抠出信封+光晕，放大至 74% 居中——系统裁完圆角即自然成图
+- gen_icons.py 改为：母版放大 6% 居中裁切（烘焙的边缘光晕随之移出画布），四角用圆弧内侧取样色铺双线性渐变补透明月牙，内部 100% 保留原图；信封随放大至 ~74% 更饱满
 - 产物同步 frontend/public 与 backend/app/static（后者为打包快照，随 sync 更新）
 
 ## 65d208d — fix：设置页保存体验
