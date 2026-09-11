@@ -18,7 +18,12 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-### S-0911-1440-保存机制调研修复 ✅
+### S-0911-1530-空草稿懒持久化
+- 目标: 尊重"空邮件也能存草稿"的用户行为——点写信不再立即落库（懒持久化，首编辑/显式保存才建行），撤销全部空稿自动清理；标签引入稳定 tabId 支持创建后换绑真实 id
+- 范围: frontend components/compose/ComposeContext.tsx、ComposeForm.tsx、ComposeWorkbench.tsx、components/Layout.tsx、pages/UserDraftsPage.tsx；docs（此前已代提交 S-0911-2500 成果 9480351）
+- 产出: 见 CHANGELOG「空邮件可存草稿（懒持久化）」条目（哈希回填见 git log）
+- 遗留: 上一版遗留的库内空稿不会被自动删（用户关标签选丢弃手动清）；刷新时未保存的 ephemeral 标签内容会丢（有 beforeunload 拦截提示）
+- 时间: 2026-09-11 15:45 完成
 - 目标: 调研草稿箱/写信台保存链路，修复发现的 bug（缓存过期误删草稿等）
 - 范围: frontend components/compose/ComposeContext.tsx、ComposeForm.tsx、pages/UserDraftsPage.tsx；docs
 - 产出: 提交 1c57697（见 CHANGELOG「草稿保存机制调研修复」条目）；机制全貌：点写信即建行 → 编辑 1s 防抖 PATCH + 回写缓存 → 发送/定时/关闭决策前 flush → 空稿在恢复/草稿箱/关闭三处即见即清
@@ -130,7 +135,7 @@
 ### S-0911-2500-AI透明化与设置侧边栏 ✅
 - 目标: ①语气学习（Tone DNA）退役 → 每账号「文风提示词」（迁移 v10 转存旧数据）②AI 总开关（关闭=传统邮件模式，隐藏全部 AI 入口）③设置页改侧边栏分类（通用/邮箱账号/AI 配置/AI 用量/关于）
 - 范围: backend(db/ai/api) + frontend(types/client/useAI新增/SettingsPage重写/Layout/MailBrowser/EmailReader/ComposeForm小改/DigestPage/DraftsPage/ManagerPage) + docs
-- 产出: 待提交（条目见 CHANGELOG 置顶）；ruff + npm build 通过；隔离实例 curl 全往返（迁移 v10 schema、style_prompt 设置/清空、停用态 400 文案、ai_enabled 开关）
+- 产出: 提交 9480351（由写信台会话代提交，条目见 CHANGELOG）；ruff + npm build 通过；隔离实例 curl 全往返（迁移 v10 schema、style_prompt 设置/清空、停用态 400 文案、ai_enabled 开关）
 - 协调: 与草稿保存会话并行无冲突（ComposeForm 新鲜重读后仅加条件渲染）；期间误向真实库插入过测试账号 t@t.com，已当场清理（id=3，无关联数据），真实账号未受影响
 - 遗留: 提交后回填 CHANGELOG 哈希；后端改动需重启 python run.py 生效；AI 总开关与文风提示词待用户真实账号验证
 - 时间: 2026-09-11 深夜 完成

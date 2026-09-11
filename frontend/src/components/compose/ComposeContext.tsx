@@ -6,10 +6,14 @@ import type { Account, EmailDetail, UserDraft } from '../../types'
 import { buildComposeInit } from './quote'
 
 export interface ComposeTab {
+  /** 标签稳定标识：懒持久化创建真实草稿后 tabId 不变、仅换绑 draftId，表单不重挂 */
+  tabId: string
   draftId: number
   mode: string
   title: string
   dirty: boolean
+  /** 尚未落库的空白新邮件：点写信即开，首次编辑/显式保存才创建记录 */
+  ephemeral: boolean
 }
 
 interface ComposeContextValue {
@@ -17,28 +21,30 @@ interface ComposeContextValue {
   /** 各标签对应的草稿数据（新建/恢复时缓存，表单初始化用） */
   drafts: Record<number, UserDraft>
   accounts: Account[]
-  /** 当前激活的写信标签 id；null = 显示底层页面（收件箱等） */
-  activeComposeId: number | null
-  setActiveCompose: (id: number | null) => void
-  openNew: () => Promise<void>
+  /** 当前激活写信标签的 tabId；null = 显示底层页面（收件箱等） */
+  activeTabId: string | null
+  setActiveTab: (tabId: string | null) => void
+  openNew: () => void
   openReply: (mode: 'reply' | 'replyAll' | 'forward', base: EmailDetail) => Promise<void>
   /** 从草稿箱打开已存草稿：已在工作台则仅激活标签 */
   openDraft: (draft: UserDraft) => void
-  updateTab: (draftId: number, patch: Partial<ComposeTab>) => void
+  updateTab: (tabId: string, patch: Partial<Omit<ComposeTab, 'tabId'>>) => void
   /** 表单拿到服务端最新草稿（附件/定时状态变化）后回写缓存 */
   cacheDraft: (draft: UserDraft) => void
-  /** 自动保存成功后同步字段到缓存，保证 openNew 复用/settleClose 判断基于最新内容 */
+  /** 自动保存成功后同步字段到缓存，保证空稿判断等基于最新内容 */
   patchDraft: (draftId: number, patch: Partial<UserDraft>) => void
   /** 表单挂载时登记 flush（立即保存）入口，关闭决策前先冲掉防抖窗口里的未保存内容 */
-  registerFlush: (draftId: number, fn: (() => Promise<void>) | null) => void
+  registerFlush: (tabId: string, fn: (() => Promise<void>) | null) => void
+  /** 懒持久化完成：临时 id 换绑真实草稿（tabId 不变，表单无感） */
+  onEphemeralPersisted: (tempId: number, real: UserDraft) => void
   /** 关闭标签：有未保存改动时先弹确认，否则直接关闭（草稿已自动保存，保留在服务端） */
-  requestClose: (draftId: number) => void
-  /** 关闭确认弹窗里的草稿 id；null 表示无待确认 */
-  pendingCloseId: number | null
+  requestClose: (tabId: string) => void
+  /** 关闭确认弹窗里的标签 id；null 表示无待确认 */
+  pendingCloseTabId: string | null
   /** confirmed=true 丢弃草稿；false 保留草稿仅关标签 */
-  settleClose: (draftId: number, discard: boolean) => Promise<void>
-  /** 发送/定时完成：移除标签、刷新邮件列表 */
-  finishSent: (draftId: number) => void
+  settleClose: (tabId: string, discard: boolean) => Promise<void>
+  /** 发送完成：移除标签、刷新邮件列表 */
+  finishSent: (tabId: string) => void
 }
 
 const ComposeContext = createContext<ComposeContextValue | null>(null)
@@ -53,7 +59,7 @@ function tabTitle(d: Pick<UserDraft, 'subject' | 'to_addrs'>): string {
   return d.subject.trim() || d.to_addrs.split(',')[0]?.trim() || '新邮件'
 }
 
-/** 空白草稿：各字段与正文（剥标签后）全空。空稿不值得保留，见 restore/openNew/settleClose。 */
+/** 空白草稿：各字段与正文（剥标签后）全空。仅用于关闭决策——用户显式保存的空稿是合法数据。 */
 export function isDraftEmpty(d: UserDraft): boolean {
   const text = d.body_html
     .replace(/<[^>]*>/g, ' ')
@@ -64,16 +70,21 @@ export function isDraftEmpty(d: UserDraft): boolean {
   )
 }
 
+function newTabId(): string {
+  return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+}
+
 /**
  * 写信工作台状态中枢（挂 App 级）。写信不走路由：打开标签只是在
- * Layout 主区上方盖一层工作台，收件箱等页面保持挂载（keep-alive），
- * 标签条一键互切。草稿实时落库（user_drafts），刷新后自动恢复标签。
+ * Layout 主区上方盖一层工作台，收件箱等页面保持挂载（keep-alive）。
+ * 草稿懒持久化：「写信」只开本地空白标签，首次编辑/显式保存才落库——
+ * 随手点开的空标签不污染数据库，用户主动存的空稿则合法保留。
  */
 export function ComposeProvider({ children }: { children: ReactNode }) {
   const [tabs, setTabs] = useState<ComposeTab[]>([])
-  const [activeComposeId, setActiveCompose] = useState<number | null>(null)
+  const [activeTabId, setActiveTab] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<number, UserDraft>>({})
-  const [pendingCloseId, setPendingCloseId] = useState<number | null>(null)
+  const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null)
   const restoredRef = useRef(false)
   const queryClient = useQueryClient()
 
@@ -82,58 +93,72 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   const accountsRef = useRef(accounts)
   accountsRef.current = accounts
 
-  // 应用启动恢复：editing/scheduled 的草稿即未关完的标签；
-  // 空白草稿（点了写信没写任何内容）不恢复并顺手清掉，避免刷新后攒一排「新邮件」
+  // 应用启动恢复：editing/scheduled 的草稿都是未关完的标签（含用户显式保存的空稿）
   useEffect(() => {
     if (restoredRef.current) return
     restoredRef.current = true
     Promise.all([api.getUserDrafts('editing'), api.getUserDrafts('scheduled')])
       .then(([editing, scheduled]) => {
-        const junk = editing.drafts.filter(isDraftEmpty)
-        const keep = editing.drafts.filter((d) => !isDraftEmpty(d))
-        for (const d of junk) void api.deleteUserDraft(d.id).catch(() => {})
-        const list = [...scheduled.drafts, ...keep]
+        const list = [...scheduled.drafts, ...editing.drafts]
         setDrafts((prev) => {
           const next = { ...prev }
           for (const d of list) next[d.id] = d
           return next
         })
-        setTabs(list.map((d) => ({ draftId: d.id, mode: d.mode, title: tabTitle(d), dirty: false })))
+        setTabs(
+          list.map((d) => ({
+            tabId: newTabId(),
+            draftId: d.id,
+            mode: d.mode,
+            title: tabTitle(d),
+            dirty: false,
+            ephemeral: false,
+          })),
+        )
       })
       .catch(() => {}) // 恢复失败不打断应用启动
   }, [])
 
-  const addTab = useCallback((draft: UserDraft) => {
+  const addTab = useCallback((draft: UserDraft, ephemeral = false) => {
+    const tabId = newTabId()
     setDrafts((prev) => ({ ...prev, [draft.id]: draft }))
-    setTabs((prev) => [...prev, { draftId: draft.id, mode: draft.mode, title: tabTitle(draft), dirty: false }])
-    setActiveCompose(draft.id)
+    setTabs((prev) => [
+      ...prev,
+      { tabId, draftId: draft.id, mode: draft.mode, title: tabTitle(draft), dirty: false, ephemeral },
+    ])
+    setActiveTab(tabId)
   }, [])
+
+  const openNew = useCallback(() => {
+    const account = accountsRef.current[0]
+    if (!account) return
+    // 已有未落库的空白标签 → 直接复用，避免连点攒一排「新邮件」
+    const existing = tabsRef.current.find((t) => t.ephemeral)
+    if (existing) {
+      setActiveTab(existing.tabId)
+      return
+    }
+    const temp: UserDraft = {
+      id: -Date.now(),
+      account_id: account.id,
+      mode: 'new',
+      in_reply_to: null,
+      to_addrs: '',
+      cc_addrs: '',
+      bcc_addrs: '',
+      subject: '',
+      body_html: '',
+      status: 'editing',
+      send_at: null,
+      attachments: [],
+      created_at: '',
+      updated_at: '',
+    }
+    addTab(temp, true)
+  }, [addTab])
 
   // 防连点：创建请求在途时忽略再次点击
   const creatingRef = useRef(false)
-  const draftsRef = useRef(drafts)
-  draftsRef.current = drafts
-
-  const openNew = useCallback(async () => {
-    const account = accountsRef.current[0]
-    if (!account || creatingRef.current) return
-    // 已有空白草稿标签（点了写信还没写）→ 直接复用，避免连点攒出一排空标签
-    const emptyTab = tabsRef.current.find((t) => {
-      const d = draftsRef.current[t.draftId]
-      return d ? isDraftEmpty(d) : false
-    })
-    if (emptyTab) {
-      setActiveCompose(emptyTab.draftId)
-      return
-    }
-    creatingRef.current = true
-    try {
-      const { draft } = await api.createUserDraft({ account_id: account.id, mode: 'new' })
-      addTab(draft)
-    } finally {
-      creatingRef.current = false
-    }
-  }, [addTab])
 
   const openReply = useCallback(
     async (mode: 'reply' | 'replyAll' | 'forward', base: EmailDetail) => {
@@ -156,8 +181,8 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     [addTab],
   )
 
-  const updateTab = useCallback((draftId: number, patch: Partial<ComposeTab>) => {
-    setTabs((prev) => prev.map((t) => (t.draftId === draftId ? { ...t, ...patch } : t)))
+  const updateTab = useCallback((tabId: string, patch: Partial<Omit<ComposeTab, 'tabId'>>) => {
+    setTabs((prev) => prev.map((t) => (t.tabId === tabId ? { ...t, ...patch } : t)))
   }, [])
 
   const cacheDraft = useCallback((draft: UserDraft) => {
@@ -172,79 +197,89 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const flushMapRef = useRef<Map<number, () => Promise<void>>>(new Map())
-  const registerFlush = useCallback((draftId: number, fn: (() => Promise<void>) | null) => {
-    if (fn) flushMapRef.current.set(draftId, fn)
-    else flushMapRef.current.delete(draftId)
+  const flushMapRef = useRef<Map<string, () => Promise<void>>>(new Map())
+  const registerFlush = useCallback((tabId: string, fn: (() => Promise<void>) | null) => {
+    if (fn) flushMapRef.current.set(tabId, fn)
+    else flushMapRef.current.delete(tabId)
   }, [])
 
-  const openDraft = useCallback(
-    (draft: UserDraft) => {
-      setDrafts((prev) => ({ ...prev, [draft.id]: draft }))
-      setTabs((prev) =>
-        prev.some((t) => t.draftId === draft.id)
-          ? prev
-          : [...prev, { draftId: draft.id, mode: draft.mode, title: tabTitle(draft), dirty: false }],
-      )
-      setActiveCompose(draft.id)
-    },
-    [],
-  )
+  const onEphemeralPersisted = useCallback((tempId: number, real: UserDraft) => {
+    setDrafts((prev) => {
+      if (!(tempId in prev)) return prev
+      const next = { ...prev }
+      delete next[tempId]
+      next[real.id] = real
+      return next
+    })
+    // tabId 不变只换绑 draftId：激活态与挂载中的表单均无需变动
+    setTabs((prev) => prev.map((t) => (t.draftId === tempId ? { ...t, draftId: real.id, ephemeral: false } : t)))
+  }, [])
+
+  const openDraft = useCallback((draft: UserDraft) => {
+    setDrafts((prev) => ({ ...prev, [draft.id]: draft }))
+    const existing = tabsRef.current.find((t) => t.draftId === draft.id)
+    if (existing) {
+      setActiveTab(existing.tabId)
+      return
+    }
+    const tabId = newTabId()
+    setTabs((prev) => [
+      ...prev,
+      { tabId, draftId: draft.id, mode: draft.mode, title: tabTitle(draft), dirty: false, ephemeral: false },
+    ])
+    setActiveTab(tabId)
+  }, [])
 
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
 
-  const removeTab = useCallback((draftId: number) => {
-    const idx = tabsRef.current.findIndex((t) => t.draftId === draftId)
-    const next = tabsRef.current.filter((t) => t.draftId !== draftId)
-    setTabs(next)
-    setActiveCompose((cur) =>
-      cur === draftId ? (next[Math.min(idx, next.length - 1)]?.draftId ?? null) : cur,
-    )
-    setPendingCloseId(null)
-    // 草稿箱列表同步失效（标签关闭/发送后状态可能变化）
-    void queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
-  }, [queryClient])
+  const removeTab = useCallback(
+    (tabId: string) => {
+      const idx = tabsRef.current.findIndex((t) => t.tabId === tabId)
+      const next = tabsRef.current.filter((t) => t.tabId !== tabId)
+      setTabs(next)
+      setActiveTab((cur) => (cur === tabId ? (next[Math.min(idx, next.length - 1)]?.tabId ?? null) : cur))
+      setPendingCloseTabId(null)
+      // 草稿箱列表同步失效（标签关闭/发送后状态可能变化）
+      void queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
+    },
+    [queryClient],
+  )
 
   const requestClose = useCallback(
-    (draftId: number) => {
+    (tabId: string) => {
       // 读 tabsRef 而非闭包：存草稿按钮保存完成后立刻关闭时，状态刚更新
-      const tab = tabsRef.current.find((t) => t.draftId === draftId)
-      if (tab?.dirty) setPendingCloseId(draftId)
-      else removeTab(draftId)
+      const tab = tabsRef.current.find((t) => t.tabId === tabId)
+      if (tab?.dirty) setPendingCloseTabId(tabId)
+      else removeTab(tabId)
     },
     [removeTab],
   )
 
   const settleClose = useCallback(
-    async (draftId: number, discard: boolean) => {
-      // 先冲掉防抖窗口内未保存的内容，再以服务端最新内容为准判断是否空稿
-      // （空稿「保留」没有意义，草稿箱里只会多一行空白，按丢弃处理）
-      await flushMapRef.current.get(draftId)?.().catch(() => {})
-      let isEmpty = false
-      if (!discard) {
-        try {
-          const { draft } = await api.getUserDraft(draftId)
-          isEmpty = isDraftEmpty(draft)
-        } catch {
-          // 草稿已不存在（他处删除），关标签即可
+    async (tabId: string, discard: boolean) => {
+      // 保留路径：先冲掉防抖窗口内未保存的内容（空白新邮件此时尚未落库，flush 即创建），
+      // 再以服务端最新内容判空——空稿「保留」仍保留（用户显式行为），此处仅放弃无主数据
+      if (!discard) await flushMapRef.current.get(tabId)?.().catch(() => {})
+      const tab = tabsRef.current.find((t) => t.tabId === tabId)
+      const draftId = tab?.draftId ?? 0
+      if (draftId > 0) {
+        if (discard) {
+          try {
+            await api.deleteUserDraft(draftId)
+          } catch {
+            // 草稿可能已被其他入口删除；照常关标签
+          }
         }
       }
-      if (discard || isEmpty) {
-        try {
-          await api.deleteUserDraft(draftId)
-        } catch {
-          // 草稿可能已被其他入口删除；照常关标签
-        }
-      }
-      removeTab(draftId)
+      removeTab(tabId)
     },
     [removeTab],
   )
 
   const finishSent = useCallback(
-    (draftId: number) => {
-      removeTab(draftId)
+    (tabId: string) => {
+      removeTab(tabId)
       void queryClient.invalidateQueries({ queryKey: ['emails'] })
       void queryClient.invalidateQueries({ queryKey: ['folders'] })
     },
@@ -267,8 +302,8 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     tabs,
     drafts,
     accounts,
-    activeComposeId,
-    setActiveCompose,
+    activeTabId,
+    setActiveTab,
     openNew,
     openReply,
     openDraft,
@@ -276,8 +311,9 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     cacheDraft,
     patchDraft,
     registerFlush,
+    onEphemeralPersisted,
     requestClose,
-    pendingCloseId,
+    pendingCloseTabId,
     settleClose,
     finishSent,
   }

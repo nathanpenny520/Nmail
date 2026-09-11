@@ -29,11 +29,19 @@ function fmtSendAt(iso: string): string {
 
 /**
  * 单个写信标签的编辑表单。内容变化 1s 防抖自动保存到 user_drafts；
+ * 「写信」开出的空白标签未落库（ephemeral），首次编辑/显式保存才创建记录；
  * 附件选择即上传落盘（刷新/重启后随草稿恢复）；支持定时发送；
  * AI 写作对话框生成富文本直插正文。
  */
-export default function ComposeForm({ draft, accounts }: { draft: UserDraft; accounts: Account[] }) {
-  const { updateTab, requestClose, finishSent, cacheDraft, patchDraft, registerFlush } = useCompose()
+export default function ComposeForm({
+  tabId, draft, accounts,
+}: {
+  tabId: string
+  draft: UserDraft
+  accounts: Account[]
+}) {
+  const { updateTab, requestClose, finishSent, cacheDraft, patchDraft, registerFlush, onEphemeralPersisted } =
+    useCompose()
   const aiEnabled = useAIEnabled()
 
   const [accountId, setAccountId] = useState(draft.account_id)
@@ -55,10 +63,14 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
   const [savedAt, setSavedAt] = useState('')
   const [saveError, setSaveError] = useState(false)
 
+  // ── 草稿 id：ephemeral 标签为负数临时 id，首次保存后换绑真实 id ──
+  const persistedIdRef = useRef(draft.id > 0 ? draft.id : 0)
+  if (draft.id > 0) persistedIdRef.current = draft.id
+
   // 标签标题跟随主题/收件人
   useEffect(() => {
-    updateTab(draft.id, { title: subject.trim() || to.split(',')[0]?.trim() || '新邮件' })
-  }, [subject, to, draft.id, updateTab])
+    updateTab(tabId, { title: subject.trim() || to.split(',')[0]?.trim() || '新邮件' })
+  }, [subject, to, tabId, updateTab])
 
   // ── 自动保存 ──
   const payloadRef = useRef({ account_id: accountId, to_addrs: to, cc_addrs: cc, bcc_addrs: bcc, subject, body_html: bodyHtml })
@@ -81,15 +93,31 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
   const doSave = useCallback(async () => {
     const p = payloadRef.current
     const serialized = JSON.stringify(p)
-    if (serialized === savedRef.current) return
+    // 未落库的空白标签：即使内容无变化，显式保存（存草稿/定时/发附件）也应创建记录
+    if (serialized === savedRef.current && persistedIdRef.current > 0) return
     try {
-      await api.updateUserDraft(draft.id, p)
+      if (persistedIdRef.current > 0) {
+        await api.updateUserDraft(persistedIdRef.current, p)
+        patchDraft(persistedIdRef.current, p) // 缓存同步，空稿判断/标题等不拿过期快照
+      } else {
+        const { draft: real } = await api.createUserDraft({
+          account_id: p.account_id,
+          mode: draft.mode,
+          in_reply_to: draft.in_reply_to,
+          to_addrs: p.to_addrs,
+          cc_addrs: p.cc_addrs,
+          bcc_addrs: p.bcc_addrs,
+          subject: p.subject,
+          body_html: p.body_html,
+        })
+        persistedIdRef.current = real.id
+        onEphemeralPersisted(draft.id, real) // tabId 不变换绑真实草稿，表单不重挂
+      }
       savedRef.current = serialized
       retriedRef.current = false
       setSaveError(false)
       setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }))
-      updateTab(draft.id, { dirty: false })
-      patchDraft(draft.id, p) // 缓存同步，openNew 复用/settleClose 空稿判断才不会拿过期快照
+      updateTab(tabId, { dirty: false })
     } catch {
       setSaveError(true) // 保持 dirty，后续改动会再次触发保存
       // 失败自动重试一次（如后端瞬时不可用）；草稿已删除等情况由重试再次失败终止
@@ -99,23 +127,39 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
         retryTimer.current = window.setTimeout(() => void doSaveRef.current(), 5000)
       }
     }
-  }, [draft.id, updateTab, patchDraft])
+  }, [draft.mode, draft.in_reply_to, draft.id, tabId, updateTab, patchDraft, onEphemeralPersisted])
   const doSaveRef = useRef(doSave)
   doSaveRef.current = doSave
 
+  // 附件/发送/定时等需要真实草稿 id 的操作先确保持久化
+  const ensureRef = useRef<Promise<void> | null>(null)
+  const ensurePersisted = useCallback((): Promise<number> => {
+    if (persistedIdRef.current > 0) return Promise.resolve(persistedIdRef.current)
+    if (!ensureRef.current) {
+      ensureRef.current = doSaveRef.current().finally(() => {
+        ensureRef.current = null
+      })
+    }
+    const inflight = ensureRef.current
+    return inflight.then(() => {
+      if (persistedIdRef.current > 0) return persistedIdRef.current
+      throw new Error('草稿保存失败，请重试')
+    })
+  }, [])
+
   // 关闭决策/发送/定时前，Provider 可调用 flush 冲掉防抖窗口里的未保存内容
   useEffect(() => {
-    registerFlush(draft.id, () => doSaveRef.current())
-    return () => registerFlush(draft.id, null)
-  }, [draft.id, registerFlush])
+    registerFlush(tabId, () => doSaveRef.current())
+    return () => registerFlush(tabId, null)
+  }, [tabId, registerFlush])
 
   useEffect(() => {
     const serialized = JSON.stringify(payloadRef.current)
     if (serialized === savedRef.current) return
-    updateTab(draft.id, { dirty: true })
+    updateTab(tabId, { dirty: true })
     window.clearTimeout(saveTimer.current)
     saveTimer.current = window.setTimeout(() => void doSaveRef.current(), 1000)
-  }, [accountId, to, cc, bcc, subject, bodyHtml, draft.id, updateTab])
+  }, [accountId, to, cc, bcc, subject, bodyHtml, tabId, updateTab])
 
   // 卸载兜底：切标签/收起工作台时把防抖窗口内的最后编辑同步上去
   useEffect(
@@ -131,10 +175,10 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
   // ── 发送 ──
   const sendMutation = useMutation({
     mutationFn: async () => {
-      await doSaveRef.current()
-      return api.sendUserDraft(draft.id)
+      const id = await ensurePersisted()
+      return api.sendUserDraft(id)
     },
-    onSuccess: () => finishSent(draft.id),
+    onSuccess: () => finishSent(tabId),
   })
   const sendNowRef = useRef<() => void>(() => {})
   sendNowRef.current = () => {
@@ -144,8 +188,8 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
   // ── 定时发送 ──
   const scheduleMutation = useMutation({
     mutationFn: async () => {
-      await doSaveRef.current()
-      return api.scheduleDraft(draft.id, schedAt)
+      const id = await ensurePersisted()
+      return api.scheduleDraft(id, schedAt)
     },
     onSuccess: ({ draft: updated }) => {
       cacheDraft(updated)
@@ -153,7 +197,7 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
     },
   })
   const unscheduleMutation = useMutation({
-    mutationFn: () => api.unscheduleDraft(draft.id),
+    mutationFn: () => api.unscheduleDraft(persistedIdRef.current),
     onSuccess: ({ draft: updated }) => cacheDraft(updated),
   })
 
@@ -163,7 +207,8 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
     setAttBusy(true)
     setAttError('')
     try {
-      const { draft: updated } = await api.uploadDraftAttachments(draft.id, files)
+      const id = await ensurePersisted()
+      const { draft: updated } = await api.uploadDraftAttachments(id, files)
       setAtts(updated.attachments)
       cacheDraft(updated)
     } catch (err) {
@@ -175,7 +220,7 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
   const removeAtt = async (attId: number) => {
     setAttError('')
     try {
-      const { draft: updated } = await api.deleteDraftAttachment(draft.id, attId)
+      const { draft: updated } = await api.deleteDraftAttachment(persistedIdRef.current, attId)
       setAtts(updated.attachments)
       cacheDraft(updated)
     } catch (err) {
@@ -373,7 +418,7 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
         <button
           className="rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-700 transition-colors hover:bg-gray-100"
           onClick={() => {
-            void doSaveRef.current().then(() => requestClose(draft.id))
+            void doSaveRef.current().then(() => requestClose(tabId))
           }}
           title="保存并收起标签（草稿保留，下次启动自动恢复）"
         >

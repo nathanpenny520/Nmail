@@ -1,9 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlarmClock, FileText, Loader2, Paperclip, Trash2 } from 'lucide-react'
-import { useEffect } from 'react'
 import { api } from '../api/client'
 import type { UserDraft } from '../types'
-import { isDraftEmpty, useCompose } from '../components/compose/ComposeContext'
+import { useCompose } from '../components/compose/ComposeContext'
 
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleString('zh-CN', {
@@ -12,9 +11,8 @@ function fmtTime(iso: string): string {
 }
 
 /**
- * 草稿箱：写信台已保存的手写草稿（editing + scheduled）。
+ * 草稿箱：写信台已保存的手写草稿（editing + scheduled，含用户显式保存的空稿）。
  * 点击整行回到写信台继续编辑；行尾可彻底删除。
- * 空白草稿（写废的行）不展示并顺手清理。
  */
 export default function UserDraftsPage() {
   const { openDraft } = useCompose()
@@ -31,14 +29,6 @@ export default function UserDraftsPage() {
   })
 
   const drafts = listQuery.data ?? []
-  const visible = drafts.filter((d) => !isDraftEmpty(d))
-
-  // 空白草稿（点了写信没写任何内容）是残留垃圾：不展示并即时清理
-  useEffect(() => {
-    for (const d of drafts) {
-      if (isDraftEmpty(d)) void api.deleteUserDraft(d.id).catch(() => {})
-    }
-  }, [drafts])
 
   const remove = async (id: number) => {
     await api.deleteUserDraft(id)
@@ -57,12 +47,12 @@ export default function UserDraftsPage() {
           <Loader2 className="h-4 w-4 animate-spin" /> 加载中…
         </div>
       )}
-      {!listQuery.isLoading && visible.length === 0 && (
+      {!listQuery.isLoading && drafts.length === 0 && (
         <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center t-sm text-gray-400">
           暂无草稿——写信时点「存草稿」或直接关标签保留，都会出现在这里
         </div>
       )}
-      {visible.map((d: UserDraft) => (
+      {drafts.map((d: UserDraft) => (
         <div
           key={d.id}
           onClick={() => openDraft(d)}

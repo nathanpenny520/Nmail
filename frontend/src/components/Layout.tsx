@@ -35,7 +35,7 @@ const ICON_ONLY_BELOW = 132 // 窄于此宽度切换为纯图标模式
 
 /** 主区顶部的同层标签条：收件箱（固定）+ 已打开的侧栏页面 + 各写信标签，一键互切（对齐网页邮箱）。 */
 function WorkspaceTabs() {
-  const { tabs, activeComposeId, setActiveCompose, openNew, requestClose } = useCompose()
+  const { tabs, activeTabId, setActiveTab, openNew, requestClose } = useCompose()
   const location = useLocation()
   const navigate = useNavigate()
   const aiEnabled = useAIEnabled()
@@ -65,7 +65,7 @@ function WorkspaceTabs() {
     if (location.pathname === path) navigate('/')
   }
 
-  const inboxActive = activeComposeId === null && location.pathname === '/'
+  const inboxActive = activeTabId === null && location.pathname === '/'
   const tabCls = (active: boolean) =>
     `flex min-w-0 shrink-0 items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 t-sm transition-colors ${
       active
@@ -79,7 +79,7 @@ function WorkspaceTabs() {
         className={tabCls(inboxActive)}
         onClick={() => {
           if (location.pathname !== '/') navigate('/')
-          setActiveCompose(null)
+          setActiveTab(null)
         }}
       >
         <Inbox className="h-3.5 w-3.5 shrink-0" />
@@ -88,13 +88,13 @@ function WorkspaceTabs() {
       {pageTabs.filter((path) => aiEnabled || !AI_ONLY_TABS.includes(path)).map((path) => {
         const meta = PAGE_TABS[path]
         const Icon = meta.icon
-        const active = activeComposeId === null && location.pathname === path
+        const active = activeTabId === null && location.pathname === path
         return (
           <div
             key={path}
             onClick={() => {
               if (location.pathname !== path) navigate(path)
-              setActiveCompose(null)
+              setActiveTab(null)
             }}
             className={`${tabCls(active)} cursor-pointer group`}
             title={meta.label}
@@ -116,9 +116,9 @@ function WorkspaceTabs() {
       })}
       {tabs.map((tab) => (
         <div
-          key={tab.draftId}
-          onClick={() => setActiveCompose(tab.draftId)}
-          className={`${tabCls(tab.draftId === activeComposeId)} max-w-56 cursor-pointer group`}
+          key={tab.tabId}
+          onClick={() => setActiveTab(tab.tabId)}
+          className={`${tabCls(tab.tabId === activeTabId)} max-w-56 cursor-pointer group`}
           title={tab.title}
         >
           {tab.dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" title="有未保存改动" />}
@@ -128,7 +128,7 @@ function WorkspaceTabs() {
             className="shrink-0 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100"
             onClick={(e) => {
               e.stopPropagation()
-              requestClose(tab.draftId)
+              requestClose(tab.tabId)
             }}
             title="关闭标签"
           >
@@ -138,7 +138,7 @@ function WorkspaceTabs() {
       ))}
       <button
         className="mb-1 flex shrink-0 items-center rounded-md p-1 text-gray-500 transition-colors hover:bg-gray-200/60 hover:text-indigo-600"
-        onClick={() => void openNew()}
+        onClick={() => openNew()}
         title="新邮件"
       >
         <Plus className="h-4 w-4" />
@@ -155,8 +155,8 @@ export default function Layout() {
   const dragging = useRef(false)
   const widthRef = useRef(navWidth)
   widthRef.current = navWidth
-  const { activeComposeId, setActiveCompose } = useCompose()
-  const composing = activeComposeId !== null
+  const { activeTabId, setActiveTab } = useCompose()
+  const composing = activeTabId !== null
 
   // 侧栏从视口左缘开始，宽度即鼠标 X
   const startDrag = (e: ReactMouseEvent) => {
@@ -220,7 +220,7 @@ export default function Layout() {
               end={to === '/'}
               title={label}
               className={({ isActive }) => navLinkClass(isActive)}
-              onClick={() => setActiveCompose(null)}
+              onClick={() => setActiveTab(null)}
             >
               <Icon className="h-4 w-4 shrink-0" />
               {!iconOnly && <span className="truncate">{label}</span>}
@@ -233,7 +233,7 @@ export default function Layout() {
             to="/settings"
             title="设置"
             className={({ isActive }) => `${navLinkClass(isActive)} flex-1`}
-            onClick={() => setActiveCompose(null)}
+            onClick={() => setActiveTab(null)}
           >
             <Settings className="h-4 w-4 shrink-0" />
             {!iconOnly && <span className="truncate">设置</span>}
