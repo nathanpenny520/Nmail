@@ -168,16 +168,9 @@ def chat_with_context(
     history: list[dict] | None = None,
     account_id: int | None = None,
 ) -> str:
-    """基于邮件上下文回答问题。history: [{role, content}]"""
+    """基于邮件上下文回答问题（非流式）。history: [{role, content}]"""
     base_url, model, api_key = _ai_config()
-    system = prompts.CHAT_SYSTEM
-    messages: list[dict] = [{"role": "system", "content": system}]
-    if history:
-        messages.extend(history[-6:])
-    messages.append({
-        "role": "user",
-        "content": f"【邮件上下文】\n{context_text[:8000]}\n\n【问题】{question}",
-    })
+    messages = _chat_messages(context_text, question, history)
     try:
         text, usage = llm.chat_messages(base_url, model, api_key, messages)
         log_usage("chat", model,
@@ -187,6 +180,44 @@ def chat_with_context(
         log_usage("chat", model, 0, 0, False, str(exc)[:200], account_id)
         raise
     return text.strip()
+
+
+def _chat_messages(context_text: str, question: str, history: list[dict] | None) -> list[dict]:
+    messages: list[dict] = [{"role": "system", "content": prompts.CHAT_SYSTEM}]
+    if history:
+        messages.extend(history[-6:])
+    messages.append({
+        "role": "user",
+        "content": f"【邮件上下文】\n{context_text[:8000]}\n\n【问题】{question}",
+    })
+    return messages
+
+
+def chat_with_context_stream(
+    context_text: str,
+    question: str,
+    history: list[dict] | None = None,
+    account_id: int | None = None,
+):
+    """流式版问答：返回一个 yield 文本增量的生成器；结束时写用量日志。"""
+    base_url, model, api_key = _ai_config()
+    messages = _chat_messages(context_text, question, history)
+    usage: dict = {"prompt_tokens": 0, "completion_tokens": 0}
+
+    def generate():
+        parts: list[str] = []
+        try:
+            for delta in llm.iter_deltas(base_url, model, api_key, messages, usage_out=usage):
+                parts.append(delta)
+                yield delta
+        except Exception as exc:  # noqa: BLE001
+            log_usage("chat", model, usage.get("prompt_tokens", 0),
+                      usage.get("completion_tokens", 0), False, str(exc)[:200], account_id)
+            raise
+        log_usage("chat", model, usage.get("prompt_tokens", 0),
+                  usage.get("completion_tokens", 0), True, question[:80], account_id)
+
+    return generate()
 
 
 def write_assist(text: str, op: str, instruction: str | None = None) -> str:

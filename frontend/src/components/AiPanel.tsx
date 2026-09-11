@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, Send, Sparkles, X } from 'lucide-react'
-import { api } from '../api/client'
+import { streamChat } from '../api/stream'
 import type { EmailDetail } from '../types'
+import Markdown from './Markdown'
 
 interface AiPanelProps {
   email: EmailDetail
@@ -18,31 +19,41 @@ const QUICK_PROMPTS = ['总结这封邮件', '翻译成中文', '提取关键信
 export default function AiPanel({ email, onClose }: AiPanelProps) {
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [input, setInput] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [messages, busy])
+  }, [messages, pending])
 
   const ask = async (question: string) => {
     const q = question.trim()
-    if (!q || busy) return
+    if (!q || pending) return
+    setError('')
     const history = messages.slice(-6)
-    setMessages((m) => [...m, { role: 'user', content: q }])
+    setMessages((m) => [...m, { role: 'user', content: q }, { role: 'assistant', content: '' }])
     setInput('')
-    setBusy(true)
+    setPending(true)
+    let received = false
     try {
-      const { answer } = await api.aiChat({
-        email_id: email.id,
-        question: q,
-        history: history.map((m) => ({ role: m.role, content: m.content })),
-      })
-      setMessages((m) => [...m, { role: 'assistant', content: answer }])
+      await streamChat(
+        '/api/ai/chat/stream',
+        { email_id: email.id, question: q, history },
+        (delta) => {
+          received = true
+          setMessages((m) => {
+            const next = [...m]
+            next[next.length - 1] = { role: 'assistant', content: next[next.length - 1].content + delta }
+            return next
+          })
+        },
+      )
     } catch (err) {
-      setMessages((m) => [...m, { role: 'assistant', content: `出错了：${(err as Error).message}` }])
+      setError((err as Error).message || '请求失败')
+      if (!received) setMessages((m) => m.slice(0, -1))
     } finally {
-      setBusy(false)
+      setPending(false)
     }
   }
 
@@ -58,7 +69,7 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
       </div>
 
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
-        {messages.length === 0 && (
+        {messages.length === 0 && !pending && (
           <div className="space-y-2">
             <p className="text-xs leading-relaxed text-gray-400">
               基于当前邮件（{email.subject || '无主题'}）向 AI 提问：
@@ -74,24 +85,37 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
             ))}
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs leading-relaxed ${
-                m.role === 'user'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-800'
-              }`}
-            >
-              {m.content}
+        {messages.map((m, i) => {
+          const isLast = i === messages.length - 1
+          if (m.role === 'user') {
+            return (
+              <div key={i} className="flex justify-end">
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-violet-600 px-3 py-2 text-xs leading-relaxed text-white">
+                  {m.content}
+                </div>
+              </div>
+            )
+          }
+          if (isLast && pending && m.content === '') {
+            return (
+              <div key={i} className="flex justify-start">
+                <div className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3 py-2 text-xs text-gray-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> 思考中…
+                </div>
+              </div>
+            )
+          }
+          return (
+            <div key={i} className="flex justify-start">
+              <div className="max-w-[90%] rounded-2xl bg-gray-100 px-3 py-2 text-xs text-gray-800">
+                <Markdown text={m.content} />
+              </div>
             </div>
-          </div>
-        ))}
-        {busy && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3 py-2 text-xs text-gray-500">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> 思考中…
-            </div>
+          )
+        })}
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+            {error}
           </div>
         )}
       </div>
@@ -104,12 +128,12 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && ask(input)}
-            disabled={busy}
+            disabled={pending}
           />
           <button
             className="rounded-lg bg-violet-600 p-2 text-white hover:bg-violet-700 disabled:opacity-50"
             onClick={() => ask(input)}
-            disabled={busy || !input.trim()}
+            disabled={pending || !input.trim()}
           >
             <Send className="h-4 w-4" />
           </button>

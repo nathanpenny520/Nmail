@@ -8,6 +8,7 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { api } from '../api/client'
 import { CATEGORY_META } from '../types'
+import Markdown from '../components/Markdown'
 
 echarts.use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
 
@@ -205,9 +206,9 @@ export default function DigestPage() {
               <div className="flex items-center gap-2 text-xs font-semibold text-violet-700">
                 <Sparkles className="h-3.5 w-3.5" /> AI 综述
               </div>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
-                {digest.ai_overview}
-              </p>
+              <div className="mt-1 text-sm leading-relaxed text-gray-800">
+                <Markdown text={digest.ai_overview} />
+              </div>
             </div>
           )}
 

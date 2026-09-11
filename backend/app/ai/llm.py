@@ -52,6 +52,30 @@ def chat_messages(base_url: str, model: str, api_key: str | None,
     return content, usage
 
 
+def iter_deltas(base_url: str, model: str, api_key: str | None,
+                messages: list[dict], usage_out: dict | None = None,
+                max_tokens: int = 2000, temperature: float = 0.3):
+    """流式对话：逐段 yield 文本增量；支持时在最后一个 chunk 回填 token 用量。"""
+    client = build_client(base_url, api_key)
+    stream = client.chat.completions.create(
+        model=model,
+        messages=messages,  # type: ignore[arg-type]
+        max_tokens=max_tokens,
+        temperature=temperature,
+        stream=True,
+        stream_options={"include_usage": True},
+    )
+    for chunk in stream:
+        if usage_out is not None and getattr(chunk, "usage", None) is not None:
+            usage_out["prompt_tokens"] = getattr(chunk.usage, "prompt_tokens", 0) or 0
+            usage_out["completion_tokens"] = getattr(chunk.usage, "completion_tokens", 0) or 0
+        if chunk.choices:
+            delta = chunk.choices[0].delta
+            content = getattr(delta, "content", None)
+            if content:
+                yield content
+
+
 def test_connection(base_url: str, model: str, api_key: str | None) -> dict:
     """发送一个极小请求，验证端点 / 密钥 / 模型名是否可用。"""
     started = time.perf_counter()

@@ -1,7 +1,9 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Loader2, Send, Sparkles } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
+import { streamChat } from '../api/stream'
+import Markdown from '../components/Markdown'
 import type { Account } from '../types'
 
 interface ChatMsg {
@@ -16,40 +18,57 @@ const QUICK_PROMPTS = [
   '这周收到过哪些验证码？',
 ]
 
-/** 「AI 总管家」：基于最近邮件全量上下文的全局对话入口。 */
+/** 「AI 总管家」：基于最近邮件全量上下文的全局对话入口（流式 + Markdown）。 */
 export default function ManagerPage() {
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [input, setInput] = useState('')
   const [accountId, setAccountId] = useState<number | null>(null)
   const [days, setDays] = useState(7)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
   const accounts: Account[] = accountsQuery.data?.accounts ?? []
 
-  const chatMutation = useMutation({
-    mutationFn: (question: string) =>
-      api.aiManagerChat({
-        question,
-        history: messages.slice(-6).map((m) => ({ role: m.role, content: m.content })),
-        account_id: accountId ?? undefined,
-        days,
-      }),
-    onSuccess: (result) => {
-      setMessages((m) => [...m, { role: 'assistant', content: result.answer }])
-    },
-  })
-
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [messages, chatMutation.isPending])
+  }, [messages, pending])
 
-  const ask = (question: string) => {
+  const ask = async (question: string) => {
     const q = question.trim()
-    if (!q || chatMutation.isPending) return
-    setMessages((m) => [...m, { role: 'user', content: q }])
+    if (!q || pending) return
+    setError('')
     setInput('')
-    chatMutation.mutate(q)
+    setMessages((m) => [...m, { role: 'user', content: q }, { role: 'assistant', content: '' }])
+    setPending(true)
+    let received = false
+    try {
+      await streamChat(
+        '/api/ai/chat-manager/stream',
+        {
+          question: q,
+          history: messages.slice(-6),
+          account_id: accountId ?? undefined,
+          days,
+        },
+        (delta) => {
+          received = true
+          setMessages((m) => {
+            const next = [...m]
+            next[next.length - 1] = { role: 'assistant', content: next[next.length - 1].content + delta }
+            return next
+          })
+        },
+      )
+    } catch (err) {
+      setError((err as Error).message || '请求失败')
+      if (!received) {
+        setMessages((m) => m.slice(0, -1)) // 移除空的占位回复
+      }
+    } finally {
+      setPending(false)
+    }
   }
 
   return (
@@ -84,7 +103,7 @@ export default function ManagerPage() {
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-4">
-        {messages.length === 0 && (
+        {messages.length === 0 && !pending && (
           <div className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/40 p-6">
             <p className="text-xs leading-relaxed text-gray-500">
               我是你的邮件总管家，基于你选择的范围（{accountId ? '指定账号' : '全部账号'} · 最近 {days} 天）
@@ -103,27 +122,38 @@ export default function ManagerPage() {
             </div>
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
-                m.role === 'user' ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-800'
-              }`}
-            >
-              {m.content}
+        {messages.map((m, i) => {
+          const isLast = i === messages.length - 1
+          if (m.role === 'user') {
+            return (
+              <div key={i} className="flex justify-end">
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-violet-600 px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
+                  {m.content}
+                </div>
+              </div>
+            )
+          }
+          // 回复中且该条还没有内容 → 打字指示
+          if (isLast && pending && m.content === '') {
+            return (
+              <div key={i} className="flex justify-start">
+                <div className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3.5 py-2.5 text-xs text-gray-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> 正在翻你的邮件…
+                </div>
+              </div>
+            )
+          }
+          return (
+            <div key={i} className="flex justify-start">
+              <div className="max-w-[90%] rounded-2xl bg-gray-100 px-3.5 py-2.5 text-[13px] text-gray-800">
+                <Markdown text={m.content} />
+              </div>
             </div>
-          </div>
-        ))}
-        {chatMutation.isPending && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3.5 py-2.5 text-xs text-gray-500">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> 正在翻你的邮件…
-            </div>
-          </div>
-        )}
-        {chatMutation.isError && (
+          )
+        })}
+        {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
-            {(chatMutation.error as Error).message}
+            {error}
           </div>
         )}
       </div>
@@ -136,12 +166,12 @@ export default function ManagerPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && ask(input)}
-            disabled={chatMutation.isPending}
+            disabled={pending}
           />
           <button
             className="rounded-lg bg-violet-600 p-2 text-white hover:bg-violet-700 disabled:opacity-50"
             onClick={() => ask(input)}
-            disabled={chatMutation.isPending || !input.trim()}
+            disabled={pending || !input.trim()}
           >
             <Send className="h-4 w-4" />
           </button>
