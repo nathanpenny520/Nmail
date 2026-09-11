@@ -3,6 +3,28 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## e5eafc9 — fix：R7 本地库保留策略——启动时通知留 500 条 / ai_logs 留 90 天，UIDVALIDITY 重置清附件孤儿目录
+- notifications / ai_logs 无界增长（本地单机库长年累月必胀）；启动（lifespan）执行 `cleanup_retention`——通知按 id 留最新 500 条、ai_logs 删 90 天前；断言验证 600→500、过期清/近期留
+- UIDVALIDITY 重置分支此前只删 emails 行（附件行随 FK 级联），磁盘 `accounts/<id>/attachments/<email_id>/` 成孤儿——重置时先收旧 id 再顺带 rmtree 各自目录
+- 验证：ruff（F,TID251）；隔离库断言 600→500 / 过期 0 / 近期 1
+
+## d1c3a1b — 功能：批量 trash/move 异步化——core/batch_ops 任务体 + 端点分支 + 前端批量进度条
+- 批量删信/移动需逐账号 IMAP 操作，耗时随批量线性增长——从 api/emails.batch_action 迁出为 `core/batch_ops.imap_batch_job`（按账号分组共用连接、进度按账号上报，R2 删行重建语义原样保留）；端点对 trash/move 立即返回 `{ok, job_id}`，打标/归档类快操作仍同步返回原结构
+- 前端：`useJob` 第二实例跟踪批量任务，列表工具条内联进度条（JobProgressBar 复用），终态展示 `{updated, failed}` 并失效列表缓存；批量按钮在任务运行期间统一禁用
+- 验证：ruff、npm build；隔离实例端到端——trash 立即返回 job_id、IMAP 不可达时任务 done 且 `{updated:0, failed:3}`（服务器失败不动本地语义保持）、进度字段就位
+
+## 8f6b417 — 功能：AI 整理异步化——organize 提交 job 立即返回 + 进度上报，前端 useJob + 进度条（M3 核心）
+- 「AI 整理」原同步执行（大账号分钟级 HTTP 挂起、双击重复触发）——迁为 `core/pipeline.organize_job`：逐账号补分类并按账号上报进度，结果结构不变写入 result_json；`POST /api/ai/organize` 立即返回 `{job_id}`，同账号重复点击去重复用同一 running 任务
+- 前端新增 `api/useJob.ts`（1s 轮询、终态自动停并回调）：MailBrowser「AI 整理」改走 job + 工具条内联进度条（百分比+当前账号），完成后展示与原版一致的汇总文案
+- runner 注册机制：业务模块 `@jobs.runner(kind)` 自注册，main.py 导入 pipeline/batch_ops 确保注册先于可用
+- 验证：ruff、npm build；隔离实例端到端——organize 立即返回 job_id、任务 done 携带 skipped_no_ai 语义、重复提交去重；执行器单测式断言（进度 0.5→1.0、result_json 落库）
+
+## fde0745 — 功能：jobs 基建——迁移 v12 + core/jobs 执行器 + GET /api/jobs/*（M3 第一步）
+- 迁移 v12（只追加）：jobs 表（kind/account_id/status/progress/stage/detail/result_json/时间戳）+ running 索引
+- `core/jobs.py`：ThreadPoolExecutor(max_workers=2) + `@runner(kind)` 注册表 + `submit`（dedupe 可选：同 kind+同账号 running 复用）+ `report`（进度/阶段/明细）+ 失败进表不进 HTTP + `get_job`/`list_active`
+- 新增 `GET /api/jobs/active`（观测口）与 `GET /api/jobs/{id}`（前端轮询用，404 语义）
+- 验证：ruff；隔离实例——v12 生效（max version=12）、active 空列表、404 形态、执行器提交→上报→done 全链路断言
+
 ## 9f0bc5e — 工程化：ruff banned-api 固化分层规则（T4）
 - pyproject `banned-api` 禁 `app.api`（main/api/tests 白名单放行），CLAUDE.md 检查命令升级 `--select F,TID251`
 - 实测：core/ 下违规 import 被拦截、现库全绿——「core/scheduler/ai 不得依赖 API 层」从约定变成门禁

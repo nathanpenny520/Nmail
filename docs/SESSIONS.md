@@ -60,6 +60,13 @@
 
 ## 已完成
 
+### S-0911-1700-提升计划M3
+- 目标: 执行 IMPROVEMENT_PLAN M3（缩窄版）——jobs 基建、AI 整理与批量 trash/move 异步化（HTTP 立即返回+进度上报）、前端 useJob+进度条、R7 启动保留策略
+- 范围: backend db/database.py（迁移 v12）、core/{jobs（新增）,batch_ops（新增）,pipeline,sync}.py、api/{jobs（新增）,ai,emails}.py、main.py；frontend types.ts、api/{client.ts,useJob.ts（新增）}、MailBrowser.tsx；docs
+- 产出: 四个功能提交——① jobs 基建 fde0745：迁移 v12 jobs 表 + core/jobs 执行器（ThreadPool 2 线程、@runner 注册、submit 去重、report 进度、失败进表）+ GET /api/jobs/{id,active}；② AI 整理异步化 8f6b417：organize 迁为 pipeline.organize_job（逐账号进度），端点立即返回 job_id 且同账号去重，前端 useJob（1s 轮询终态自停）+ 工具条内联进度条；③ 批量 trash/move 异步化 d1c3a1b：core/batch_ops.imap_batch_job（按账号进度，R2 语义与「服务器成功才动本地」保持），端点分支（打标/归档仍同步），前端批量进度条+运行期禁用；④ R7 e5eafc9：启动 cleanup_retention（通知 500 条/ai_logs 90 天，断言 600→500）+ UIDVALIDITY 重置清附件孤儿目录。每项 ruff（F,TID251）+ npm build + 隔离实例端到端冒烟
+- 遗留: **真实账号大邮箱的「AI 整理」进度体验待用户重启后验证**（含批量删信/移动）；sync 历史是否统一入 jobs 表（可观测性）待评估（计划遗留）；M4 待认领（3.7 类型生成/useFlash/format/ChatView/SettingsPage 拆分、T1 pytest、T2/T3 CI、T5 版本号）
+- 时间: 2026-09-11 17:15 完成
+
 ### S-0911-1632-提升计划M2
 - 目标: 执行 IMPROVEMENT_PLAN M2——发送通路归一、调度器脱离 API 层（A2）、AI 收口（deps 错误翻译 + _logged 用量记账 + categories 单一来源 + /api/meta + 前端消费）、T4 分层规则
 - 范围: backend api/{emails,user_drafts,drafts,accounts,ai,deps（新增）,meta（新增）}.py、ai/{tasks,prompts,digest,categories（新增）}.py、core/{mailbox,outbox（新增）,pipeline}.py、scheduler.py、pyproject.toml；frontend types.ts、api/{client.ts,useMeta.ts（新增）}、MailBrowser.tsx、DigestPage.tsx；docs

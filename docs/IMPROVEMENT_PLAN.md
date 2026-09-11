@@ -152,7 +152,7 @@ AUTO_ARCHIVE = frozenset({"promo"})
 ```
 prompts 文本由 `CATEGORIES` 生成；tasks 校验、pipeline.AUTO_ARCHIVE、digest.CATEGORIES、前端徽章/图表色全部消费同一来源。**加分类从改 6 处 → 改 1 处**。
 
-### 3.4 任务执行器 `core/jobs.py`：长任务异步化 + 进度（解 A9，范围缩窄）
+### 3.4 任务执行器 `core/jobs.py`：长任务异步化 + 进度（解 A9，范围缩窄）✅ 已落地（fde0745 基建 + 8f6b417 organize + d1c3a1b 批量 trash/move）
 
 > 2026-09-11 修订：同步/首翻已由 `start_sync` 后台化并自带进度（本轮已落地），**本项范围缩窄为**：AI 整理（organize）、批量 IMAP 动作两个仍同步执行的入口异步化；sync 类 job 是否统一入 jobs 表（换取历史可观测性）待动手时再评估。
 
@@ -238,7 +238,7 @@ npx openapi-typescript frontend/openapi.json -o frontend/src/api/schema.d.ts
 | R4 | `/api/emails/send` 裸 `f.filename` 路径注入 | emails.py:399 | 随 3.6 删除端点即消 | ✅ 提前完成（393293e） |
 | R5 | 恶意网页可 multipart 无预检 POST 触发本机发信（drive-by）；DNS rebinding 同理 | main.py | S1 Origin/Host 校验 | ✅（9ab675a） |
 | R6 | 混合时区 `e.date` 字符串比较，日界漏算/多算 | ai.py:134、digest.py:44 | 统一 `COALESCE(e.date_sort, e.date)` | ✅（56b9883） |
-| R7 | notifications / ai_logs 无界增长；UIDVALIDITY 重置后附件文件成孤儿 | sync.py:202、notifications | 启动时保留策略（通知 500 条 / ai_logs 90 天）；重置分支顺带删 `attachments/<email_id>/` 目录 | ☐ |
+| R7 | notifications / ai_logs 无界增长；UIDVALIDITY 重置后附件文件成孤儿 | sync.py:202、notifications | 启动时保留策略（通知 500 条 / ai_logs 90 天）；重置分支顺带删 `attachments/<email_id>/` 目录 | ✅（e5eafc9） |
 | R8 | 总管家未配 AI 时先落库了用户消息 → 孤儿消息 | ai.py chat_manager_stream | 配置解析挪到 `append_message` 之前 | ✅（d34a54a） |
 | R9 | settings 表单值损坏 → 所有读取请求 500 | database.py get_setting | json.loads 包 try 返回 default | ✅（208443c） |
 | R10 | 首翻 bulk 全量驻留内存 | imap_client.py | 3.5 分块拉取（已落地） | ✅ 已修（e8c0084） |
@@ -283,7 +283,7 @@ npx openapi-typescript frontend/openapi.json -o frontend/src/api/schema.d.ts
 - 3.3 deps.py + `_logged` + `ai/categories.py` + `/api/meta` + 前端消费（M）
 - 验收：AI 新端点零样板（拿 write 端点当样例对照）；真实账号发一封 user_draft + 一封 AI 草稿 approve，串线与 Sent 归档正常
 
-**M3 AI 整理异步化（范围缩窄；同步/首翻/分块已落地）**
+**M3 AI 整理异步化（✅ 已完成 2026-09-11，S-0911-1700 会话：fde0745 / 8f6b417 / d1c3a1b / e5eafc9；真实账号大邮箱进度体验待用户重启后验证）**
 - 3.4 jobs 表 + core/jobs.py + AI 整理与批量 IMAP 动作两端点改造（M）｜ 前端 useJob + 进度条（M）｜ R7 启动清理随此落地
 - 验收：AI 整理 HTTP 立即返回、全程可进度可视；真实账号验证
 

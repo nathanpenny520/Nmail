@@ -38,7 +38,8 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `api/user_drafts.py` | 写信台草稿：CRUD + 附件上传/删除 + 定时/取消 + 发送 | 编辑防抖 PATCH 自动保存；附件选择即落盘 `data_dir/drafts/<id>/`（行在 user_draft_attachments，草稿删除/发送成功即清理）；发送为薄壳，核心在 `core/outbox.send_user_draft`（API 与调度器共用）；回复草稿带 `In-Reply-To`（软引用邮件 id） |
 | `api/meta.py` | `GET /api/meta`：分类枚举下发（key/label/color/badge_cls） | 真源 `ai/categories.py`；前端 `useMeta` 拉取一次长期缓存，徽章/图表色不再手写 |
 | `api/compose_extras.py` | 写信台模板/签名 KV（Markdown 文本整存整取）+ `POST /markdown` Markdown→消毒 HTML 转换 | 存 settings KV（compose_templates/compose_signatures） |
-| `api/ai.py` | 单邮件问答、总管家问答（会话持久化）、写作辅助、用量、AI 整理 | 问答/总管家均有 `/stream` SSE 版本，中途错误以 `{"error":...}` 事件下发；对话/写作接受 `profile_id` 临时切换档案；写作 `op=compose` 按指令整篇写邮件，`want_html=true` 附带 Markdown→消毒 HTML 结果 |
+| `api/ai.py` | 单邮件问答、总管家问答（会话持久化）、写作辅助、用量、AI 整理 | 问答/总管家均有 `/stream` SSE 版本，中途错误以 `{"error":...}` 事件下发；对话/写作接受 `profile_id` 临时切换档案；写作 `op=compose` 按指令整篇写邮件，`want_html=true` 附带 Markdown→消毒 HTML 结果；AI 整理（organize）为异步 job——立即返回 job_id，同账号去重 |
+| `api/jobs.py` | `GET /api/jobs/active`（观测口）、`GET /api/jobs/{id}`（前端 useJob 轮询） | 任务体注册在业务模块（pipeline/batch_ops），core/jobs 只管调度与登记 |
 | `api/notifications.py` | 通知中心 | — |
 | `api/sender_lists.py` | 白/黑名单（邮箱或 @域名） | 管线中零成本先过滤 |
 | `api/chats.py` | 总管家会话持久化（chat_sessions/messages）：列表/消息/置顶/重命名/删除 | 列表 置顶>updated_at 倒序；删除级联；`append_message` 供 ai.py 落库复用 |
@@ -49,6 +50,8 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `core/mailbox.py` | 账号凭据/连接统一入口（全项目唯一 MailConfig 构造点） | `load_account`（账号行+密钥 → AccountHandle，缺一抛 `MailError`）、`has_credentials`、`open_imap`；API 层 `_imap_for` 等拼装点逐步迁移至此（IMPROVEMENT_PLAN §3.1）；添加账号入库前的表单直连预检除外 |
 | `core/sync.py` | UID 增量同步 | 分块断点续拉（每块入库+断点同一事务提交，中断从断点续传）；`start_sync` 后台线程执行（防重入），进度写账号 status=`syncing`+status_detail；网络异常自动重试一次；首同步限 30 天；UIDVALIDITY 变化自愈；登录失败→`auth_error`+一次性通知；同步完成后触发 AI 流水线 |
 | `core/outbox.py` | 写信台草稿发送唯一实现（API 与调度器共用） | `send_user_draft`：状态校验→地址解析→消毒+纯文本派生→`mailbox.send_message`→标记 sent/清附件；失败抛 `MailError`（后台线程无 HTTPException）；`draft_dir` 为附件目录唯一出处 |
+| `core/jobs.py` | 轻量任务执行器（ThreadPool 2 线程） | `@runner(kind)` 注册表 + `submit`（dedupe 防双击）+ `report`（进度/阶段入 jobs 表）+ 失败进表；`GET /api/jobs/*` 供前端 useJob 1s 轮询 |
+| `core/batch_ops.py` | 批量 IMAP 动作任务体（trash/move 异步化） | 按账号分组共用连接、进度按账号上报；R2 语义（拿不到新 UID 删行交增量重建）与「服务器成功才动本地」保持；打标/归档仍在端点同步执行 |
 | `core/pipeline.py` | 白/黑名单 → AI 批量分类 → 营销自动归档 → 生成草稿 → 通知 | AI 未配置诚实降级；批量 20 封/请求 |
 | `core/mail_html.py` | nh3 白名单消毒 + 远程图片拦截 + cid 内联 + Markdown→HTML | 两层防护：消毒在前、图片控制在后；另供发件方向 `sanitize_outgoing_html`（放行 data: 内嵌图）与 `html_to_plain_text`/`wrap_email_body_html` |
 | `core/update_check.py` | 应用内更新检查：GitHub Releases 对比 + 通知中心提醒 | 仅匿名 GET api.github.com（UA=Nmail/版本），24h 缓存；开关 `update_check_enabled`；按 ref_id=版本去重，升级后自动清理旧提醒 |
@@ -72,9 +75,9 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 
 ## 数据表（nmail.db）
 
-`settings`(KV) · `notifications` · `accounts`(含 ai_permission/style_prompt 文风提示词) · `emails`(含分类/needs_reply/archived_local) · `attachments` · `sync_state`(uid/uidvalidity) · `emails_fts`(trigram) · `drafts`(pending/sent/discarded) · `user_drafts`(写信台草稿，editing/scheduled/sent，含 send_at) · `user_draft_attachments`(写信台附件行，文件在 data_dir/drafts/<id>/) · `ai_logs`(全量 AI 用量) · `sender_lists` · `digest_history` · `chat_sessions`/`chat_messages`（P4 会话持久化）
+`settings`(KV) · `notifications`(保留 500 条) · `accounts`(含 ai_permission/style_prompt 文风提示词) · `emails`(含分类/needs_reply/archived_local) · `attachments` · `sync_state`(uid/uidvalidity) · `emails_fts`(trigram) · `drafts`(pending/sent/discarded) · `user_drafts`(写信台草稿，editing/scheduled/sent，含 send_at) · `user_draft_attachments`(写信台附件行，文件在 data_dir/drafts/<id>/) · `ai_logs`(全量 AI 用量，保留 90 天) · `sender_lists` · `digest_history` · `chat_sessions`/`chat_messages`（P4 会话持久化） · `jobs`(后台任务进度/结果)
 
-迁移版本：v1 基础表 → v2 邮件核心+FTS → v3 AI 层 → v4 摘要+ToneDNA → v5 会话持久化 → v7 date_sort 排序修复 → v8 user_drafts → v9 草稿附件+send_at → v10 语气学习退役→文风提示词（tone_dna 数据转存 style_prompt 后删列）+ AI 总开关（settings KV `ai_enabled`） → v11 清语气学习残留用量日志（ai_logs task_type='tone_dna'）
+迁移版本：v1 基础表 → v2 邮件核心+FTS → v3 AI 层 → v4 摘要+ToneDNA → v5 会话持久化 → v7 date_sort 排序修复 → v8 user_drafts → v9 草稿附件+send_at → v10 语气学习退役→文风提示词（tone_dna 数据转存 style_prompt 后删列）+ AI 总开关（settings KV `ai_enabled`） → v11 清语气学习残留用量日志（ai_logs task_type='tone_dna'） → v12 jobs 后台任务表
 
 ## 关键流程
 
