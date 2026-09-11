@@ -386,6 +386,17 @@ def run_migrations() -> None:
         conn.commit()
 
 
+def cleanup_retention() -> None:
+    """启动时保留策略（IMPROVEMENT_PLAN R7）：notifications 最多 500 条、
+    ai_logs 最多 90 天——本地单机库防无界增长。幂等，随启动执行。"""
+    conn = get_conn()
+    conn.execute(
+        "DELETE FROM notifications WHERE id NOT IN"
+        " (SELECT id FROM notifications ORDER BY id DESC LIMIT 500)"
+    )
+    conn.execute("DELETE FROM ai_logs WHERE created_at < datetime('now', '-90 days')")
+
+
 def get_setting(key: str, default: Any = None) -> Any:
     row = get_conn().execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     if row is None or row["value"] is None:

@@ -18,7 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api import api_router
 from app.config import APP_NAME, APP_VERSION
 from app.core import batch_ops, pipeline  # noqa: F401 — 导入即注册 jobs runner（organize/imap_batch）
-from app.db.database import run_migrations
+from app.db.database import cleanup_retention, run_migrations
 from app.scheduler import MailScheduler
 
 
@@ -65,6 +65,7 @@ class SPAStaticFiles(StaticFiles):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     run_migrations()
+    cleanup_retention()  # R7：通知/用量日志保留策略，防本地库无界增长
     scheduler.start()
     yield
     scheduler.shutdown()

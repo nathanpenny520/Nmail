@@ -273,12 +273,24 @@ def _sync_folder(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001
 
     uidvalidity = get_uidvalidity(mb, folder)
     if uidvalidity is not None and stored_uidv is not None and uidvalidity != stored_uidv:
-        # 服务器文件夹被重建：清空本地该文件夹数据，重新增量起点
+        # 服务器文件夹被重建：清空本地该文件夹数据（附件行随 FK 级联删除），重新增量起点
+        stale_ids = [
+            int(r["id"]) for r in conn.execute(
+                "SELECT id FROM emails WHERE account_id = ? AND folder = ?", (account_id, folder)
+            ).fetchall()
+        ]
         conn.execute(
             "DELETE FROM emails WHERE account_id = ? AND folder = ?", (account_id, folder)
         )
         conn.commit()
         last_uid = 0
+        if stale_ids:
+            # R7：附件文件在磁盘不随行删除——UIDVALIDITY 变化产生的孤儿目录顺带清掉
+            import shutil
+
+            att_base = get_data_dir() / "accounts" / str(account_id) / "attachments"
+            for eid in stale_ids:
+                shutil.rmtree(att_base / str(eid), ignore_errors=True)
 
     new_count = 0
     latest_subject = ""
