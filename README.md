@@ -4,7 +4,7 @@ AI 驱动的本地聚合邮箱客户端 · 本地优先 · 隐私自持 · MIT �
 
 你只管看信、写信、拍板；AI 负责分类、过滤噪音、预先写好草稿、每天给你汇报。数据全部留在本机，AI 用你自己的 OpenAI 兼容 API key（也可指向 Ollama / LM Studio 实现 100% 本地推理），纯 IMAP/SMTP 客户端，不自建任何邮件服务。
 
-> 产品方案与路线图见 [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)。当前进度：**P4 打磨**。
+> 产品方案与路线图见 [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)；**安装、首次使用与更新详见 [docs/INSTALL.md](docs/INSTALL.md)**。当前进度：**P4 打磨**。
 
 ## 快速开始
 

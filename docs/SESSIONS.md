@@ -31,8 +31,8 @@
 ### S-0911-1040-更新机制
 - 目标: 应用内更新检查 + 包管理器分发渠道（winget / Homebrew）
 - 范围: backend/app/core/update_check.py、api/system.py、api/settings.py（开关）、api/cli.py（--version）、frontend types/client/SettingsPage、release.yml、README/docs、外部仓库 homebrew-nmail 与 winget-pkgs
-- 产出: 24h 匿名更新检查（UA=Nmail/版本，不带本机数据，设置可关）+ 通知中心提醒（按版本去重、升级后自动清理）；tap 仓库 nathanpenny520/homebrew-nmail（macOS arm64 0.1.0，brew tap nathanpenny520/nmail && brew install nmail）；CI 新增 homebrew-tap 自动同步 job（可选 secret HOMEBREW_TAP_TOKEN，未配置自动跳过）；winget manifest PR 由后台脚本提交（fork 物化中，结果见 winget-pkgs PR 列表）
-- 遗留: winget PR 审核 + 需以 nathanpenny520 身份签 Microsoft CLA；HOMEBREW_TAP_TOKEN 未配置（配好即生效）；真实账号验证 uvx/exe
+- 产出: 24h 匿名更新检查（UA=Nmail/版本，不带本机数据，设置可关）+ 通知中心提醒（按版本去重、升级后自动清理）；tap 仓库 nathanpenny520/homebrew-nmail（macOS arm64 0.1.0，brew tap nathanpenny520/nmail && brew install nmail）；CI 新增 homebrew-tap 自动同步 job（可选 secret HOMEBREW_TAP_TOKEN，未配置自动跳过）；winget manifest PR 已提交：microsoft/winget-pkgs#432990（fork 默认分支为 master，首轮脚本等 main 超时的乌龙已修正）
+- 遗留: winget PR #432990 审核中，需以 nathanpenny520 身份签 Microsoft CLA；HOMEBREW_TAP_TOKEN 未配置（配好即生效）；真实账号验证 uvx/exe
 - 时间: 2026-09-11 完成
 
 ### S-0911-1028-apple-touch-icon ✅
