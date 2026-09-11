@@ -11,7 +11,15 @@ from pathlib import Path
 from platformdirs import user_data_dir
 
 APP_NAME = "Nmail"
-APP_VERSION = "0.1.0"
+
+# 版本号单一来源是 pyproject.toml（T5）：已安装（wheel/uvx/editable）时读包元数据；
+# 源码直跑或冻结环境无元数据时回退常量——改版本时只需改 pyproject，此处随动。
+try:
+    from importlib.metadata import PackageNotFoundError, version
+
+    APP_VERSION = version("nmail-app")
+except PackageNotFoundError:
+    APP_VERSION = "0.1.0"
 
 
 def get_data_dir() -> Path:
