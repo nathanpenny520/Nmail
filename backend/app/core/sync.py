@@ -20,11 +20,11 @@ from datetime import datetime, timezone
 
 from imap_tools.errors import MailboxLoginError
 
-from app.core.imap_client import MailConfig, connect_imap, get_uidvalidity, iter_new_mail
+from app.core import mailbox
+from app.core.imap_client import get_uidvalidity, iter_new_mail
 from app.core.mail_html import count_remote_images
 from app.config import get_data_dir
 from app.db.database import get_conn
-from app.security import get_secret
 
 logger = logging.getLogger(__name__)
 
@@ -165,16 +165,10 @@ def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dic
     登录失败不重试（结果可预期）。
     """
     account_id = int(account["id"])
-    password = get_secret(f"account_pwd:{account_id}")
-    if not password:
-        return {"ok": False, "folders": [], "error": "缺少密码凭证"}
-
-    cfg = MailConfig(
-        email=account["email"],
-        password=password,
-        imap_server=account["imap_server"],
-        imap_port=int(account["imap_port"]),
-    )
+    try:
+        handle = mailbox.load_account(account_id)  # 全项目唯一 MailConfig 构造点
+    except mailbox.MailError as exc:
+        return {"ok": False, "folders": [], "error": exc.message}
     results: list[dict] = []
     last_error: Exception | None = None
     for attempt, backoff in ((1, 0), (2, 15), (3, 45)):
@@ -182,7 +176,7 @@ def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dic
             logger.info("sync retry for %s in %ss (断点已落库，只补剩余)", account["email"], backoff)
             time.sleep(backoff)
         try:
-            with connect_imap(cfg) as mb:
+            with mailbox.open_imap(handle) as mb:
                 results = []
                 for folder in folders:
                     results.append(_sync_folder(mb, account_id, folder))
@@ -241,7 +235,7 @@ def start_sync(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dict:
     with _SYNC_LOCK:
         if account_id in _SYNCING:
             return {"started": False, "reason": "syncing"}
-        if not get_secret(f"account_pwd:{account_id}"):
+        if not mailbox.has_credentials(account_id):
             return {"started": False, "reason": "no_credentials"}
         _SYNCING.add(account_id)
 

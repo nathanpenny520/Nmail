@@ -32,7 +32,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `api/system.py` | `/api/health`、`/api/update-check`（24h 节流，force 可立即检查） | — |
 | `api/settings.py` | 通用设置 KV 读写 + AI 端点测试 | 含 `ui_font/body_font` 档位校验；AI 配置已移至 profiles；`/api/ai/test` 字段省略时回退激活档案 |
 | `api/accounts.py` | 账号 CRUD/测试/探测/后台同步触发/文件夹/服务商预设/文风提示词 | 授权码存 `secrets.json`（key=`account_pwd:{id}`）；`POST /accounts/probe` 未收录域名自动探测 |
-| `api/emails.py` | 列表/搜索/详情/操作/发送/附件下载 | 搜索：≥3 字走 FTS5 trigram，<3 字回退 LIKE；详情返回消毒后 HTML（`?images=1` 放行远程图+内联 cid） |
+| `api/emails.py` | 列表/搜索/详情/操作/附件下载 | 搜索：≥3 字走 FTS5 trigram，<3 字回退 LIKE；详情返回消毒后 HTML（`?images=1` 放行远程图+内联 cid） |
 | `api/drafts.py` | 待审草稿：列表/修改/发送(approve)/丢弃/恢复/彻底删除/重新生成 | approve 走 SMTP 并带 `In-Reply-To`；原文自动标已读 |
 | `api/user_drafts.py` | 写信台草稿：CRUD + 附件上传/删除 + 定时/取消 + 发送 | 编辑防抖 PATCH 自动保存；附件选择即落盘 `data_dir/drafts/<id>/`（行在 user_draft_attachments，草稿删除/发送成功即清理）；`send_draft_now` 同步核心供 API 与调度器共用；发送前 `sanitize_outgoing_html` 消毒 + 派生纯文本 + 套基础样式外层；回复草稿带 `In-Reply-To`（软引用邮件 id） |
 | `api/compose_extras.py` | 写信台模板/签名 KV（Markdown 文本整存整取）+ `POST /markdown` Markdown→消毒 HTML 转换 | 存 settings KV（compose_templates/compose_signatures） |
@@ -44,6 +44,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `api/digest.py` | 每日摘要查看/手动生成 | — |
 | `core/providers.py` | 20 个服务商预设（含中文授权码提示）+ 未收录域名自动探测 | 按域名自动匹配；`probe_server()`：autoconfig 标准接口 → 常见主机名 993/465 并发试连（只收加密端口） |
 | `core/imap_client.py` | IMAP/SMTP 封装 | 连接/读写超时 60s；`iter_new_mail` 分块产出新增邮件（SEARCH UID 清单 → 稠密窗口区间 FETCH、稀疏窗口逐 UID 精确拉取——移入型文件夹如「已删除」日期与 UID 不单调，QQ 会把任何多 UID 集合按 min:max 连续展开）；网易系需 IMAP ID 命令；SMTP 端口 465=SSL/587=STARTTLS；`append_sent` 发送后归档 |
+| `core/mailbox.py` | 账号凭据/连接统一入口（全项目唯一 MailConfig 构造点） | `load_account`（账号行+密钥 → AccountHandle，缺一抛 `MailError`）、`has_credentials`、`open_imap`；API 层 `_imap_for` 等拼装点逐步迁移至此（IMPROVEMENT_PLAN §3.1）；添加账号入库前的表单直连预检除外 |
 | `core/sync.py` | UID 增量同步 | 分块断点续拉（每块入库+断点同一事务提交，中断从断点续传）；`start_sync` 后台线程执行（防重入），进度写账号 status=`syncing`+status_detail；网络异常自动重试一次；首同步限 30 天；UIDVALIDITY 变化自愈；登录失败→`auth_error`+一次性通知；同步完成后触发 AI 流水线 |
 | `core/pipeline.py` | 白/黑名单 → AI 批量分类 → 营销自动归档 → 生成草稿 → 通知 | AI 未配置诚实降级；批量 20 封/请求 |
 | `core/mail_html.py` | nh3 白名单消毒 + 远程图片拦截 + cid 内联 + Markdown→HTML | 两层防护：消毒在前、图片控制在后；另供发件方向 `sanitize_outgoing_html`（放行 data: 内嵌图）与 `html_to_plain_text`/`wrap_email_body_html` |
