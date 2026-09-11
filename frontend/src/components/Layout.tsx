@@ -1,4 +1,4 @@
-import { Archive, BarChart3, FilePenLine, Inbox, Pencil, Plus, Settings, Sparkles, X } from 'lucide-react'
+import { Archive, BarChart3, FilePenLine, FileText, Inbox, Pencil, Plus, Settings, Sparkles, X } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useCompose } from './compose/ComposeContext'
@@ -8,6 +8,7 @@ import NotificationBell from './NotificationBell'
 const navItems = [
   { to: '/', label: '收件箱', icon: Inbox },
   { to: '/drafts', label: '待审草稿', icon: FilePenLine },
+  { to: '/mydrafts', label: '草稿箱', icon: FileText },
   { to: '/archived', label: '已归档', icon: Archive },
   { to: '/digest', label: '每日摘要', icon: BarChart3 },
   { to: '/assistant', label: 'AI 总管家', icon: Sparkles },

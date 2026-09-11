@@ -22,6 +22,8 @@ interface ComposeContextValue {
   setActiveCompose: (id: number | null) => void
   openNew: () => Promise<void>
   openReply: (mode: 'reply' | 'replyAll' | 'forward', base: EmailDetail) => Promise<void>
+  /** 从草稿箱打开已存草稿：已在工作台则仅激活标签 */
+  openDraft: (draft: UserDraft) => void
   updateTab: (draftId: number, patch: Partial<ComposeTab>) => void
   /** 表单拿到服务端最新草稿（附件/定时状态变化）后回写缓存 */
   cacheDraft: (draft: UserDraft) => void
@@ -132,6 +134,19 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     setDrafts((prev) => ({ ...prev, [draft.id]: draft }))
   }, [])
 
+  const openDraft = useCallback(
+    (draft: UserDraft) => {
+      setDrafts((prev) => ({ ...prev, [draft.id]: draft }))
+      setTabs((prev) =>
+        prev.some((t) => t.draftId === draft.id)
+          ? prev
+          : [...prev, { draftId: draft.id, mode: draft.mode, title: tabTitle(draft), dirty: false }],
+      )
+      setActiveCompose(draft.id)
+    },
+    [],
+  )
+
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
 
@@ -143,7 +158,9 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       cur === draftId ? (next[Math.min(idx, next.length - 1)]?.draftId ?? null) : cur,
     )
     setPendingCloseId(null)
-  }, [])
+    // 草稿箱列表同步失效（标签关闭/发送后状态可能变化）
+    void queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
+  }, [queryClient])
 
   const requestClose = useCallback(
     (draftId: number) => {
@@ -198,6 +215,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     setActiveCompose,
     openNew,
     openReply,
+    openDraft,
     updateTab,
     cacheDraft,
     requestClose,

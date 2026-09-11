@@ -10,6 +10,7 @@ import DraftsPage from './pages/DraftsPage'
 import InboxPage from './pages/InboxPage'
 import ManagerPage from './pages/ManagerPage'
 import SettingsPage from './pages/SettingsPage'
+import UserDraftsPage from './pages/UserDraftsPage'
 
 /** 把设置里的界面字号档位应用到 <html data-font>，全局 CSS 变量随之切换。 */
 function FontApplier() {
@@ -31,6 +32,7 @@ export default function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<InboxPage />} />
             <Route path="/drafts" element={<DraftsPage />} />
+            <Route path="/mydrafts" element={<UserDraftsPage />} />
             <Route path="/archived" element={<ArchivedPage />} />
             <Route path="/digest" element={<DigestPage />} />
             <Route path="/assistant" element={<ManagerPage />} />

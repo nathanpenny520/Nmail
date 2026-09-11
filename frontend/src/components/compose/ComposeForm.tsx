@@ -227,12 +227,32 @@ export default function ComposeForm({ draft, accounts }: { draft: UserDraft; acc
                 密送
               </button>
             )}
+            <button
+              className="shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 t-sm text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+              onClick={() => {
+                setShowCc(false)
+                setShowBcc(false)
+              }}
+              title="收起抄送/密送（内容保留）"
+            >
+              收起
+            </button>
           </div>
         )}
         {showCc && showBcc && (
           <div className="flex items-center gap-1.5 px-4 py-1.5">
             <span className="w-11 shrink-0 t-sm text-gray-400">密送</span>
             <input className={fieldInput} value={bcc} onChange={(e) => setBcc(e.target.value)} />
+            <button
+              className="shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 t-sm text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+              onClick={() => {
+                setShowCc(false)
+                setShowBcc(false)
+              }}
+              title="收起抄送/密送（内容保留）"
+            >
+              收起
+            </button>
           </div>
         )}
         <div className="flex items-center gap-1.5 px-4 py-1.5">

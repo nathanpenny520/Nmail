@@ -3,11 +3,13 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 /** 工具栏下拉菜单：点击外部收起，项点击自动收起（panel 内自带 onClick 冒泡关闭）。 */
 export function Dropdown({
-  label, title, disabled, children,
+  label, title, disabled, align = 'left', children,
 }: {
   label: ReactNode
   title: string
   disabled?: boolean
+  /** 靠右缘的菜单用 right，避免面板溢出视口被裁切 */
+  align?: 'left' | 'right'
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
@@ -36,7 +38,9 @@ export function Dropdown({
       </button>
       {open && (
         <div
-          className="absolute left-0 top-full z-40 mt-1 max-w-72 min-w-44 rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+          className={`absolute top-full z-40 mt-1 max-w-72 min-w-44 rounded-lg border border-gray-200 bg-white py-1 shadow-lg ${
+            align === 'right' ? 'right-0' : 'left-0'
+          }`}
           onClick={() => setOpen(false)}
         >
           {children}

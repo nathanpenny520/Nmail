@@ -21,6 +21,7 @@ export function TemplateMenu({ editor, onManage }: { editor: Editor | null; onMa
   const templates = data?.templates ?? []
   return (
     <Dropdown
+      align="right"
       label={
         <>
           <FileBox className="h-3.5 w-3.5" />
@@ -63,6 +64,7 @@ export function SignatureMenu({
   const sigMap = new Map((data?.signatures ?? []).map((s) => [s.account_id, s.content]))
   return (
     <Dropdown
+      align="right"
       label={
         <>
           <PenLine className="h-3.5 w-3.5" />
