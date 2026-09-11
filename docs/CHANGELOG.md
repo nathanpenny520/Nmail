@@ -3,6 +3,9 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — docs：IMPROVEMENT_PLAN 修订（对齐代码现状）
+- 逐条对照当前代码核实提升计划：R1（IMAP 超时）、R10/3.5（分块拉取）、A9 同步侧（后台化+进度）、T6（.gitignore）确认已由同步引擎系列提交（e8c0084…28ef2df）解决，移出待办；M3 缩窄为「AI 整理/批量动作异步化」；修正前端文件路径（src/types.ts、components/MailBrowser.tsx）与通知横幅规模（flash ×8 + syncMessage ×19）；A4→A5 编号笔误、MailConfig ×8 等其余断言经核实成立
+
 ## efd36e2 — fix：Errno 22 真凶——畸形 Date 头（1900-01-01）令 astimezone 抛 OSError，同步死循环
 - 埋点复现终于定位真凶：QQ「已删除」文件夹里 3 封垃圾邮件（notifications@whizzzest.com 伪造验证码）Date 头为 `1900-01-01T00:00:00`，`astimezone()` 在 Windows 换算 1900 年越界抛 `OSError: [Errno 22] Invalid argument`——同一封邮件每次同步必死、断点永远推不进。此前所有 Errno 22（含最初 14:16 那次）皆为此因；INBOX 无此邮件故一直正常。前几轮的分块/断点/退避是真实加固（保留），但真正命门在此
 - 修复：`_norm_date` 容错——astimezone 失败降级为原值入库、date_sort 置空（排序沉底），摘要的 `_to_local_dt` 同步扩展异常类型。真机端到端验证：真实 sync_account 跑通「已删除」文件夹 ok=True 新增 383 封 54.5s，账号状态恢复 ok；顺带发现 1900-01-01 垃圾邮件冒用用户自有域名发验证码，建议拉黑

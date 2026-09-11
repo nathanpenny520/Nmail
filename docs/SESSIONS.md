@@ -18,6 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0911-1546-提升计划修订与M1快修
+- 目标: 逐条核实 IMPROVEMENT_PLAN 后修订（清除已被同步引擎会话解决的项、修正路径/规模、缩窄 M3），随后按修订版 M1 清单逐项小步执行：R2 move uid、R4 删 /api/emails/send、R8 孤儿消息、R9 get_setting 容错、R6 date_sort、S1 Origin/Host 中间件、3.1 core/mailbox.py、3.2 tx()
+- 范围: docs（IMPROVEMENT_PLAN/SESSIONS/CHANGELOG）；backend api/emails.py、api/ai.py、ai/digest.py、db/database.py、main.py、core/mailbox.py（新增）、core/sync.py；frontend api/client.ts、vite.config.ts
+- 产出: （进行中）
+- 遗留: 无
+- 时间: 2026-09-11 15:46 进行中
+
 ### S-0911-1416-全面提升计划
 - 目标: 全量代码审核（架构/扩展性/质量/鲁棒性）复查后沉淀为可执行提升计划——以降耦合、降开发难度为主线，保留鲁棒性/安全/测试洞察
 - 范围: docs/IMPROVEMENT_PLAN.md（新增）、docs/SESSIONS.md；**不改任何代码**
