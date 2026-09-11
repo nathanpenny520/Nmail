@@ -18,11 +18,12 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-### S-0911-1315-写信台二期
+### S-0911-1315-写信台二期 ✅
 - 目标: 收件箱/写信同层标签切换（keep-alive）+ 附件持久化 + 定时发送 + 模板/签名 + AI 写作对话框（生成可用富文本）
 - 范围: backend 迁移 v9、api/user_drafts.py、api/compose_extras.py（新增）、api/ai.py、ai/tasks.py、scheduler.py、core/mail_html.py；frontend Layout、compose/*（AiWriteDialog/InsertDialogs/ui/ComposeWorkbench 新增）、App.tsx、types/client；docs
-- 开始: 2026-09-11 13:15
-- 状态: 进行中
+- 产出: 提交 cabdda3——同层标签条（收件箱固定+写信标签，keep-alive 隐藏不卸载）、附件选择即落盘（迁移 v9 + drafts/<id>/ 目录）、定时发送（scheduled 状态 + 调度器到期派发 + 失败退回编辑态写通知 + 横幅取消）、模板/签名（/api/compose-extras KV + Markdown 转富文本插入）、AI 写作对话框（compose 指令生成 + want_html 转换 + 预览替换/插入）
+- 遗留: ① 用户重启进程生效（迁移 v9 自动补跑）② AI 真实生成质量与定时实发需真实账号验证 ③ 定时草稿重启后恢复为标签可取消，但通知中心条目暂不可点跳转 ④ 附件数量不设限（SMTP 服务商大小限制由发送时报错兜底）
+- 时间: 2026-09-11 13:35 完成
 
 ## 已完成
 
