@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronLeft, ChevronRight, Inbox, Loader2, Paperclip, Pencil, RefreshCw, Search, Sparkles, Star,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, type EmailQuery } from '../api/client'
 import {
@@ -37,6 +37,51 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   const [showImages, setShowImages] = useState(false)
   const [compose, setCompose] = useState<ComposeInit | null>(null)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+
+  // 分屏布局：列表宽度可拖拽，阅读区可全屏，均记忆在本地
+  const [listWidth, setListWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('nmail_list_width'))
+    return saved >= 240 && saved <= 640 ? saved : 340
+  })
+  const [readerFull, setReaderFull] = useState(() => localStorage.getItem('nmail_reader_full') === '1')
+  const listRef = useRef<HTMLElement>(null)
+  const dragging = useRef(false)
+  const widthRef = useRef(listWidth)
+  widthRef.current = listWidth
+
+  const startDrag = (e: ReactMouseEvent) => {
+    e.preventDefault()
+    dragging.current = true
+    document.body.classList.add('dragging-col')
+  }
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragging.current || !listRef.current) return
+      const w = Math.min(640, Math.max(240, e.clientX - listRef.current.getBoundingClientRect().left))
+      widthRef.current = w
+      setListWidth(w)
+    }
+    const onUp = () => {
+      if (!dragging.current) return
+      dragging.current = false
+      document.body.classList.remove('dragging-col')
+      localStorage.setItem('nmail_list_width', String(widthRef.current))
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
+  const toggleFull = () => {
+    setReaderFull((v) => {
+      localStorage.setItem('nmail_reader_full', v ? '0' : '1')
+      return !v
+    })
+  }
 
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
   const accounts = accountsQuery.data?.accounts ?? []
@@ -206,46 +251,14 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
     )
   }
 
-  // 全文阅读模式：邮件占满主区域（Gmail 式），返回按钮 / Esc 回列表
-  if (selectedId != null) {
-    return (
-      <div className="flex h-full flex-col bg-white">
-        {detail ? (
-          <EmailReader
-            detail={detail}
-            archived={archived}
-            actionBusy={actionBusy}
-            onAction={(action, dest) =>
-              actionMutation.mutate({ id: detail.id, action, folder: dest })
-            }
-            onCompose={openCompose}
-            onShowImages={() => setShowImages(true)}
-            onBack={() => setSelectedId(null)}
-          />
-        ) : (
-          <div className="flex flex-1 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
-          </div>
-        )}
-        {compose && (
-          <ComposeModal
-            accounts={accounts}
-            init={compose}
-            onClose={() => setCompose(null)}
-            onSent={() => {
-              setCompose(null)
-              invalidateMail()
-            }}
-          />
-        )}
-      </div>
-    )
-  }
+  const inFullRead = selectedId != null && readerFull
 
   return (
     <div className="flex h-full">
-      {/* 邮件列表（占满主区域） */}
-      <section className="flex min-w-0 flex-1 flex-col bg-white">
+      {/* 邮件列表（分屏左栏；全屏阅读时隐藏） */}
+      {!inFullRead && (
+      <>
+      <section ref={listRef} style={{ width: listWidth }} className="flex shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white">
         <div className="space-y-2 border-b border-gray-100 p-2.5">
           <div className="flex items-center gap-2">
             <div className="relative max-w-xl flex-1">
@@ -370,8 +383,8 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             <button
               key={item.id}
               onClick={() => selectEmail(item)}
-              className={`block w-full border-b border-gray-50 px-4 py-1.5 text-left transition-colors hover:bg-gray-50 ${
-                item.is_read ? '' : 'bg-blue-50/40'
+              className={`block w-full border-b border-gray-50 px-3 py-1.5 text-left transition-colors hover:bg-gray-50 ${
+                selectedId === item.id ? 'bg-indigo-50' : item.is_read ? '' : 'bg-blue-50/40'
               }`}
             >
               <div className="mx-auto flex max-w-6xl items-center gap-2">
@@ -424,6 +437,49 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             </div>
           )}
         </div>
+      </section>
+      {/* 拖拽分隔条：悬停高亮，双击复位 */}
+      <div
+        onMouseDown={startDrag}
+        onDoubleClick={() => {
+          setListWidth(340)
+          localStorage.setItem('nmail_list_width', '340')
+        }}
+        className="relative w-px shrink-0 cursor-col-resize bg-gray-200 hover:bg-indigo-400"
+        title="拖拽调整列表宽度（双击复位）"
+      >
+        <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+      </div>
+      </>
+      )}
+
+      {/* 阅读区（分屏右栏；全屏模式占满） */}
+      <section className="min-w-0 flex-1 bg-gray-50">
+        {selectedId != null ? (
+          detail ? (
+            <EmailReader
+              detail={detail}
+              archived={archived}
+              actionBusy={actionBusy}
+              onAction={(action, dest) =>
+                actionMutation.mutate({ id: detail.id, action, folder: dest })
+              }
+              onCompose={openCompose}
+              onShowImages={() => setShowImages(true)}
+              full={readerFull}
+              onToggleFull={toggleFull}
+              onClose={() => setSelectedId(null)}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-gray-300" />
+            </div>
+          )
+        ) : (
+          <div className="flex h-full items-center justify-center text-xs text-gray-300">
+            选择一封邮件阅读
+          </div>
+        )}
       </section>
 
       {compose && (

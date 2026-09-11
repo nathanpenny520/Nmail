@@ -1,4 +1,6 @@
+import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { api } from '../api/client'
 
 interface HtmlMailProps {
   html: string
@@ -7,10 +9,19 @@ interface HtmlMailProps {
 /**
  * HTML 邮件沙箱渲染：sandbox 仅 allow-same-origin（禁止脚本/表单/弹窗），
  * 后端已消毒；允许父级读取 scrollHeight 以自适应高度。
+ * 正文字号缩放独立于界面字号（zoom 注入沙箱）。
  */
+const BODY_ZOOM: Record<string, number> = { small: 0.85, standard: 1, large: 1.15 }
+
 export default function HtmlMail({ html }: HtmlMailProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [height, setHeight] = useState(320)
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: api.getSettings,
+    staleTime: Infinity,
+  })
+  const zoom = BODY_ZOOM[settings?.body_font ?? 'standard'] ?? 1
 
   const remeasure = useCallback(() => {
     try {
@@ -44,7 +55,7 @@ export default function HtmlMail({ html }: HtmlMailProps) {
       title="邮件正文"
       style={style}
       sandbox="allow-same-origin"
-      srcDoc={html}
+      srcDoc={`<style>html{zoom:${zoom}}</style>` + html}
       onLoad={handleLoad}
     />
   )

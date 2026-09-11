@@ -18,6 +18,8 @@ DEFAULT_SETTINGS: dict[str, object] = {
     "ai_model": "",
     "poll_interval_minutes": 5,
     "digest_time": "08:30",
+    "ui_font": "compact",     # compact | standard | large
+    "body_font": "standard",  # small | standard | large
 }
 
 
@@ -32,6 +34,8 @@ class SettingsIn(BaseModel):
     ai: AISettingsIn | None = None
     poll_interval_minutes: int | None = Field(default=None, ge=1, le=60)
     digest_time: str | None = None
+    ui_font: str | None = None
+    body_font: str | None = None
 
     @field_validator("digest_time")
     @classmethod
@@ -44,6 +48,20 @@ class SettingsIn(BaseModel):
                 raise ValueError
         except ValueError as exc:
             raise ValueError("digest_time 需为 HH:MM 格式") from exc
+        return v
+
+    @field_validator("ui_font")
+    @classmethod
+    def _validate_ui_font(cls, v: str | None) -> str | None:
+        if v is not None and v not in ("compact", "standard", "large"):
+            raise ValueError("ui_font 需为 compact/standard/large")
+        return v
+
+    @field_validator("body_font")
+    @classmethod
+    def _validate_body_font(cls, v: str | None) -> str | None:
+        if v is not None and v not in ("small", "standard", "large"):
+            raise ValueError("body_font 需为 small/standard/large")
         return v
 
 
@@ -63,6 +81,8 @@ def read_settings() -> dict:
             "poll_interval_minutes", DEFAULT_SETTINGS["poll_interval_minutes"]
         ),
         "digest_time": get_setting("digest_time", DEFAULT_SETTINGS["digest_time"]),
+        "ui_font": get_setting("ui_font", DEFAULT_SETTINGS["ui_font"]),
+        "body_font": get_setting("body_font", DEFAULT_SETTINGS["body_font"]),
     }
 
 
@@ -79,6 +99,10 @@ def update_settings(payload: SettingsIn) -> dict:
         set_setting("poll_interval_minutes", payload.poll_interval_minutes)
     if payload.digest_time is not None:
         set_setting("digest_time", payload.digest_time)
+    if payload.ui_font is not None:
+        set_setting("ui_font", payload.ui_font)
+    if payload.body_font is not None:
+        set_setting("body_font", payload.body_font)
     return read_settings()
 
 

@@ -136,6 +136,35 @@ def draft_action(draft_id: int, payload: DraftActionIn) -> dict:
     return {"ok": True}
 
 
+@router.delete("/{draft_id}")
+def delete_draft(draft_id: int) -> dict:
+    """彻底删除草稿记录（任意状态）。"""
+    conn = get_conn()
+    row = conn.execute("SELECT id FROM drafts WHERE id = ?", (draft_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "草稿不存在")
+    conn.execute("DELETE FROM drafts WHERE id = ?", (draft_id,))
+    conn.commit()
+    return {"ok": True}
+
+
+@router.post("/{draft_id}/reopen")
+def reopen_draft(draft_id: int) -> dict:
+    """把已丢弃的草稿恢复为待审。"""
+    conn = get_conn()
+    row = conn.execute("SELECT id, status FROM drafts WHERE id = ?", (draft_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "草稿不存在")
+    if row["status"] != "discarded":
+        raise HTTPException(400, "仅已丢弃的草稿可恢复")
+    conn.execute(
+        "UPDATE drafts SET status = 'pending', updated_at = datetime('now') WHERE id = ?",
+        (draft_id,),
+    )
+    conn.commit()
+    return {"ok": True}
+
+
 @router.post("/regenerate")
 def regenerate_draft(payload: RegenerateIn) -> dict:
     """按 email_id 重新生成草稿（可带指令），覆盖现有待审草稿。"""

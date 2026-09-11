@@ -1,1 +1,33 @@
 @import "tailwindcss";
+
+/* 界面字号系统：挂载在 <html data-font="..."> 上，设置页可切换 */
+:root,
+[data-font="compact"] {
+  --fs-xs: 10px;
+  --fs-sm: 11.5px;
+  --fs-md: 12.5px;
+  --fs-lg: 14.5px;
+}
+[data-font="standard"] {
+  --fs-xs: 11px;
+  --fs-sm: 12.5px;
+  --fs-md: 13.5px;
+  --fs-lg: 15.5px;
+}
+[data-font="large"] {
+  --fs-xs: 12px;
+  --fs-sm: 13.5px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+}
+
+.t-xs { font-size: var(--fs-xs); }
+.t-sm { font-size: var(--fs-sm); }
+.t-md { font-size: var(--fs-md); }
+.t-lg { font-size: var(--fs-lg); }
+
+/* 拖拽分隔条时的全局状态 */
+body.dragging-col {
+  cursor: col-resize;
+  user-select: none;
+}

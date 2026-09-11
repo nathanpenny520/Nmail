@@ -139,6 +139,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email_id: emailId, ...(instruction ? { instruction } : {}) }),
     }),
+  deleteDraft: (id: number) =>
+    request<{ ok: boolean }>(`/api/drafts/${id}`, { method: 'DELETE' }),
+  reopenDraft: (id: number) =>
+    request<{ ok: boolean }>(`/api/drafts/${id}/reopen`, { method: 'POST' }),
   aiChat: (payload: { email_id?: number; email_ids?: number[]; question: string; history?: { role: string; content: string }[] }) =>
     request<{ answer: string }>('/api/ai/chat', {
       method: 'POST',

@@ -8,6 +8,8 @@ export interface Settings {
   ai: AISettings
   poll_interval_minutes: number
   digest_time: string
+  ui_font: 'compact' | 'standard' | 'large'
+  body_font: 'small' | 'standard' | 'large'
 }
 
 export interface SettingsPayload {
@@ -19,6 +21,8 @@ export interface SettingsPayload {
   }
   poll_interval_minutes?: number
   digest_time?: string
+  ui_font?: 'compact' | 'standard' | 'large'
+  body_font?: 'small' | 'standard' | 'large'
 }
 
 export interface AITestPayload {

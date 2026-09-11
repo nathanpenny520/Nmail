@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Archive, ArchiveRestore, ArrowLeft, Ban, CircleCheck, CornerUpLeft, CornerUpRight,
-  ExternalLink, Forward, Loader2, PenLine, Sparkles, Star, Trash2,
+  Archive, ArchiveRestore, Ban, CircleCheck, CornerUpLeft, CornerUpRight,
+  ExternalLink, Forward, Loader2, Maximize2, Minimize2, PenLine, Sparkles, Star, Trash2, X,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -17,7 +17,9 @@ interface EmailReaderProps {
   onAction: (action: string, folder?: string) => void
   onCompose: (mode: 'reply' | 'replyAll' | 'forward') => void
   onShowImages: () => void
-  onBack: () => void
+  full: boolean
+  onToggleFull: () => void
+  onClose: () => void
 }
 
 function formatSize(size: number): string {
@@ -32,11 +34,11 @@ function formatDate(iso: string | null): string {
 }
 
 const btn =
-  'inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50'
+  'inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-1 t-sm text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50'
 
-/** 全文阅读模式：占满主区域，内容列居中限宽，保证长邮件完整可读。 */
+/** 邮件阅读区：分屏右栏，可一键全屏；内容列随容器自适应。 */
 export default function EmailReader({
-  detail, archived, actionBusy, onAction, onCompose, onShowImages, onBack,
+  detail, archived, actionBusy, onAction, onCompose, onShowImages, full, onToggleFull, onClose,
 }: EmailReaderProps) {
   const [moveOpen, setMoveOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
@@ -77,31 +79,40 @@ export default function EmailReader({
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-white">
-      {/* 顶部：返回 */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-gray-100 px-4 py-2">
+      {/* 顶部：全屏切换 + 关闭 */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-1.5">
         <button
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50"
-          onClick={onBack}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2 py-1 t-sm text-gray-600 hover:bg-gray-50"
+          onClick={onToggleFull}
+          title={full ? '返回分屏' : '全屏阅读'}
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> 返回列表
+          {full ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+          {full ? '返回分屏' : '全屏'}
         </button>
         <span className="flex-1" />
         <span
-          className="max-w-64 truncate rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+          className="max-w-56 truncate rounded-full px-2 py-0.5 t-xs font-medium text-white"
           style={{ backgroundColor: detail.account_color }}
           title={detail.account_email}
         >
           {detail.account_email}
         </span>
+        <button
+          className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          onClick={onClose}
+          title="关闭 (Esc)"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-4xl px-6 pb-10 pt-4 lg:px-8">
+        <div className="mx-auto w-full max-w-6xl px-5 pb-10 pt-4">
           {/* 头部 */}
-          <h1 className="text-[15px] font-semibold leading-snug text-gray-900">
+          <h1 className="t-lg font-semibold leading-snug text-gray-900">
             {detail.subject || '（无主题）'}
           </h1>
-          <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-[11px] text-gray-500">
+          <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 t-sm text-gray-500">
             <span className="font-medium text-gray-700">{detail.sender_name || detail.sender_email}</span>
             {detail.sender_name && detail.sender_email && detail.sender_name !== detail.sender_email && (
               <span className="text-gray-400">&lt;{detail.sender_email}&gt;</span>
@@ -110,12 +121,12 @@ export default function EmailReader({
             <span>{formatDate(detail.date)}</span>
           </div>
           {detail.recipients.length > 0 && (
-            <div className="mt-0.5 text-[10px] text-gray-400">
+            <div className="mt-0.5 t-xs text-gray-400">
               收件人：{detail.recipients.join('，')}
             </div>
           )}
           {detail.cc.length > 0 && (
-            <div className="mt-0.5 text-[10px] text-gray-400">抄送：{detail.cc.join('，')}</div>
+            <div className="mt-0.5 t-xs text-gray-400">抄送：{detail.cc.join('，')}</div>
           )}
 
           {/* 操作栏 */}
@@ -237,7 +248,7 @@ export default function EmailReader({
             {detail.body_html ? (
               <HtmlMail html={detail.body_html} />
             ) : (
-              <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-gray-800">
+              <pre className="whitespace-pre-wrap break-words font-sans t-md leading-relaxed text-gray-800">
                 {detail.body_text}
               </pre>
             )}

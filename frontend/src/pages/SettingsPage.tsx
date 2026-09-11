@@ -24,6 +24,8 @@ export default function SettingsPage() {
   const [apiKey, setApiKey] = useState('')
   const [pollMinutes, setPollMinutes] = useState(5)
   const [digestTime, setDigestTime] = useState('08:30')
+  const [uiFont, setUiFont] = useState<'compact' | 'standard' | 'large'>('compact')
+  const [bodyFont, setBodyFont] = useState<'small' | 'standard' | 'large'>('standard')
 
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [accountMessage, setAccountMessage] = useState<string | null>(null)
@@ -34,6 +36,8 @@ export default function SettingsPage() {
     setModel(data.ai.model)
     setPollMinutes(data.poll_interval_minutes)
     setDigestTime(data.digest_time)
+    setUiFont(data.ui_font)
+    setBodyFont(data.body_font)
   }, [data])
 
   const saveMutation = useMutation({
@@ -98,6 +102,8 @@ export default function SettingsPage() {
       ai: { base_url: baseUrl, model, ...(apiKey ? { api_key: apiKey } : {}) },
       poll_interval_minutes: pollMinutes,
       digest_time: digestTime,
+      ui_font: uiFont,
+      body_font: bodyFont,
     })
   }
 
@@ -361,6 +367,36 @@ export default function SettingsPage() {
               value={digestTime}
               onChange={(e) => setDigestTime(e.target.value)}
             />
+          </label>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-4">
+          <label className="block">
+            <span className="mb-1 block text-sm text-gray-600">
+              界面字号<span className="ml-1 text-xs text-gray-400">保存后全局生效</span>
+            </span>
+            <select
+              className={inputClass}
+              value={uiFont}
+              onChange={(e) => setUiFont(e.target.value as 'compact' | 'standard' | 'large')}
+            >
+              <option value="compact">紧凑（小）</option>
+              <option value="standard">标准</option>
+              <option value="large">大</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm text-gray-600">
+              邮件正文字号<span className="ml-1 text-xs text-gray-400">只影响邮件内容显示</span>
+            </span>
+            <select
+              className={inputClass}
+              value={bodyFont}
+              onChange={(e) => setBodyFont(e.target.value as 'small' | 'standard' | 'large')}
+            >
+              <option value="small">小</option>
+              <option value="standard">标准</option>
+              <option value="large">大</option>
+            </select>
           </label>
         </div>
       </section>
