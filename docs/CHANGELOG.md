@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix：同步误用 search 的收尾 + health 暴露代码版本
+## 6d25ec3 — fix：同步误用 search 的收尾 + health 暴露代码版本
 - `python run.py` 无热重载，用户进程停在修复前代码上反复报 `'search'` 错——行为探测（POST sync 后读状态）确认为旧进程而非代码问题；引导重启解决
 - `GET /api/health` 新增 `commit` 字段（启动时读 git 短哈希，打包环境为空省略）：以后「改了没生效」一条 curl 对照 `git log` 即可甄别
 
