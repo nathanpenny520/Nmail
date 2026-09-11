@@ -24,7 +24,7 @@ from app.core import mailbox
 from app.core.imap_client import get_uidvalidity, iter_new_mail
 from app.core.mail_html import count_remote_images
 from app.config import get_data_dir
-from app.db.database import get_conn
+from app.db.database import close_thread_conn, get_conn
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +245,7 @@ def start_sync(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dict:
         except Exception:  # noqa: BLE001 — sync_account 内部已兜底，这里防御线程带异常退出
             logger.exception("background sync crashed for account %s", account_id)
         finally:
+            close_thread_conn()  # 一次性线程：连接随线程关闭，防泄漏
             with _SYNC_LOCK:
                 _SYNCING.discard(account_id)
 

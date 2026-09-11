@@ -1,6 +1,6 @@
 """SQLite 连接、版本化迁移与 KV 设置存取。
 
-单用户本地应用：单连接 + 写锁即可；WAL 提升读写并发。
+单用户本地应用：每线程一条连接 + 写锁即可；WAL 提升读写并发。
 迁移为有序 SQL 脚本，记录在 schema_migrations 表，启动时按版本号补跑；
 个别迁移附带的 Python 回填逻辑放在 run_migrations 迁移循环之后（幂等）。
 
@@ -22,7 +22,12 @@ from collections.abc import Iterator
 from app.config import get_db_path
 
 _lock = threading.Lock()
-_conn: sqlite3.Connection | None = None
+# 每线程独立连接（回归 S-0912-0040）：共享一条连接时，Python sqlite3 对并发
+# execute 并不安全——语句缓存与参数绑定状态会被并发重置，实测稳定复现
+# InterfaceError: bad parameter or other API misuse 与 IndexError: tuple index
+# out of range（SQLite 序列化模式只保护单次 C API 调用，兜不住 Python 层的
+# 多步执行序列）。WAL 下多连接读写互不阻塞，写侧由 tx() 全局写锁串行。
+_local = threading.local()
 
 MIGRATIONS: list[tuple[int, str]] = [
     (
@@ -333,15 +338,26 @@ MIGRATIONS: list[tuple[int, str]] = [
 
 
 def get_conn() -> sqlite3.Connection:
-    global _conn
-    if _conn is None:
-        _conn = sqlite3.connect(get_db_path(), check_same_thread=False, isolation_level=None)
-        _conn.row_factory = sqlite3.Row
-        _conn.execute("PRAGMA journal_mode=WAL")
-        _conn.execute("PRAGMA synchronous=NORMAL")  # WAL 推荐档：免逐提交 fsync，断电只丢最后事务不损库
-        _conn.execute("PRAGMA foreign_keys=ON")
-        _conn.execute("PRAGMA busy_timeout=5000")  # 跨进程写冲突（如另开 CLI）兜底等待
-    return _conn
+    """当前线程的连接（懒创建，线程内复用）。"""
+    conn = getattr(_local, "conn", None)
+    if conn is None:
+        conn = sqlite3.connect(get_db_path(), check_same_thread=False, isolation_level=None)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")  # WAL 推荐档：免逐提交 fsync，断电只丢最后事务不损库
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA busy_timeout=5000")  # 跨进程写冲突（如另开 CLI）兜底等待
+        _local.conn = conn
+    return conn
+
+
+def close_thread_conn() -> None:
+    """关闭并丢弃当前线程的连接——一次性线程（如同步线程）收尾时防连接泄漏。"""
+    conn = getattr(_local, "conn", None)
+    if conn is not None:
+        _local.conn = None
+        with suppress(sqlite3.Error):
+            conn.close()
 
 
 _write_lock = threading.Lock()

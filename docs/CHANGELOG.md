@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: SQLite 共享连接并发竞态（macOS 启动 500 根因）
+- 用户 macOS 冷启动首屏并发（/api/settings、/api/ai/profiles）报 `sqlite3.InterfaceError: bad parameter or other API misuse` 且间歇自愈——潜伏 bug 在所有平台都存在，Python 3.14 调度时序把它炸了出来
+- 根因（实测定位）：`get_conn()` 全局共享一条 sqlite3 连接，**Python sqlite3 层对同一连接的并发 execute 并不安全**——16 线程稳定复现 InterfaceError 与 `IndexError: tuple index out of range`，且只有带参数的语句中招（无参读/tx 写零错误）：语句缓存与参数绑定状态被并发重置；SQLite 序列化模式（threadsafety=3）只保护单次 C API 调用，兜不住 Python 层多步执行序列。原懒初始化还把半初始化连接（PRAGMA 未跑完）提前发布，属第二重竞态
+- 修复：`get_conn()` 改为**每线程独立连接**（threading.local，线程内复用；WAL 下多连接读写互不阻塞，写侧仍由 tx() 全局写锁串行）；新增 `close_thread_conn()`，同步一次性线程（`sync.start_sync` 每次 spawn daemon 线程）收尾时关闭防连接泄漏
+- 验证：并发锤 16×300 次参数化读+写事务从 12-15 错误归零；pytest 90 例全绿（新增线程隔离/连接关闭 2 例回归）；ruff app 门禁通过；HTTP 冷启动 3 轮 × 32 并发全 200、服务端日志零 InterfaceError
+- 遗留：用户重启进程生效
+
 ## 2135257 — OAuth 回调路径按客户端可配置（loopback 根路径兼容）
 - 背景：用户拟内置公开桌面客户端凭据实现一键授权（方案文档含凭据值，审核后仅存本机不入库）。经审核：**凭据值不入仓库**（TB 源码明文禁止复用——"Don't copy these values for your own application"；公开仓库即分发，Google/Mozilla 均扫描公开代码），只采纳其技术基座——回调路径可配置；凭据由用户在各机设置页自行粘贴（secrets.json 随数据目录持久化，双机各配一次）
 - 后端：`oauth_client:{provider}` 存储新增 `redirect_path`（缺省 `/oauth/callback`，坏值兜底回退默认；默认值不落盘保持旧配置结构不变）；授权 URL 与令牌交换按客户端路径拼装回调地址；`GET /` 新增根路径回调——按 state 参数与 SPA 首页分流（授权重定向必带 state），api_router 先于 SPA 挂载注册故仅拦截精确 `/`；`DIST_DIR` 解析从 main.py 移至 config.py（api 层需读取，避免循环导入）
