@@ -27,6 +27,7 @@ export default function SettingsPage() {
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [accountMessage, setAccountMessage] = useState<string | null>(null)
   const [showNewProfile, setShowNewProfile] = useState(false)
+  const [settingsError, setSettingsError] = useState('')
 
   useEffect(() => {
     if (!data) return
@@ -36,12 +37,45 @@ export default function SettingsPage() {
     setBodyFont(data.body_font)
   }, [data])
 
+  // 版本守护：响应缺新字段说明后端进程是旧版本（旧 Pydantic 会静默忽略未知字段）
+  const guardVersion = (saved: Settings) => {
+    queryClient.setQueryData(['settings'], saved)
+    if (saved.ui_font === undefined || saved.poll_interval_minutes === undefined) {
+      setSettingsError('后端版本较旧，设置未能真正保存——请重启 python run.py 后重试')
+    } else {
+      setSettingsError('')
+    }
+  }
+
+  // 通用表单（轮询/摘要时间）：改动后由底部粘性保存栏统一提交
   const saveMutation = useMutation({
     mutationFn: api.updateSettings,
-    onSuccess: (saved: Settings) => {
-      queryClient.setQueryData(['settings'], saved)
-    },
+    onSuccess: guardVersion,
   })
+  const handleSave = () =>
+    saveMutation.mutate({ poll_interval_minutes: pollMinutes, digest_time: digestTime })
+  const discardChanges = () => {
+    if (!data) return
+    setPollMinutes(data.poll_interval_minutes)
+    setDigestTime(data.digest_time)
+  }
+  const dirty =
+    !!data && (pollMinutes !== data.poll_interval_minutes || digestTime !== data.digest_time)
+
+  // 字号：选择即保存、即时生效
+  const fontMutation = useMutation({
+    mutationFn: api.updateSettings,
+    onSuccess: guardVersion,
+    onError: (err: Error) => setSettingsError(`保存失败：${err.message}`),
+  })
+  const changeUiFont = (v: 'compact' | 'standard' | 'large') => {
+    setUiFont(v)
+    fontMutation.mutate({ ui_font: v })
+  }
+  const changeBodyFont = (v: 'small' | 'standard' | 'large') => {
+    setBodyFont(v)
+    fontMutation.mutate({ body_font: v })
+  }
 
   // ── AI 配置档案 ──
   const profilesQuery = useQuery({ queryKey: ['ai-profiles'], queryFn: api.getAIProfiles })
@@ -93,15 +127,6 @@ export default function SettingsPage() {
     },
   })
 
-  const handleSave = () => {
-    saveMutation.mutate({
-      poll_interval_minutes: pollMinutes,
-      digest_time: digestTime,
-      ui_font: uiFont,
-      body_font: bodyFont,
-    })
-  }
-
   if (isLoading) {
     return <div className="p-8 text-sm text-gray-400">加载设置中…</div>
   }
@@ -109,6 +134,12 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-8">
       <h1 className="text-xl font-semibold">设置</h1>
+
+      {settingsError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          ⚠ {settingsError}
+        </div>
+      )}
 
       {/* 邮箱账号 */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -304,12 +335,15 @@ export default function SettingsPage() {
         <div className="mt-4 grid grid-cols-2 gap-4">
           <label className="block">
             <span className="mb-1 block text-sm text-gray-600">
-              界面字号<span className="ml-1 text-xs text-gray-400">保存后全局生效</span>
+              界面字号
+              <span className="ml-1 text-xs text-gray-400">
+                {fontMutation.isPending ? '保存中…' : '选择即生效'}
+              </span>
             </span>
             <select
               className={inputClass}
               value={uiFont}
-              onChange={(e) => setUiFont(e.target.value as 'compact' | 'standard' | 'large')}
+              onChange={(e) => changeUiFont(e.target.value as 'compact' | 'standard' | 'large')}
             >
               <option value="compact">紧凑（小）</option>
               <option value="standard">标准</option>
@@ -318,33 +352,18 @@ export default function SettingsPage() {
           </label>
           <label className="block">
             <span className="mb-1 block text-sm text-gray-600">
-              邮件正文字号<span className="ml-1 text-xs text-gray-400">只影响邮件内容显示</span>
+              邮件正文字号<span className="ml-1 text-xs text-gray-400">选择即生效，只影响邮件内容</span>
             </span>
             <select
               className={inputClass}
               value={bodyFont}
-              onChange={(e) => setBodyFont(e.target.value as 'small' | 'standard' | 'large')}
+              onChange={(e) => changeBodyFont(e.target.value as 'small' | 'standard' | 'large')}
             >
               <option value="small">小</option>
               <option value="standard">标准</option>
               <option value="large">大</option>
             </select>
           </label>
-        </div>
-        <div className="mt-5 flex items-center gap-3">
-          <button
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
-            onClick={handleSave}
-            disabled={saveMutation.isPending}
-          >
-            {saveMutation.isPending ? '保存中…' : '保存'}
-          </button>
-          {saveMutation.isSuccess && !saveMutation.isPending && (
-            <span className="text-xs text-emerald-600">已保存</span>
-          )}
-          {saveMutation.isError && (
-            <span className="text-xs text-red-600">保存失败：{(saveMutation.error as Error).message}</span>
-          )}
         </div>
       </section>
 
@@ -399,6 +418,33 @@ export default function SettingsPage() {
           <p className="mt-2 text-xs text-gray-400">加载用量中…</p>
         )}
       </section>
+
+      {/* 粘性保存栏：通用设置有改动时浮出 */}
+      {dirty && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 backdrop-blur">
+          <div className="mx-auto flex max-w-2xl items-center gap-3 px-8 py-3">
+            <span className="t-sm text-gray-600">通用设置有未保存更改</span>
+            <span className="flex-1" />
+            {saveMutation.isError && (
+              <span className="t-sm text-red-600">保存失败：{(saveMutation.error as Error).message}</span>
+            )}
+            <button
+              className="rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              onClick={discardChanges}
+              disabled={saveMutation.isPending}
+            >
+              放弃
+            </button>
+            <button
+              className="rounded-lg bg-indigo-600 px-4 py-1.5 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              onClick={handleSave}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? '保存中…' : '保存更改'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
