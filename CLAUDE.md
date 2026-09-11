@@ -10,7 +10,7 @@ python run.py                                   # 一键启动（127.0.0.1:8720�
 cd backend && ../.venv/Scripts/python -m uvicorn app.main:app --reload --port 8720   # 后端热重载
 cd frontend && npm run dev                      # 前端 dev server（/api 代理到 8720）
 cd frontend && npm run build                    # 前端构建（含 tsc 类型检查）——前端改动后必须执行
-cd backend && ../.venv/Scripts/python -m ruff check app --select F                  # 后端静态检查
+cd backend && ../.venv/Scripts/python -m ruff check app --select F,TID251           # 后端静态检查（F + 分层规则 T4：禁 core/scheduler/ai → app.api）
 bash scripts/release.sh 0.2.0                   # 一条命令发版（PyPI/Release/Homebrew/winget PR，详见 docs/RELEASE.md）
 ```
 

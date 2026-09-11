@@ -38,3 +38,16 @@ where = ["backend"]
 # 前端构建产物由 scripts/sync_frontend.sh 同步进 app/static 后一起打入 wheel
 [tool.setuptools.package-data]
 app = ["static/**/*"]
+
+# ── 分层规则（IMPROVEMENT_PLAN T4）────────────────────────────────
+# 禁止 core/scheduler/ai/db 反向依赖 API 层；检查命令见 CLAUDE.md：
+#   ruff check app --select F,TID251
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"app.api".msg = "分层规则（T4）：core/scheduler/ai/db 不得 import app.api.*——跨层复用请下沉到 core/"
+
+[tool.ruff.lint.per-file-ignores]
+# API 层内部互引与入口装配是合法的
+"**/app/api/**" = ["TID251"]
+"**/app/main.py" = ["TID251"]
+# 未来 pytest（T1）经 TestClient 引用路由层属测试入口
+"**/tests/**" = ["TID251"]
