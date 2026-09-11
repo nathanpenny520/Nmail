@@ -8,8 +8,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Iterator
 
 from app.ai import llm, profiles, prompts
 from app.db.database import get_conn
@@ -27,6 +28,35 @@ def _ai_config(profile_id: str | None = None) -> tuple[str, str, str | None]:
         return profiles.resolve_config(profile_id)
     except profiles.ProfileNotConfigured as exc:
         raise AINotConfigured(str(exc)) from None
+
+
+@contextmanager
+def _logged(task_type: str, summary: str, model: str = "",
+            account_id: int | None = None, usage_out: dict | None = None) -> Iterator:
+    """ai_logs 统一记账（IMPROVEMENT_PLAN §3.3b）：正常退出记成功日志，异常记失败
+    日志（摘要=异常文本截 200）后 re-raise——各任务函数不再各写一对样板。
+
+    - 常规：``with _logged("draft", subj, model, aid) as ok: ...; ok(usage)``
+    - 流式/累计用量：传 usage_out=与 llm 层共享的 dict，成功失败都取其中累计值。
+    """
+    usage = usage_out if usage_out is not None else {}
+    final_summary = summary
+
+    def ok(u: dict | None = None, summary_override: str | None = None) -> None:
+        if u:
+            usage.update(u)
+        if summary_override is not None:
+            nonlocal final_summary
+            final_summary = summary_override
+
+    try:
+        yield ok
+    except Exception as exc:  # noqa: BLE001
+        log_usage(task_type, model, usage.get("prompt_tokens", 0),
+                  usage.get("completion_tokens", 0), False, str(exc)[:200], account_id)
+        raise
+    log_usage(task_type, model, usage.get("prompt_tokens", 0),
+              usage.get("completion_tokens", 0), True, final_summary, account_id)
 
 
 def log_usage(task_type: str, model: str, prompt_tokens: int, completion_tokens: int,
@@ -80,14 +110,9 @@ def classify_batch(items: list[dict], account_id: int | None = None,
         )
     user = prompts.CLASSIFY_USER_TEMPLATE.format(count=len(items), emails="\n".join(email_lines))
 
-    try:
+    with _logged("classify", f"{len(items)} 封", model, account_id) as ok:
         text, usage = llm.chat(base_url, model, api_key, prompts.CLASSIFY_SYSTEM, user)
-        log_usage("classify", model,
-                  usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
-                  True, f"{len(items)} 封", account_id)
-    except Exception as exc:  # noqa: BLE001
-        log_usage("classify", model, 0, 0, False, str(exc)[:200], account_id)
-        raise
+        ok(usage)
 
     try:
         data = _extract_json(text)
@@ -151,14 +176,9 @@ def generate_reply_draft(
     if instruction:
         user += f"\n\n用户的额外要求：{instruction}"
 
-    try:
+    with _logged("draft", email_row["subject"][:80], model, account_id) as ok:
         text, usage = llm.chat(base_url, model, api_key, system, user)
-        log_usage("draft", model,
-                  usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
-                  True, email_row["subject"][:80], account_id)
-    except Exception as exc:  # noqa: BLE001
-        log_usage("draft", model, 0, 0, False, str(exc)[:200], account_id)
-        raise
+        ok(usage)
     return text.strip()
 
 
@@ -172,14 +192,9 @@ def chat_with_context(
     """基于邮件上下文回答问题（非流式）。history: [{role, content}]"""
     base_url, model, api_key = _ai_config(profile_id)
     messages = _chat_messages(context_text, question, history)
-    try:
+    with _logged("chat", question[:80], model, account_id) as ok:
         text, usage = llm.chat_messages(base_url, model, api_key, messages)
-        log_usage("chat", model,
-                  usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
-                  True, question[:80], account_id)
-    except Exception as exc:  # noqa: BLE001
-        log_usage("chat", model, 0, 0, False, str(exc)[:200], account_id)
-        raise
+        ok(usage)
     return text.strip()
 
 
@@ -207,17 +222,9 @@ def chat_with_context_stream(
     usage: dict = {"prompt_tokens": 0, "completion_tokens": 0}
 
     def generate():
-        parts: list[str] = []
-        try:
-            for delta in llm.iter_deltas(base_url, model, api_key, messages, usage_out=usage):
-                parts.append(delta)
-                yield delta
-        except Exception as exc:  # noqa: BLE001
-            log_usage("chat", model, usage.get("prompt_tokens", 0),
-                      usage.get("completion_tokens", 0), False, str(exc)[:200], account_id)
-            raise
-        log_usage("chat", model, usage.get("prompt_tokens", 0),
-                  usage.get("completion_tokens", 0), True, question[:80], account_id)
+        # 流式：usage 由 iter_deltas 边发边填，成功/失败都按累计值记账
+        with _logged("chat", question[:80], model, account_id, usage_out=usage):
+            yield from llm.iter_deltas(base_url, model, api_key, messages, usage_out=usage)
 
     return generate()
 
@@ -237,14 +244,9 @@ def write_assist(text: str, op: str, instruction: str | None = None,
         )
         context = f"\n\n可参考的背景/已有草稿：\n{text[:4000]}" if text.strip() else ""
         user = f"{instruction.strip()}{context}"
-        try:
+        with _logged("write", "compose", model) as ok:
             result, usage = llm.chat(base_url, model, api_key, system, user)
-            log_usage("write", model,
-                      usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
-                      True, "compose", None)
-        except Exception as exc:  # noqa: BLE001
-            log_usage("write", model, 0, 0, False, str(exc)[:200], None)
-            raise
+            ok(usage)
         return result.strip()
 
     if op == "custom":
@@ -254,15 +256,10 @@ def write_assist(text: str, op: str, instruction: str | None = None,
         if not head:
             raise ValueError(f"未知写作操作：{op}")
     user = prompts.WRITE_USER_TEMPLATE.format(instruction=head, text=text[:6000])
-    try:
+    with _logged("write", op, model) as ok:
         result, usage = llm.chat(base_url, model, api_key,
                                  "你是写作助手，只输出改写结果本身，不要解释。", user)
-        log_usage("write", model,
-                  usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
-                  True, op, None)
-    except Exception as exc:  # noqa: BLE001
-        log_usage("write", model, 0, 0, False, str(exc)[:200], None)
-        raise
+        ok(usage)
     return result.strip()
 
 
@@ -270,18 +267,13 @@ def digest_overview(user: str, account_id: int | None = None,
                     profile_id: str | None = None) -> str:
     """每日摘要的 AI 综述段落。"""
     base_url, model, api_key = _ai_config(profile_id)
-    try:
+    with _logged("digest", "digest", model, account_id) as ok:
         text, usage = llm.chat(
             base_url, model, api_key,
             "你是邮件秘书，用中文写简洁的每日综述，只输出综述本身。",
             user,
         )
-        log_usage("digest", model,
-                  usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
-                  True, "digest", account_id)
-    except Exception as exc:  # noqa: BLE001
-        log_usage("digest", model, 0, 0, False, str(exc)[:200], account_id)
-        raise
+        ok(usage)
     return text.strip()
 
 

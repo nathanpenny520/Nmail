@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.ai import profiles, tasks
 from app.api.chats import append_message, require_session
+from app.api.deps import ai_config_or_400, ai_result_or_http
 from app.core.mail_html import markdown_body_html, sanitize_outgoing_html
 from app.core.pipeline import classify_missing
 from app.db.database import get_conn
@@ -92,15 +93,10 @@ def _persist_stream(gen, session_id: int, model: str):
 def chat_manager(payload: ManagerChatIn) -> dict:
     """「AI 总管家」非流式版本（保留兼容）。"""
     context = _manager_context(payload)
-    try:
-        answer = tasks.chat_with_context(
-            context, payload.question, history=payload.history,
-            profile_id=payload.profile_id,
-        )
-    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
-        raise HTTPException(400, str(exc)) from None
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"AI 调用失败：{exc}") from exc
+    answer = ai_result_or_http(lambda: tasks.chat_with_context(
+        context, payload.question, history=payload.history,
+        profile_id=payload.profile_id,
+    ))
     if payload.session_id is not None:
         require_session(payload.session_id)
         append_message(payload.session_id, "user", payload.question)
@@ -113,10 +109,8 @@ def chat_manager(payload: ManagerChatIn) -> dict:
 def chat_manager_stream(payload: ManagerChatIn):
     """「AI 总管家」流式版本：SSE 逐段返回。"""
     context = _manager_context(payload)
-    try:
-        tasks._ai_config(payload.profile_id)  # 先验配置：未配置/停用时用户消息不能先落库成孤儿
-    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
-        raise HTTPException(400, str(exc)) from None
+    # 先验配置：未配置/停用时用户消息不能先落库成孤儿
+    ai_config_or_400(payload.profile_id)
     if payload.session_id is not None:
         require_session(payload.session_id)
         append_message(payload.session_id, "user", payload.question)
@@ -202,16 +196,11 @@ def chat(payload: ChatIn) -> dict:
     if not ids:
         raise HTTPException(400, "需要提供 email_id 或 email_ids 作为上下文")
     contexts, account_id = _chat_contexts(ids)
-    try:
-        answer = tasks.chat_with_context(
-            "\n\n".join(contexts), payload.question,
-            history=payload.history, account_id=account_id,
-            profile_id=payload.profile_id,
-        )
-    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
-        raise HTTPException(400, str(exc)) from None
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"AI 调用失败：{exc}") from exc
+    answer = ai_result_or_http(lambda: tasks.chat_with_context(
+        "\n\n".join(contexts), payload.question,
+        history=payload.history, account_id=account_id,
+        profile_id=payload.profile_id,
+    ))
     return {"answer": answer}
 
 
@@ -221,14 +210,11 @@ def chat_stream(payload: ChatIn):
     if not ids:
         raise HTTPException(400, "需要提供 email_id 或 email_ids 作为上下文")
     contexts, account_id = _chat_contexts(ids)
-    try:
-        gen = tasks.chat_with_context_stream(
-            "\n\n".join(contexts), payload.question,
-            history=payload.history, account_id=account_id,
-            profile_id=payload.profile_id,
-        )
-    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
-        raise HTTPException(400, str(exc)) from None
+    gen = ai_result_or_http(lambda: tasks.chat_with_context_stream(
+        "\n\n".join(contexts), payload.question,
+        history=payload.history, account_id=account_id,
+        profile_id=payload.profile_id,
+    ))
     return _sse(gen)
 
 
@@ -243,15 +229,8 @@ def _chat_contexts(ids: list[int]) -> tuple[list[str], int | None]:
 
 @router.post("/write")
 def write(payload: WriteIn) -> dict:
-    try:
-        result = tasks.write_assist(payload.text, payload.op, payload.instruction,
-                                    profile_id=payload.profile_id)
-    except tasks.AINotConfigured as exc:  # 区分「未配置端点」与「AI 已停用」
-        raise HTTPException(400, str(exc)) from None
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"AI 调用失败：{exc}") from exc
+    result = ai_result_or_http(lambda: tasks.write_assist(
+        payload.text, payload.op, payload.instruction, profile_id=payload.profile_id))
     resp: dict = {"text": result}
     if payload.want_html:
         html = markdown_body_html(result)

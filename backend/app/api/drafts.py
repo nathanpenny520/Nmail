@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.ai import tasks
-from app.api.deps import mail_error_to_http
+from app.api.deps import ai_result_or_http, mail_error_to_http
 from app.core import imap_client, mailbox
 from app.core.mail_html import markdown_to_email_html
 from app.db.database import get_conn
@@ -172,15 +172,10 @@ def regenerate_draft(payload: RegenerateIn) -> dict:
     if not account:
         raise HTTPException(404, "账号不存在")
 
-    try:
-        content = tasks.generate_reply_draft(
-            email_row, account["email"],
-            instruction=payload.instruction, account_id=int(account["id"]),
-        )
-    except tasks.AINotConfigured:
-        raise HTTPException(400, "未配置 AI 端点") from None
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"生成失败：{exc}") from exc
+    content = ai_result_or_http(lambda: tasks.generate_reply_draft(
+        email_row, account["email"],
+        instruction=payload.instruction, account_id=int(account["id"]),
+    ))
 
     existing = conn.execute(
         "SELECT id FROM drafts WHERE email_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1",
