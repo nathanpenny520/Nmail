@@ -17,6 +17,7 @@ from app.core.mailbox import MailError
 _MAIL_ERROR_STATUS: dict[str, int] = {
     "not_found": 404,
     "missing_credential": 400,
+    "oauth_error": 400,  # 令牌缺失/刷新失败：文案含「重新授权」指引
     "smtp_missing": 400,
     "state": 400,
     "no_recipient": 400,

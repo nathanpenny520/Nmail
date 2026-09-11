@@ -19,7 +19,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
    ▼
 本地数据目录（platformdirs；Windows: %LOCALAPPDATA%/Nmail）
    ├─ nmail.db      全部业务数据
-   ├─ secrets.json  AI key、各账号授权码（AI key 明文回显设置界面供所见即所存；账号授权码不回传）
+   ├─ secrets.json  AI key、各账号授权码、OAuth 客户端配置与令牌（AI key 明文回显设置界面供所见即所存；账号授权码不回传）
    ├─ accounts/<id>/attachments/  附件落盘
    └─ drafts/<id>/               写信台草稿附件落盘（发送/删稿即清）
 ```
@@ -32,7 +32,8 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `api/deps.py` | API 层公共错误翻译 | `mail_error_to_http`（MailError→4xx/502 翻译表）、`ai_config_or_400`（AI 未配置/停用→400）、`ai_result_or_http`（AI 调用统一 400/502）——端点零样板 |
 | `api/system.py` | `/api/health`、`/api/update-check`（24h 节流，force 可立即检查） | — |
 | `api/settings.py` | 通用设置 KV 读写 + AI 端点测试 | 含 `ui_font/body_font` 档位校验；AI 配置已移至 profiles；`/api/ai/test` 字段省略时回退激活档案 |
-| `api/accounts.py` | 账号 CRUD/测试/探测/后台同步触发/文件夹/服务商预设/文风提示词 | 授权码存 `secrets.json`（key=`account_pwd:{id}`）；`POST /accounts/probe` 未收录域名自动探测 |
+| `api/accounts.py` | 账号 CRUD/测试/探测/后台同步触发/文件夹/服务商预设/文风提示词 | 授权码存 `secrets.json`（key=`account_pwd:{id}`）；`POST /accounts/probe` 未收录域名自动探测；OAuth 账号拒绝改密（400 指引重新授权）、删除账号时一并清 OAuth 令牌 |
+| `api/oauth.py` | Gmail/Outlook OAuth2：`GET /api/oauth/status`（配置状态+动态回调地址）、`PUT /api/oauth/config`（client_id/secret 登记）、`POST /api/oauth/authorize`（发起授权返 auth_url）、`GET /api/oauth/flow/{state}`（前端轮询结果）、`GET /oauth/callback`（回环回调，直出自关闭 HTML） | 回调地址=`http://localhost:{进程端口}/oauth/callback`（端口随 run.py 动态，端口被占会顺延——桌面型 OAuth 客户端对 localhost 回环不校验端口）；回调里完成换令牌→建/转账号→触发首同步；流程状态进程内 10 分钟 TTL，state 防伪、verifier 用后即弃；回调页不携带任何令牌内容 |
 | `api/emails.py` | 列表/搜索/详情/操作/附件下载 | 搜索：≥3 字走 FTS5 trigram，<3 字回退 LIKE；详情返回消毒后 HTML（`?images=1` 放行远程图+内联 cid） |
 | `api/drafts.py` | 待审草稿：列表/修改/发送(approve)/丢弃/恢复/彻底删除/重新生成 | approve 走 SMTP 并带 `In-Reply-To`；原文自动标已读 |
 | `api/user_drafts.py` | 写信台草稿：CRUD + 附件上传/删除 + 定时/取消 + 发送 | 编辑防抖 PATCH 自动保存；附件选择即落盘 `data_dir/drafts/<id>/`（行在 user_draft_attachments，草稿删除/发送成功即清理）；发送为薄壳，核心在 `core/outbox.send_user_draft`（API 与调度器共用）；回复草稿带 `In-Reply-To`（软引用邮件 id） |
@@ -46,8 +47,9 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `api/profiles.py` | AI 配置档案 CRUD/激活/模型列表代理（`POST /api/ai/models`，显式 URL/Key 优先、回退档案已存值）+ AI 总开关（`PUT /api/ai/enabled`） | 密钥语义：响应回显 `api_key` 明文（本地单用户应用，所见即所存，清空保存=清除）；`ai_enabled=false` 即传统邮件模式，档案保留（/models 属配置辅助不受开关限制） |
 | `api/digest.py` | 每日摘要查看/手动生成 | — |
 | `core/providers.py` | 20 个服务商预设（含中文授权码提示）+ 未收录域名自动探测 | 按域名自动匹配；`probe_server()`：autoconfig 标准接口 → 常见主机名 993/465 并发试连（只收加密端口） |
-| `core/imap_client.py` | IMAP/SMTP 封装 | 连接/读写超时 60s；`iter_new_mail` 分块产出新增邮件（SEARCH UID 清单 → 稠密窗口区间 FETCH、稀疏窗口逐 UID 精确拉取——移入型文件夹如「已删除」日期与 UID 不单调，QQ 会把任何多 UID 集合按 min:max 连续展开）；网易系需 IMAP ID 命令；SMTP 端口 465=SSL/587=STARTTLS；`append_sent` 发送后归档 |
-| `core/mailbox.py` | 账号凭据/连接统一入口（全项目唯一 MailConfig 构造点） | `load_account`（账号行+密钥 → AccountHandle，缺一抛 `MailError`）、`has_credentials`、`open_imap`；API 层 `_imap_for` 等拼装点逐步迁移至此（IMPROVEMENT_PLAN §3.1）；添加账号入库前的表单直连预检除外 |
+| `core/imap_client.py` | IMAP/SMTP 封装 | 连接/读写超时 60s；`iter_new_mail` 分块产出新增邮件（SEARCH UID 清单 → 稠密窗口区间 FETCH、稀疏窗口逐 UID 精确拉取——移入型文件夹如「已删除」日期与 UID 不单调，QQ 会把任何多 UID 集合按 min:max 连续展开）；网易系需 IMAP ID 命令；SMTP 端口 465=SSL/587=STARTTLS；`append_sent` 发送后归档；`MailConfig.access_token` 非空时 IMAP 走 `xoauth2`、SMTP 走 `AUTH XOAUTH2`（不广播时回退裸 docmd） |
+| `core/oauth.py` | Gmail/Outlook OAuth2 授权与令牌管理（PKCE 授权码流程、XOAUTH2 编码、令牌刷新） | 服务商参数内置（Gmail scope 仅 `https://mail.google.com/`、Outlook 用 outlook.office.com 资源 + offline_access；端口 465=SSL/587=STARTTLS）；OAuth 客户端由用户自建（secrets `oauth_client:{provider}`），令牌存 `oauth_token:{account_id}`（expires_at 预扣 120s 余量，微软轮换 refresh_token 随保存覆盖）；`ensure_access_token` 按账号加锁防并发重复刷新；教程见 docs/自建邮箱客户端 Gmail+Outlook OAuth2 完整教程.md |
+| `core/mailbox.py` | 账号凭据/连接统一入口（全项目唯一 MailConfig 构造点） | `load_account`（账号行+密钥 → AccountHandle，缺一抛 `MailError`；OAuth 账号先 `oauth.ensure_access_token` 刷新令牌再装配）、`has_credentials`、`open_imap`；API 层 `_imap_for` 等拼装点逐步迁移至此（IMPROVEMENT_PLAN §3.1）；添加账号入库前的表单直连预检除外 |
 | `core/sync.py` | UID 增量同步 | 分块断点续拉（每块入库+断点同一事务提交，中断从断点续传）；`start_sync` 后台线程执行（防重入），进度写账号 status=`syncing`+status_detail；网络异常自动重试一次；首同步限 30 天；UIDVALIDITY 变化自愈；登录失败→`auth_error`+一次性通知；同步完成后触发 AI 流水线 |
 | `core/outbox.py` | 写信台草稿发送唯一实现（API 与调度器共用） | `send_user_draft`：状态校验→地址解析→消毒+纯文本派生→`mailbox.send_message`→标记 sent/清附件；失败抛 `MailError`（后台线程无 HTTPException）；`draft_dir` 为附件目录唯一出处 |
 | `core/jobs.py` | 轻量任务执行器（ThreadPool 2 线程） | `@runner(kind)` 注册表 + `submit`（dedupe 防双击）+ `report`（进度/阶段入 jobs 表）+ 失败进表；`GET /api/jobs/*` 供前端 useJob 1s 轮询 |
@@ -91,7 +93,7 @@ UID 增量拉取 → 落库+附件落盘 → 白名单(留收件箱)/黑名单(�
 ### 安全模型
 - HTML 邮件：nh3 白名单（http(s) 链接强制 target=_blank + rel=noopener）→ 远程图默认拦截（计数）→ 前端 sandbox iframe（allow-same-origin+allow-popups-to-escape-sandbox，无脚本；外链点击在新标签由浏览器正常打开，不在 iframe 内导航）
 - 发信：multipart/alternative（写信工作台：TipTap HTML 经 `sanitize_outgoing_html` 白名单消毒后直发 + 派生纯文本；AI 草稿 approve 同走 `imap_client` 发送）；草稿 approve 带 In-Reply-To 并归档 Sent
-- 密钥：本地 `secrets.json`（POSIX chmod 600，原子写：临时文件+`os.replace`）；AI key 按档案存放（`ai_profile_key:{id}`）明文回显（所见即所存）；服务仅 127.0.0.1
+- 密钥：本地 `secrets.json`（POSIX chmod 600，原子写：临时文件+`os.replace`）；AI key 按档案存放（`ai_profile_key:{id}`）明文回显（所见即所存）；OAuth 令牌按账号存放（`oauth_token:{id}`，含 refresh_token）与客户端配置（`oauth_client:{provider}`）不回传前端；服务仅 127.0.0.1
 - 来源校验（main.py 中间件）：Host 必须为本机主机名（端口与实际监听一致才严格比对）；浏览器附带 Origin 时必须为本机源——挡恶意网页对 127.0.0.1 的 drive-by POST 与 DNS rebinding
 
 ## 分发与打包

@@ -3,6 +3,7 @@ import { BadgeCheck, BarChart3, Bot, Eye, EyeOff, Info, Loader2, Mail, MailPlus,
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
+import { OauthConfigCard, ReauthorizeButton } from '../components/OauthSettings'
 import type { Account, AITestResult, AIProfile, Settings } from '../types'
 
 const inputClass =
@@ -321,6 +322,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="mt-4 space-y-2">
+              <OauthConfigCard />
               {accountsQuery.isLoading && <div className="t-md text-gray-400">加载中…</div>}
               {!accountsQuery.isLoading && accounts.length === 0 && (
                 <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center t-md text-gray-400">
@@ -345,6 +347,9 @@ export default function SettingsPage() {
                           </span>
                           <span className="ml-2 text-gray-400">
                             {account.provider_name}
+                            {account.auth_type === 'oauth2' && (
+                              <span className="ml-1.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-600">OAuth2</span>
+                            )}
                             {account.last_sync_at
                               ? ` · 上次同步 ${new Date(account.last_sync_at).toLocaleString('zh-CN', { hour12: false })}`
                               : ''}
@@ -378,6 +383,12 @@ export default function SettingsPage() {
                       >
                         {account.style_prompt ? '文风 ✓' : '文风'}
                       </button>
+                      {account.auth_type === 'oauth2' && (
+                        <ReauthorizeButton
+                          account={account}
+                          onDone={() => void queryClient.invalidateQueries({ queryKey: ['accounts'] })}
+                        />
+                      )}
                       <button
                         className="rounded-lg border border-gray-200 p-1.5 text-gray-500 hover:bg-white hover:text-indigo-600 disabled:opacity-40"
                         title="立即同步"
@@ -410,7 +421,8 @@ export default function SettingsPage() {
               )}
               {accounts.some((a) => a.status === 'auth_error') && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 t-sm leading-relaxed text-red-700">
-                  有账号授权码失效：登录对应邮箱网页版 → 设置 → 开启 IMAP/SMTP 并重新生成授权码，
+                  有账号登录凭据失效：OAuth2 账号点「重新授权」完成登录即可；
+                  授权码账号请登录对应邮箱网页版 → 设置 → 开启 IMAP/SMTP 并重新生成授权码，
                   然后删除账号重新添加（或更新授权码）。
                 </div>
               )}

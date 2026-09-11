@@ -1,8 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { CheckCircle2, ChevronDown, Loader2, Radar, X, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ExternalLink, Loader2, Radar, X, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import type { AccountAddPayload, ProviderPreset } from '../types'
+import { useOauthAuthorize } from './OauthSettings'
 
 interface AddAccountModalProps {
   onClose: () => void
@@ -24,6 +25,15 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
   const providersQuery = useQuery({ queryKey: ['providers'], queryFn: api.getProviders })
   const providers = providersQuery.data?.providers ?? []
   const manualNote = providersQuery.data?.manual_note ?? ''
+
+  // Gmail/Outlook 域名 → OAuth2 授权登录入口（免授权码；未配置 client_id 时给出指引）
+  const oauthQuery = useQuery({ queryKey: ['oauth-status'], queryFn: api.getOauthStatus })
+  const oauthProvider = useMemo(() => {
+    const domain = email.split('@')[1]?.trim().toLowerCase()
+    if (!domain) return null
+    return oauthQuery.data?.providers.find((p) => p.domains.includes(domain)) ?? null
+  }, [email, oauthQuery.data])
+  const oauthFlow = useOauthAuthorize((addedEmail) => onAdded(addedEmail))
 
   const detected: ProviderPreset | null = useMemo(() => {
     const domain = email.split('@')[1]?.trim().toLowerCase()
@@ -105,6 +115,41 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
               autoComplete="off"
             />
           </label>
+
+          {oauthProvider && (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+              {oauthProvider.configured ? (
+                <>
+                  <button
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                    disabled={!emailValid || oauthFlow.pending}
+                    onClick={() => oauthFlow.start({ email: email.trim(), provider: oauthProvider.key })}
+                  >
+                    {oauthFlow.pending
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <ExternalLink className="h-4 w-4" />}
+                    {oauthFlow.pending
+                      ? '等待授权完成（在弹出的窗口中登录）…'
+                      : `使用 ${oauthProvider.name} 账号授权登录（推荐）`}
+                  </button>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-indigo-500/90">
+                    免授权码：Google/微软已停用密码直连。授权成功后自动建号并开始后台同步。
+                  </p>
+                </>
+              ) : (
+                <p className="text-[11px] leading-relaxed text-indigo-800/90">
+                  {oauthProvider.name} 已停用密码直连。推荐使用 OAuth2 授权登录：
+                  先到 <b>设置 → 邮箱账号 → OAuth2 授权登录</b> 完成一次性配置
+                  （填入你的 OAuth 客户端 client_id），回到这里即可一键授权。
+                </p>
+              )}
+              {oauthFlow.error && (
+                <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+                  {oauthFlow.error}
+                </p>
+              )}
+            </div>
+          )}
 
           {email.includes('@') && (
             <div

@@ -1,0 +1,339 @@
+"""Gmail / Outlook.com OAuth2（XOAUTH2）授权与令牌管理。
+
+授权码 + PKCE 流程：浏览器在 Google/微软完成登录后，回环回调打到本机
+/oauth/callback（API 层），后端凭 code + code_verifier 换令牌。OAuth 客户端
+由用户自建（client_id 填在设置页，教程见 docs/自建邮箱客户端
+Gmail+Outlook OAuth2 完整教程.md），Nmail 不内置凭据。
+
+存储约定（secrets.json）：
+- oauth_client:{provider} → JSON {client_id, client_secret?}（secret 可选：桌面型
+  客户端走纯 PKCE 不需要；Web 型客户端必填）
+- oauth_token:{account_id} → JSON {provider, email, access_token, refresh_token,
+  expires_at}（expires_at 为本地 Unix 时间戳，提前 _TOKEN_MARGIN 秒刷新；
+  微软 v2 端点轮换 refresh_token，轮换值随保存覆盖）
+
+XOAUTH2 编码（Gmail/Outlook 共用，\x01 为二进制 SOH，教程 §1）：
+user=<email>\\x01auth=Bearer <token>\\x01\\x01 → base64
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import secrets as _secrets
+import threading
+import time
+from dataclasses import dataclass
+from urllib.parse import urlencode
+
+import httpx
+
+from app.security import get_secret, has_secret, set_secret
+
+CALLBACK_PATH = "/oauth/callback"
+FLOW_TTL = 600  # 授权流程状态有效期（秒），过期即弃
+_TOKEN_MARGIN = 120  # access_token 提前刷新余量（秒）
+
+_TOKEN_ERR_HINT = {
+    "invalid_grant": "授权已过期或已被撤销，请重新授权",
+    "invalid_client": "client_id / client_secret 不正确，请检查 OAuth 客户端配置",
+    "redirect_uri_mismatch": "回调地址与 OAuth 客户端登记的不一致，请按设置页显示的地址登记",
+    "unauthorized_client": "该 OAuth 客户端类型不允许此流程，请检查客户端创建时的类型选择",
+}
+
+
+class OAuthError(Exception):
+    """面向用户的 OAuth 错误（消息不含令牌内容）。"""
+
+
+@dataclass(frozen=True)
+class OAuthProvider:
+    key: str
+    name: str
+    domains: tuple[str, ...]
+    auth_url: str
+    token_url: str
+    scope: str
+    imap_server: str
+    imap_port: int
+    smtp_server: str
+    smtp_port: int
+    extra_auth_params: dict[str, str]  # 拼进授权 URL 的额外参数
+
+
+PROVIDERS: dict[str, OAuthProvider] = {
+    # Gmail：IMAP/SMTP XOAUTH2 只认 https://mail.google.com/ 这一个 scope，
+    # access_type=offline 保证返回 refresh_token（教程 §2 坑点 4）
+    "gmail": OAuthProvider(
+        key="gmail", name="Gmail", domains=("gmail.com", "googlemail.com"),
+        auth_url="https://accounts.google.com/o/oauth2/v2/auth",
+        token_url="https://oauth2.googleapis.com/token",
+        scope="https://mail.google.com/",
+        imap_server="imap.gmail.com", imap_port=993,
+        smtp_server="smtp.gmail.com", smtp_port=465,
+        extra_auth_params={"access_type": "offline", "prompt": "consent"},
+    ),
+    # Outlook：scope 必须是 outlook.office.com 资源（graph 资源换的 token 鉴权失败），
+    # offline_access 拿 refresh_token；个人账号 SMTP 走 smtp-mail.outlook.com:587 STARTTLS
+    "outlook": OAuthProvider(
+        key="outlook", name="Outlook", domains=("outlook.com", "hotmail.com", "live.com", "msn.com"),
+        auth_url="https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        token_url="https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        scope="offline_access https://outlook.office.com/IMAP.AccessAsUser.All"
+              " https://outlook.office.com/SMTP.Send",
+        imap_server="outlook.office365.com", imap_port=993,
+        smtp_server="smtp-mail.outlook.com", smtp_port=587,
+        extra_auth_params={},
+    ),
+}
+
+
+def match_provider(email: str) -> OAuthProvider | None:
+    """按邮箱域名匹配 OAuth 服务商；未覆盖域名返回 None。"""
+    domain = email.rsplit("@", 1)[-1].strip().lower()
+    for provider in PROVIDERS.values():
+        if domain in provider.domains:
+            return provider
+    return None
+
+
+def xoauth2_string(email: str, access_token: str) -> str:
+    """SASL XOAUTH2 初始响应串（IMAP/SMTP 共用；注意 \\x01 是二进制字节）。"""
+    return f"user={email}\x01auth=Bearer {access_token}\x01\x01"
+
+
+# ── OAuth 客户端配置（用户在设置页填写）──────────────────────────
+
+def client_key(provider_key: str) -> str:
+    return f"oauth_client:{provider_key}"
+
+
+def get_client(provider_key: str) -> dict | None:
+    raw = get_secret(client_key(provider_key))
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+    return data if data.get("client_id") else None
+
+
+def configured(provider_key: str) -> bool:
+    return get_client(provider_key) is not None
+
+
+def save_client(provider_key: str, client_id: str, client_secret: str = "") -> None:
+    if not client_id.strip() and not client_secret.strip():
+        set_secret(client_key(provider_key), None)  # 双空 = 清除配置
+        return
+    set_secret(client_key(provider_key), json.dumps({
+        "client_id": client_id.strip(),
+        "client_secret": client_secret.strip(),
+    }))
+
+
+# ── PKCE 与授权 URL ──────────────────────────────────────────────
+
+def pkce_pair() -> tuple[str, str]:
+    """返回 (code_verifier, code_challenge)：RFC 7636 S256，verifier 64 字符。"""
+    verifier = base64.urlsafe_b64encode(_secrets.token_bytes(48)).decode().rstrip("=")
+    return verifier, challenge_from_verifier(verifier)
+
+
+def challenge_from_verifier(verifier: str) -> str:
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
+
+
+def build_auth_url(provider: OAuthProvider, *, client_id: str, redirect_uri: str,
+                   state: str, code_challenge: str) -> str:
+    params: dict[str, str] = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": provider.scope,
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+    }
+    params.update(provider.extra_auth_params)
+    return f"{provider.auth_url}?{urlencode(params)}"
+
+
+def _token_request(provider: OAuthProvider, data: dict[str, str]) -> dict:
+    """POST token 端点；失败按错误码翻译为面向用户的文案。"""
+    try:
+        resp = httpx.post(provider.token_url, data=data,
+                          headers={"Content-Type": "application/x-www-form-urlencoded"},
+                          timeout=30)
+    except httpx.HTTPError as exc:
+        raise OAuthError(f"无法连接 {provider.name} 令牌服务：{exc}") from exc
+    try:
+        payload = resp.json()
+    except ValueError as exc:
+        raise OAuthError(f"{provider.name} 令牌服务返回异常（HTTP {resp.status_code}）") from exc
+    if resp.status_code != 200 or "access_token" not in payload:
+        err = payload.get("error", "")
+        hint = _TOKEN_ERR_HINT.get(err)
+        detail = hint or payload.get("error_description") or err or f"HTTP {resp.status_code}"
+        raise OAuthError(f"{provider.name} 授权失败：{detail}")
+    return payload
+
+
+def exchange_code(provider: OAuthProvider, *, client_id: str, code: str,
+                  code_verifier: str, redirect_uri: str,
+                  client_secret: str | None = None) -> dict:
+    """授权码换令牌：PKCE 必带 verifier；Web 型客户端需附 client_secret。"""
+    data = {
+        "client_id": client_id,
+        "code": code,
+        "code_verifier": code_verifier,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+    }
+    if client_secret:
+        data["client_secret"] = client_secret
+    return _token_request(provider, data)
+
+
+def refresh_tokens(provider: OAuthProvider, *, client_id: str, refresh_token: str,
+                   client_secret: str | None = None) -> dict:
+    data = {
+        "client_id": client_id,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }
+    if client_secret:
+        data["client_secret"] = client_secret
+    return _token_request(provider, data)
+
+
+# ── 令牌存储与刷新 ────────────────────────────────────────────────
+
+def token_key(account_id: int) -> str:
+    return f"oauth_token:{account_id}"
+
+
+def load_token(account_id: int) -> dict | None:
+    raw = get_secret(token_key(account_id))
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return None
+
+
+def has_token(account_id: int) -> bool:
+    return has_secret(token_key(account_id))
+
+
+def delete_token(account_id: int) -> None:
+    set_secret(token_key(account_id), None)
+
+
+def store_tokens(account_id: int, provider_key: str, email: str, tokens: dict) -> None:
+    """落库令牌（expires_at 提前 _TOKEN_MARGIN 秒，刷新轮换值覆盖保存）。"""
+    expires_in = int(tokens.get("expires_in") or 3600)
+    record = {
+        "provider": provider_key,
+        "email": email,
+        "access_token": tokens["access_token"],
+        "refresh_token": tokens.get("refresh_token"),
+        "expires_at": time.time() + expires_in - _TOKEN_MARGIN,
+    }
+    set_secret(token_key(account_id), json.dumps(record))
+
+
+_token_locks: dict[int, threading.Lock] = {}
+_token_locks_guard = threading.Lock()
+
+
+def _account_lock(account_id: int) -> threading.Lock:
+    """按账号加锁：同步线程与发信线程同时发现令牌过期时只刷一次。
+
+    微软 v2 端点轮换 refresh_token——并发刷新会让先返回的 refresh_token 失效。
+    """
+    with _token_locks_guard:
+        lock = _token_locks.get(account_id)
+        if lock is None:
+            lock = _token_locks.setdefault(account_id, threading.Lock())
+        return lock
+
+
+def ensure_access_token(account_id: int) -> str:
+    """取有效 access_token：未过期直接用，临期/已过期则刷新并保存。
+
+    令牌缺失或刷新失败（含 refresh_token 失效）抛 OAuthError，调用方翻译为
+    「请重新授权」类文案。
+    """
+    with _account_lock(account_id):
+        record = load_token(account_id)
+        if not record or not record.get("refresh_token"):
+            raise OAuthError("缺少 OAuth 令牌，请重新授权")
+        if record.get("access_token") and time.time() < record.get("expires_at", 0):
+            return record["access_token"]
+
+        provider = PROVIDERS.get(record.get("provider") or "")
+        if provider is None:
+            raise OAuthError("OAuth 服务商标识无效，请重新授权")
+        client = get_client(provider.key)
+        if client is None:
+            raise OAuthError(f"{provider.name} 的 OAuth 客户端配置已被移除，请在设置页重新填写")
+        try:
+            tokens = refresh_tokens(
+                provider, client_id=client["client_id"],
+                refresh_token=record["refresh_token"],
+                client_secret=client.get("client_secret"))
+        except OAuthError:
+            raise
+        store_tokens(account_id, provider.key, record["email"], tokens)
+        return tokens["access_token"]
+
+
+# ── 授权流程状态（进程内；单用户本地应用无需持久化）───────────────
+
+_FLOWS: dict[str, dict] = {}
+_FLOW_LOCK = threading.Lock()
+
+
+def _prune_flows(now: float) -> None:
+    expired = [k for k, v in _FLOWS.items() if now - v["created"] > FLOW_TTL]
+    for k in expired:
+        _FLOWS.pop(k, None)
+
+
+def create_flow(email: str, provider_key: str, redirect_uri: str) -> tuple[str, dict]:
+    """新建授权流程，返回 (state, 流程信息)。state 供回调防伪（RFC 6749 §10.12）。"""
+    client = get_client(provider_key)
+    assert client  # 调用方（API 层）已预检
+    verifier, challenge = pkce_pair()
+    state = _secrets.token_urlsafe(24)
+    flow = {
+        "email": email, "provider": provider_key,
+        "code_verifier": verifier, "redirect_uri": redirect_uri,
+        "created": time.time(), "status": "pending", "detail": "",
+    }
+    with _FLOW_LOCK:
+        _prune_flows(time.time())
+        _FLOWS[state] = flow
+    return state, flow
+
+
+def get_flow(state: str) -> dict | None:
+    with _FLOW_LOCK:
+        flow = _FLOWS.get(state)
+        if flow is None or time.time() - flow["created"] > FLOW_TTL:
+            return None
+        return flow
+
+
+def settle_flow(state: str, ok: bool, detail: str) -> None:
+    """回调处理完毕：标记结果供前端轮询（verifier 用后即弃，state 保留到过期）。"""
+    with _FLOW_LOCK:
+        flow = _FLOWS.get(state)
+        if flow is not None:
+            flow["code_verifier"] = ""
+            flow["status"] = "done" if ok else "error"
+            flow["detail"] = detail

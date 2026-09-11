@@ -18,6 +18,11 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0911-1756-OAuth2登录
+- 目标: 按 docs/自建邮箱客户端 Gmail+Outlook OAuth2 完整教程.md 落地 Gmail/Outlook OAuth2（XOAUTH2）账号授权登录——PKCE 授权码流程、令牌刷新与存储、IMAP/SMTP XOAUTH2 接入、添加账号走浏览器授权、设置页 OAuth 客户端配置
+- 范围: backend（db 迁移 v13、core/oauth.py 新增、imap_client/mailbox、api/oauth.py 新增、api/accounts、core/providers 文案）、frontend（types/client/AddAccountModal/SettingsPage）、docs
+- 开始: 2026-09-11 17:56
+
 ### S-0911-1416-全面提升计划
 - 目标: 全量代码审核（架构/扩展性/质量/鲁棒性）复查后沉淀为可执行提升计划——以降耦合、降开发难度为主线，保留鲁棒性/安全/测试洞察
 - 范围: docs/IMPROVEMENT_PLAN.md（新增）、docs/SESSIONS.md；**不改任何代码**

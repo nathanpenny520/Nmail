@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — Gmail / Outlook OAuth2 授权登录（XOAUTH2）
+- 依据 docs/自建邮箱客户端 Gmail+Outlook OAuth2 完整教程.md 落地：Google/微软已停用账号密码直连，Gmail/Outlook 账号改走 OAuth2 授权码 + PKCE 流程（用户自建 OAuth 客户端，client_id 填设置页；不内置凭据）
+- 后端：迁移 v13（accounts.auth_type/oauth_provider）；新增 `core/oauth.py`（PKCE/授权 URL/换令牌/令牌刷新按账号加锁防并发、XOAUTH2 编码、流程状态 TTL）与 `api/oauth.py`（status/config/authorize/flow 轮询 + `/oauth/callback` 回环回调直出自关闭 HTML，回调里完成换令牌→建/转账号→首同步）；`imap_client`/`mailbox` 支持 `access_token` 认证通路（IMAP `xoauth2`、SMTP `AUTH XOAUTH2` 带裸 docmd 回退）；删除账号联动清令牌，OAuth 账号拒绝改密
+- 令牌存储：secrets.json `oauth_client:{provider}` / `oauth_token:{account_id}`（expires_at 预扣 120s 余量；微软轮换 refresh_token 随保存覆盖），不回传前端
+- 前端：新增 `components/OauthSettings.tsx`（设置页 OAuth 配置卡：client_id/secret 登记、回调地址复制、分服务商步骤提示；账号行「重新授权」按钮 + useOauthAuthorize 弹窗轮询公共 hook）；AddAccountModal 识别 Gmail/Outlook 域名时展示「使用 XX 账号授权登录」入口（未配置时给指引）；账号列表 OAuth2 徽章
+- 验证：pytest 66 例全绿（新增 22 例：XOAUTH2 编码二进制 \x01/PKCE/授权 URL 参数契约/令牌刷新轮换与容错/流程 TTL/API 语义矩阵/回调建号与转号/删号清令牌）；ruff 通过；npm build（tsc 含）通过；隔离实例冒烟（迁移 v13 到位、动态回调地址随端口、Gmail/Outlook 授权 URL 参数、未配置 400 文案、回调无效 state/access_denied/轮询终态、前端托管正常）
+- 遗留：真实 Google/Microsoft OAuth 客户端的端到端授权（换真实令牌、IMAP/SMTP 实连）待用户按教程完成控制台配置后验证
+
 ## 5afa93a — 工程化：OpenAPI 类型生成基建（3.7a）
 - 新增 devDependency `openapi-typescript` + `npm run gen:api`；`frontend/openapi.json` 为后端 schema 快照（随 API 改动更新、同提交），生成 `src/api/schema.d.ts` 供接口类型消费
 - CLAUDE.md 常用命令新增更新流程一行；存量 types.ts 手写类型按计划渐进替换（新增端点优先走生成类型）

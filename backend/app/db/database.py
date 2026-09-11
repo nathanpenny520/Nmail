@@ -312,6 +312,15 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX IF NOT EXISTS idx_jobs_active ON jobs(status, updated_at DESC);
         """,
     ),
+    (
+        13,
+        """
+        -- Gmail / Outlook OAuth2（XOAUTH2）登录：auth_type 区分密码与 OAuth 账号，
+        -- oauth_provider 记录服务商（gmail/outlook）；令牌本体存 secrets.json（oauth_token:*）
+        ALTER TABLE accounts ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'password';
+        ALTER TABLE accounts ADD COLUMN oauth_provider TEXT NOT NULL DEFAULT '';
+        """,
+    ),
 ]
 
 

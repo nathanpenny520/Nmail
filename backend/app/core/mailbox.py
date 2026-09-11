@@ -15,13 +15,13 @@ from collections.abc import Iterator
 
 from imap_tools import MailBox
 
-from app.core import imap_client
+from app.core import imap_client, oauth
 from app.db.database import get_conn
 from app.security import get_secret
 
 
 class MailError(Exception):
-    """业务级邮件错误；code ∈ not_found | missing_credential"""
+    """业务级邮件错误；code ∈ not_found | missing_credential | oauth_error | smtp_missing"""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -40,11 +40,29 @@ class AccountHandle:
         return int(self.row["id"])
 
 
+def _is_oauth(row: sqlite3.Row) -> bool:
+    return bool(row["auth_type"] and row["auth_type"] == "oauth2")
+
+
 def load_account(account_id: int) -> AccountHandle:
-    """查账号 + 密钥，缺一即抛 MailError。全项目唯一的 MailConfig 构造点。"""
+    """查账号 + 凭据（密码或 OAuth 令牌），缺一即抛 MailError。全项目唯一的 MailConfig 构造点。"""
     row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
     if row is None:
         raise MailError("not_found", "账号不存在")
+    if _is_oauth(row):
+        # OAuth 账号：临期自动刷新（mailbox 层拿到的一定是可用令牌）
+        try:
+            access_token = oauth.ensure_access_token(account_id)
+        except oauth.OAuthError as exc:
+            raise MailError("oauth_error", exc.message) from exc
+        cfg = imap_client.MailConfig(
+            email=row["email"], password="",
+            imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
+            smtp_server=row["smtp_server"] or "",
+            smtp_port=int(row["smtp_port"] or 465),
+            access_token=access_token,
+        )
+        return AccountHandle(row=row, cfg=cfg)
     password = get_secret(f"account_pwd:{account_id}")
     if not password:
         raise MailError("missing_credential", "缺少密码凭证，请在 设置-账号 中重新保存授权码")
@@ -58,7 +76,13 @@ def load_account(account_id: int) -> AccountHandle:
 
 
 def has_credentials(account_id: int) -> bool:
-    """轻量检查（不查账号行）：提交后台任务前快速判断。"""
+    """提交后台任务前快速判断（账号行 + 凭据存在性，不建连接）。"""
+    row = get_conn().execute(
+        "SELECT auth_type FROM accounts WHERE id = ?", (account_id,)).fetchone()
+    if row is None:
+        return False
+    if _is_oauth(row):
+        return oauth.has_token(account_id)
     return bool(get_secret(f"account_pwd:{account_id}"))
 
 

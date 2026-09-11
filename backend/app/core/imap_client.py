@@ -1,6 +1,7 @@
 """IMAP/SMTP 客户端封装（imap-tools + 标准库 smtplib）。"""
 from __future__ import annotations
 
+import base64
 import email.utils
 import logging
 import re
@@ -13,6 +14,8 @@ from email.message import EmailMessage
 
 from imap_tools import AND, MailBox, MailMessageFlags
 from imap_tools.errors import MailboxLoginError
+
+from app.core import oauth
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,9 @@ class MailConfig:
     imap_port: int = 993
     smtp_server: str = ""
     smtp_port: int = 465
+    # OAuth2 账号（auth_type='oauth2'）：access_token 非空时走 XOAUTH2，
+    # password 不参与认证（邮箱层已确保传入的是刚刷新过的有效令牌）
+    access_token: str | None = None
 
 
 @dataclass
@@ -64,7 +70,10 @@ def connect_imap(cfg: MailConfig) -> MailBox:
     """建立已登录的 IMAP 连接，返回可作上下文管理器使用的 MailBox。"""
     # timeout=60：连接与读写都有上限，避免僵死连接永远挂着
     mb = MailBox(cfg.imap_server, port=cfg.imap_port, timeout=60)
-    mb.login(cfg.email, cfg.password)
+    if cfg.access_token:
+        mb.xoauth2(cfg.email, cfg.access_token)
+    else:
+        mb.login(cfg.email, cfg.password)
     if _is_netease(cfg.imap_server):
         try:
             mb.client._simple_command("ID", '("name" "Nmail" "version" "0.1.0")')
@@ -81,6 +90,8 @@ def test_connection(cfg: MailConfig) -> tuple[bool, str]:
             mb.folder.list()
         return True, "IMAP 登录成功"
     except MailboxLoginError:
+        if cfg.access_token:
+            return False, "OAuth 授权登录被拒绝：令牌可能已失效或被撤销，请到 设置-邮箱账号 重新授权"
         return False, "登录被拒绝：请检查邮箱地址与密码（多数服务商要求使用授权码/应用密码，而非网页登录密码）"
     except (TimeoutError, ConnectionRefusedError, OSError):
         return False, f"无法连接服务器 {cfg.imap_server}:{cfg.imap_port}，请检查服务器地址、端口与网络"
@@ -295,12 +306,31 @@ def send_email(
         if cfg.smtp_port != 465:
             server.starttls()
             server.ehlo()
-        server.login(cfg.email, cfg.password)
+        _smtp_auth(server, cfg)
         server.send_message(msg)
     finally:
         with suppress(Exception):
             server.quit()
     return msg
+
+
+def _smtp_auth(server: smtplib.SMTP, cfg: MailConfig) -> None:
+    """SMTP 登录：OAuth 账号走 XOAUTH2（SASL 初始响应），密码账号走 LOGIN。
+
+    微软不推荐但允许的 465 与 Gmail 465 均广播 AUTH=XOAUTH2；个别服务器不广播
+    却支持时回退到裸 docmd（初始响应直接拼在 AUTH 命令后）。
+    """
+    if not cfg.access_token:
+        server.login(cfg.email, cfg.password)
+        return
+    auth_str = oauth.xoauth2_string(cfg.email, cfg.access_token)
+    try:
+        server.auth("XOAUTH2", lambda _challenge: auth_str)
+    except smtplib.SMTPNotSupportedError:
+        b64 = base64.b64encode(auth_str.encode("ascii")).decode("ascii")
+        code, resp = server.docmd("AUTH", f"XOAUTH2 {b64}")
+        if code != 235:
+            raise smtplib.SMTPAuthenticationError(code, resp) from None
 
 
 def _attach_file(msg: EmailMessage, path: str, filename: str) -> None:

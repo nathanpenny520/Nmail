@@ -15,6 +15,9 @@ import type {
   FolderInfo,
   JobInfo,
   NotificationsResp,
+  OauthAuthorizeResp,
+  OauthFlowStatus,
+  OauthStatusResp,
   ProbeResult,
   ProvidersResp,
   SenderListEntry,
@@ -315,6 +318,22 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
+
+  // ── OAuth2 授权登录（Gmail / Outlook）──
+  getOauthStatus: () => request<OauthStatusResp>('/api/oauth/status'),
+  saveOauthConfig: (payload: { provider: string; client_id: string; client_secret?: string }) =>
+    request<{ ok: boolean; configured: boolean }>('/api/oauth/config', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  /** 发起授权：返回浏览器要打开的授权 URL，账号建/改在回调完成后发生 */
+  startOauthAuthorize: (email: string, provider: string) =>
+    request<OauthAuthorizeResp>('/api/oauth/authorize', {
+      method: 'POST',
+      body: JSON.stringify({ email, provider }),
+    }),
+  /** 轮询授权结果（回调页由后端直出，前端经此感知完成/失败） */
+  getOauthFlow: (state: string) => request<OauthFlowStatus>(`/api/oauth/flow/${state}`),
 
   // ── 每日摘要 ──
   getDigest: () => request<DigestResp>('/api/digest'),

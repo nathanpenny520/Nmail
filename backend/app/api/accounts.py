@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.deps import mail_error_to_http
-from app.core import imap_client, mailbox, sync as sync_engine
+from app.core import imap_client, mailbox, oauth, sync as sync_engine
 from app.core.providers import MANUAL_NOTE, PRESETS, match_provider, probe_server
 from app.db.database import get_conn
 from app.security import set_secret
@@ -75,7 +75,9 @@ def _account_dict(row) -> dict[str, Any]:  # noqa: ANN001
         "smtp_server": row["smtp_server"],
         "smtp_port": row["smtp_port"],
         "color": row["color"],
-        "ai_permission": row["ai_permission"] if "ai_permission" in row.keys() else "draft_review",  # noqa: SIM118 — sqlite3.Row 的 in 语义是值不是键
+        "auth_type": row["auth_type"] if "auth_type" in row.keys() else "password",  # noqa: SIM118 — sqlite3.Row 的 in 语义是值不是键
+        "oauth_provider": row["oauth_provider"] if "oauth_provider" in row.keys() else "",  # noqa: SIM118 — 同上
+        "ai_permission": row["ai_permission"] if "ai_permission" in row.keys() else "draft_review",  # noqa: SIM118 — 同上
         "style_prompt": row["style_prompt"] if "style_prompt" in row.keys() else None,  # noqa: SIM118 — 同上
         "status": row["status"],
         "status_detail": row["status_detail"],
@@ -197,6 +199,8 @@ def update_account(account_id: int, payload: AccountPatchIn) -> dict:
         conn.commit()
 
     if payload.password is not None:
+        if row["auth_type"] == "oauth2":
+            raise HTTPException(400, "OAuth2 授权账号无需密码，请在账号卡片点「重新授权」更新令牌")
         cfg = imap_client.MailConfig(
             email=row["email"], password=payload.password,
             imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
@@ -222,6 +226,7 @@ def delete_account(account_id: int) -> dict:
     conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
     conn.commit()
     set_secret(f"account_pwd:{account_id}", None)
+    oauth.delete_token(account_id)
     sync_engine.delete_account_files(account_id)
     return {"ok": True}
 

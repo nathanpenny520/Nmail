@@ -65,12 +65,45 @@ export interface Account {
   smtp_server: string
   smtp_port: number
   color: string
+  /** password=授权码/密码登录；oauth2=Gmail/Outlook OAuth 授权（XOAUTH2） */
+  auth_type: 'password' | 'oauth2'
+  /** OAuth 服务商标识：gmail | outlook | ''（密码账号） */
+  oauth_provider: string
   ai_permission: 'readonly' | 'draft_review'
   /** 文风提示词：AI 起草该账号回复时遵循，用户手写可编辑；null=未设置 */
   style_prompt: string | null
   status: 'ok' | 'auth_error' | 'connection_error' | 'never_synced' | 'syncing'
   status_detail: string | null
   last_sync_at: string | null
+}
+
+// ── OAuth2 授权登录（Gmail / Outlook）──
+
+export interface OauthProviderStatus {
+  key: 'gmail' | 'outlook'
+  name: string
+  configured: boolean
+  client_id_masked: string
+  domains: string[]
+  imap_server: string
+  smtp_server: string
+}
+
+export interface OauthStatusResp {
+  /** 本进程监听端口对应的回环回调地址，登记到 OAuth 客户端时使用 */
+  redirect_uri: string
+  providers: OauthProviderStatus[]
+}
+
+export interface OauthAuthorizeResp {
+  auth_url: string
+  state: string
+}
+
+export interface OauthFlowStatus {
+  status: 'pending' | 'done' | 'error'
+  detail: string
+  email: string
 }
 
 export interface ProviderPreset {
