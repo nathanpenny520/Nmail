@@ -28,6 +28,13 @@
 
 ## 已完成
 
+### S-0911-1028-apple-touch-icon ✅
+- 目标: apple-touch-icon 按 Apple 规范重排（去掉自带圆角/阴影导致的「图标套图标」问题）
+- 范围: scripts/gen_icons.py、frontend/public/apple-touch-icon.png、docs/CHANGELOG.md、backend/app/static（仅同步产物）
+- 产出: gen_icons.py apple_touch() 改为放大 6% 裁切+四角弧内取样渐变补底（待提交）；npm build 通过；dist 与 backend/app/static 均已同步
+- 遗留: 无（favicon/exe 图标无需跟进，浏览器不套蒙版不受此问题影响）
+- 时间: 2026-09-11 上午 完成
+
 ### S-0911-2300-UI密度与侧栏拖拽 ✅
 - 产出：d6dec7c（遮蔽修复见 CHANGELOG d6dec7c 条目，属高影响 bug）
 - 遗留：EmailReader 拦截横幅仍为固定 text-xs（微小，可并入下轮 UI 清理）
@@ -39,6 +46,13 @@
 - 产出: 提交 65d208d + 20c4d77（由协作体系会话代登、后经 git log 确认收工——看板首个闭环案例）
 - 时间: 2026-09-11 深夜 完成
 
+### S-0911-2320-发布首发
+- 目标: gh CLI 授权、PYPI_API_TOKEN secret、v0.1.0 触发发布流水线并修复失败
+- 范围: .github/workflows/release.yml、pyproject.toml（发行名）、README、docs
+- 产出: PyPI nmail-app 0.1.0 + GitHub Release v0.1.0 三平台二进制；修复链 25912b4/e7cf7b8（发行名被占→nmail-app、Release 写权限）
+- 遗留: PyPI token 曾暴露于对话，待用户轮换；真实账号验证 uvx/exe 安装路径
+- 时间: 2026-09-11 完成
+
 ### S-0911-2340-协作体系
 - 目标: 多会话并行透明度机制化（CLAUDE.md 规范 8–10 + 本看板）
 - 范围: CLAUDE.md, docs/SESSIONS.md, docs/CHANGELOG.md
@@ -49,7 +63,7 @@
 - 目标: 会话持久化 + AI 配置档案 + 服务商探测 + 打包分发
 - 范围: backend/app/**, frontend/src/**, pyproject.toml, nmail.spec, .github/workflows, docs/**
 - 产出: 提交 7f49125（主工作）、095be6a（CHANGELOG 回填）；条目见 CHANGELOG
-- 遗留: 未打 v0.1.0 tag（等 PyPI_API_TOKEN 配好）；AI 档案切换待真实账号验证
+- 遗留: AI 档案切换待真实账号验证（tag/发布已由 S-0911-2320-发布首发 完成）
 - 时间: 2026-09-11 深夜 完成
 
 ### S-0911-2100-图标
