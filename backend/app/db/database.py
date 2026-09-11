@@ -331,7 +331,11 @@ def get_setting(key: str, default: Any = None) -> Any:
     row = get_conn().execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     if row is None or row["value"] is None:
         return default
-    return json.loads(row["value"])
+    try:
+        return json.loads(row["value"])
+    except (ValueError, TypeError):
+        # 表单值损坏时回退默认，避免所有读取该设置的请求 500
+        return default
 
 
 def set_setting(key: str, value: Any) -> None:
