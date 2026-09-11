@@ -75,3 +75,34 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.name }}${{ matrix.ext }}
+
+  # ③ 同步 Homebrew tap（可选：在仓库 Secrets 配置 HOMEBREW_TAP_TOKEN——
+  #    一个可写 nathanpenny520/homebrew-nmail 的 fine-grained PAT；未配置时此 job 直接跳过）
+  homebrew-tap:
+    needs: python-package
+    runs-on: ubuntu-latest
+    env:
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - name: 更新 tap formula 版本与哈希
+        if: env.TAP_TOKEN != ''
+        run: |
+          set -e
+          TAG_REF="${GITHUB_REF_NAME}"   # v0.1.1
+          TAG="${TAG_REF#v}"             # 0.1.1
+          URL="https://github.com/nathanpenny520/Nmail/releases/download/${TAG_REF}/nmail-macos-arm64"
+          SHA=$(curl -fsSL "$URL" | sha256sum | cut -d' ' -f1)
+          AUTH="Authorization: Bearer $TAP_TOKEN"
+          OLD=$(curl -fsSL -H "$AUTH" -H "Accept: application/vnd.github.raw" \
+            "https://api.github.com/repos/nathanpenny520/homebrew-nmail/contents/Formula/nmail.rb?ref=main")
+          BLOB_SHA=$(curl -fsSL -H "$AUTH" \
+            "https://api.github.com/repos/nathanpenny520/homebrew-nmail/contents/Formula/nmail.rb?ref=main" --jq '.sha')
+          NEW=$(printf '%s' "$OLD" \
+            | sed -e "s#releases/download/v[0-9][0-9.]*#releases/download/${TAG_REF}#" \
+                  -e "s#sha256 \"[0-9a-f]*\"#sha256 \"${SHA}\"#" \
+                  -e "s#version \"[0-9][0-9.]*\"#version \"${TAG}\"#")
+          B64=$(printf '%s' "$NEW" | base64 -w0)
+          curl -fsSL -X PUT -H "$AUTH" \
+            "https://api.github.com/repos/nathanpenny520/homebrew-nmail/contents/Formula/nmail.rb" \
+            -d "{\"message\":\"nmail ${TAG}\",\"content\":\"${B64}\",\"sha\":\"${BLOB_SHA}\"}" > /dev/null
+          echo "tap updated to ${TAG}"

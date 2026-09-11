@@ -156,6 +156,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ action, folder }),
     }),
+  batchAction: (ids: number[], action: string, folder?: string) =>
+    request<{ ok: boolean; updated: number; failed: number }>('/api/emails/batch-action', {
+      method: 'POST',
+      body: JSON.stringify({ ids, action, ...(folder ? { folder } : {}) }),
+    }),
   sendEmail: (form: FormData) => request<{ ok: boolean }>('/api/emails/send', { method: 'POST', body: form }),
 
   // ── 通知 ──

@@ -28,7 +28,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | 模块 | 职责 | 要点 |
 |------|------|------|
 | `main.py` | 入口、lifespan（迁移+调度器启停）、SPAStaticFiles 回退 | 路由先于静态挂载注册 |
-| `api/system.py` | `/api/health` | — |
+| `api/system.py` | `/api/health`、`/api/update-check`（24h 节流，force 可立即检查） | — |
 | `api/settings.py` | 通用设置 KV 读写 + AI 端点测试 | 含 `ui_font/body_font` 档位校验；AI 配置已移至 profiles；`/api/ai/test` 字段省略时回退激活档案 |
 | `api/accounts.py` | 账号 CRUD/测试/探测/同步/文件夹/服务商预设/语气学习 | 授权码存 `secrets.json`（key=`account_pwd:{id}`）；`POST /accounts/probe` 未收录域名自动探测 |
 | `api/emails.py` | 列表/搜索/详情/操作/发送/附件下载 | 搜索：≥3 字走 FTS5 trigram，<3 字回退 LIKE；详情返回消毒后 HTML（`?images=1` 放行远程图+内联 cid） |
@@ -44,6 +44,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `core/sync.py` | UID 增量同步 | 首同步限 30 天；UIDVALIDITY 变化自愈；登录失败→`auth_error`+一次性通知；同步完成后触发 AI 流水线 |
 | `core/pipeline.py` | 白/黑名单 → AI 批量分类 → 营销自动归档 → 生成草稿 → 通知 | AI 未配置诚实降级；批量 20 封/请求 |
 | `core/mail_html.py` | nh3 白名单消毒 + 远程图片拦截 + cid 内联 + Markdown→HTML | 两层防护：消毒在前、图片控制在后 |
+| `core/update_check.py` | 应用内更新检查：GitHub Releases 对比 + 通知中心提醒 | 仅匿名 GET api.github.com（UA=Nmail/版本），24h 缓存；开关 `update_check_enabled`；按 ref_id=版本去重，升级后自动清理旧提醒 |
 | `ai/llm.py` | OpenAI 兼容客户端（流式 `iter_deltas` / 非流式） | connect 5s / 读写 15s 快速失败 |
 | `ai/profiles.py` | AI 配置档案存储/解析（settings JSON + secrets 分离） | 解析顺序：显式 profile_id > 激活档案 > 第一个；旧单配置首读自动迁移为「默认」档案 |
 | `ai/tasks.py` | 分类/草稿/问答/写作/摘要综述/Tone DNA + 用量日志 | 所有任务接受 `profile_id` 并经 `_ai_config()` 按档案解析；所有调用写 `ai_logs` |
@@ -88,6 +89,7 @@ UID 增量拉取 → 落库+附件落盘 → 白名单(留收件箱)/黑名单(�
 | 源码开发 | `python run.py` | 注入 `backend/` 路径后调 `app.cli:main` |
 | PyPI 包 | `pyproject.toml` | 发行名 `nmail-app`（"nmail" 在 PyPI 已被占用），console script `nmail = app.cli:main`；版本需与 `app/config.py` 的 APP_VERSION 同步；前端产物经 `scripts/sync_frontend.sh` 同步进 `backend/app/static` 打入 wheel |
 | 三平台单文件 | `nmail.spec` | PyInstaller onefile；hiddenimports 显式声明 uvicorn 延迟导入子模块；前端资源随包 |
-| 发布流水线 | `.github/workflows/release.yml` | 打 tag `v*` → wheel 发 PyPI（用户 `uvx nmail`）+ Windows/macOS/Linux 二进制挂 GitHub Release |
+| 发布流水线 | `.github/workflows/release.yml` | 打 tag `v*` → wheel 发 PyPI（`uvx --from nmail-app nmail`）+ Windows/macOS/Linux 二进制挂 GitHub Release +（可选 secret `HOMEBREW_TAP_TOKEN`）自动同步 Homebrew tap |
+| winget | winget-pkgs PR | `winget install nathanpenny520.Nmail` / `winget upgrade`；portable 型，SHA256 对齐 Release 资产 |
 
 已知分发注意点：Windows SmartScreen 对无签名 exe 会警告（缓解：onedir/误报申诉/买签名证书）；macOS 未公证二进制需右键打开或 `xattr -cr`（公证需 Apple Developer 账号）。

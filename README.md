@@ -13,6 +13,8 @@ AI 驱动的本地聚合邮箱客户端 · 本地优先 · 隐私自持 · MIT �
 **① 单文件可执行（零依赖，双击即用）**
 
 到 [Releases](../../releases) 下载对应平台文件（Windows: `nmail-windows-x64.exe`）双击运行，自动打开浏览器。
+Windows 也可用 winget 安装（manifest 审核通过后可用）：`winget install nathanpenny520.Nmail`；
+macOS (Apple Silicon) 用 Homebrew：`brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail && brew install nmail`。
 
 - Windows 可能弹 SmartScreen 提示（未签名）：点「更多信息 → 仍要运行」
 - macOS 首次运行需右键 → 打开（未公证）；Linux：`chmod +x nmail-linux-x64` 后直接运行
@@ -56,7 +58,13 @@ bash scripts/sync_frontend.sh                       # 构建前端并同步进 P
 .venv/Scripts/pyinstaller nmail.spec                # 产出 dist/nmail 单文件（Windows 为 nmail.exe）
 ```
 
-或只构建 wheel：`pip wheel . -w dist`。发布 PyPI 后用户即可 `uvx nmail`。打 `v*` tag 时 CI（`.github/workflows/release.yml`）自动完成 wheel 发布与三平台二进制。
+或只构建 wheel：`pip wheel . -w dist`。发布 PyPI 后用户即可 `uvx --from nmail-app nmail`。打 `v*` tag 时 CI（`.github/workflows/release.yml`）自动完成 wheel 发布、三平台二进制，并（配置 `HOMEBREW_TAP_TOKEN` secret 后）自动同步 Homebrew tap。
+
+## 更新
+
+- **应用内检查**（默认开启，可在 设置-通用 关闭）：每 24 小时向 GitHub 做一次匿名版本对比，发现新版本会在通知中心提醒；设置页可手动「检查更新」。只发送版本号，不携带任何本机数据。
+- **各渠道升级**：Windows `winget upgrade nathanpenny520.Nmail` ｜ macOS `brew upgrade nmail` ｜ PyPI `uv tool upgrade nmail-app` 或 `pip install -U nmail-app` ｜ 单文件：下载新版覆盖旧 exe。
+- 升级不影响数据：邮件库/密钥/配置在独立数据目录，新版本首次启动自动跑数据库迁移。
 
 ## 开发模式
 

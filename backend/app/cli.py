@@ -35,9 +35,12 @@ def open_browser_later(url: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    from app.config import APP_VERSION  # 延迟导入保持 --help/--version 轻量
+
     parser = argparse.ArgumentParser(description="Nmail 一键启动")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
+    parser.add_argument("--version", action="version", version=f"Nmail {APP_VERSION}")
     args = parser.parse_args(argv)
 
     from app.main import app as fastapi_app  # 延迟导入：--help 无需加载重型依赖
