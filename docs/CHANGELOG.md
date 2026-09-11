@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 9b98a9e — fix/功能：时区排序 + 未读辨识 + 通知可点击
+- 排序根因：date 列为混合时区 ISO 串，字典序比较错序（+08:00 的 12:10 排在 +08:00 的 10:03 之后却早于 -07:00 的 21:15）——迁移 v7 新增 date_sort（UTC 归一）+ 索引，启动时 Python 回填历史数据，列表按 date_sort 排序（真实数据验证严格降序）
+- 未读行增加左侧 indigo 竖条标识（选中态同列），与已读行区分度提升
+- 通知中心：单条可点击——按类型跳转（AI 草稿→原邮件 / 摘要→摘要页 / 账号异常→设置），点击即单条已读（新端点 /notifications/{id}/read）
+
+## 待提交 — fix：邮件外链新标签打开 + 正文高度即时自适应
+- 外链「拒绝连接」根因：链接在沙箱 iframe 内部导航，目标站（如 console.volcengine.com 带 X-Frame-Options/CSP frame-ancestors）拒绝被网页内嵌，浏览器遂显示「拒绝连接」。修复：后端消毒时为 http(s) 链接强制 target="_blank"（rel=noopener 原有），前端 sandbox 增加 allow-popups + allow-popups-to-escape-sandbox，点击在新标签正常打开，同时支持 Ctrl/中键
+- 正文显示不全根因：iframe 高度只靠加载后 0/500/1200/2500/4000ms 五次定时报复测，图片等资源 4s 后才就位则高度偏小（出现内部滚动条、内容截断）。修复：onLoad 后对 iframe body 挂 ResizeObserver，尺寸变化即时复测，定时复测降为兜底；卸载时断开
+
 ## 31a2f6d — docs：安装与更新指南 INSTALL.md
 - 新增 docs/INSTALL.md：五种安装方式对比（单文件/winget/Homebrew/uvx·pip/源码）、各平台首次运行注意（SmartScreen/Gatekeeper/chmod）、首次使用五分钟引导、更新方式与升级安全性、数据目录/备份/卸载
 - README 顶部加指南入口；winget manifest PR 已提交（microsoft/winget-pkgs#432990，fork 默认分支为 master 的乌龙修正）
