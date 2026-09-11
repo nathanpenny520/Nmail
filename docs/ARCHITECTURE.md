@@ -28,13 +28,15 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 
 | 模块 | 职责 | 要点 |
 |------|------|------|
-| `main.py` | 入口、lifespan（迁移+调度器启停）、SPAStaticFiles 回退 | 路由先于静态挂载注册 |
+| `main.py` | 入口、lifespan（迁移+调度器启停）、SPAStaticFiles 回退、本机来源校验中间件 | 路由先于静态挂载注册 |
+| `api/deps.py` | API 层公共错误翻译 | `mail_error_to_http`（MailError→4xx/502 翻译表）、`ai_config_or_400`（AI 未配置/停用→400）、`ai_result_or_http`（AI 调用统一 400/502）——端点零样板 |
 | `api/system.py` | `/api/health`、`/api/update-check`（24h 节流，force 可立即检查） | — |
 | `api/settings.py` | 通用设置 KV 读写 + AI 端点测试 | 含 `ui_font/body_font` 档位校验；AI 配置已移至 profiles；`/api/ai/test` 字段省略时回退激活档案 |
 | `api/accounts.py` | 账号 CRUD/测试/探测/后台同步触发/文件夹/服务商预设/文风提示词 | 授权码存 `secrets.json`（key=`account_pwd:{id}`）；`POST /accounts/probe` 未收录域名自动探测 |
 | `api/emails.py` | 列表/搜索/详情/操作/附件下载 | 搜索：≥3 字走 FTS5 trigram，<3 字回退 LIKE；详情返回消毒后 HTML（`?images=1` 放行远程图+内联 cid） |
 | `api/drafts.py` | 待审草稿：列表/修改/发送(approve)/丢弃/恢复/彻底删除/重新生成 | approve 走 SMTP 并带 `In-Reply-To`；原文自动标已读 |
-| `api/user_drafts.py` | 写信台草稿：CRUD + 附件上传/删除 + 定时/取消 + 发送 | 编辑防抖 PATCH 自动保存；附件选择即落盘 `data_dir/drafts/<id>/`（行在 user_draft_attachments，草稿删除/发送成功即清理）；`send_draft_now` 同步核心供 API 与调度器共用；发送前 `sanitize_outgoing_html` 消毒 + 派生纯文本 + 套基础样式外层；回复草稿带 `In-Reply-To`（软引用邮件 id） |
+| `api/user_drafts.py` | 写信台草稿：CRUD + 附件上传/删除 + 定时/取消 + 发送 | 编辑防抖 PATCH 自动保存；附件选择即落盘 `data_dir/drafts/<id>/`（行在 user_draft_attachments，草稿删除/发送成功即清理）；发送为薄壳，核心在 `core/outbox.send_user_draft`（API 与调度器共用）；回复草稿带 `In-Reply-To`（软引用邮件 id） |
+| `api/meta.py` | `GET /api/meta`：分类枚举下发（key/label/color/badge_cls） | 真源 `ai/categories.py`；前端 `useMeta` 拉取一次长期缓存，徽章/图表色不再手写 |
 | `api/compose_extras.py` | 写信台模板/签名 KV（Markdown 文本整存整取）+ `POST /markdown` Markdown→消毒 HTML 转换 | 存 settings KV（compose_templates/compose_signatures） |
 | `api/ai.py` | 单邮件问答、总管家问答（会话持久化）、写作辅助、用量、AI 整理 | 问答/总管家均有 `/stream` SSE 版本，中途错误以 `{"error":...}` 事件下发；对话/写作接受 `profile_id` 临时切换档案；写作 `op=compose` 按指令整篇写邮件，`want_html=true` 附带 Markdown→消毒 HTML 结果 |
 | `api/notifications.py` | 通知中心 | — |
@@ -46,6 +48,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `core/imap_client.py` | IMAP/SMTP 封装 | 连接/读写超时 60s；`iter_new_mail` 分块产出新增邮件（SEARCH UID 清单 → 稠密窗口区间 FETCH、稀疏窗口逐 UID 精确拉取——移入型文件夹如「已删除」日期与 UID 不单调，QQ 会把任何多 UID 集合按 min:max 连续展开）；网易系需 IMAP ID 命令；SMTP 端口 465=SSL/587=STARTTLS；`append_sent` 发送后归档 |
 | `core/mailbox.py` | 账号凭据/连接统一入口（全项目唯一 MailConfig 构造点） | `load_account`（账号行+密钥 → AccountHandle，缺一抛 `MailError`）、`has_credentials`、`open_imap`；API 层 `_imap_for` 等拼装点逐步迁移至此（IMPROVEMENT_PLAN §3.1）；添加账号入库前的表单直连预检除外 |
 | `core/sync.py` | UID 增量同步 | 分块断点续拉（每块入库+断点同一事务提交，中断从断点续传）；`start_sync` 后台线程执行（防重入），进度写账号 status=`syncing`+status_detail；网络异常自动重试一次；首同步限 30 天；UIDVALIDITY 变化自愈；登录失败→`auth_error`+一次性通知；同步完成后触发 AI 流水线 |
+| `core/outbox.py` | 写信台草稿发送唯一实现（API 与调度器共用） | `send_user_draft`：状态校验→地址解析→消毒+纯文本派生→`mailbox.send_message`→标记 sent/清附件；失败抛 `MailError`（后台线程无 HTTPException）；`draft_dir` 为附件目录唯一出处 |
 | `core/pipeline.py` | 白/黑名单 → AI 批量分类 → 营销自动归档 → 生成草稿 → 通知 | AI 未配置诚实降级；批量 20 封/请求 |
 | `core/mail_html.py` | nh3 白名单消毒 + 远程图片拦截 + cid 内联 + Markdown→HTML | 两层防护：消毒在前、图片控制在后；另供发件方向 `sanitize_outgoing_html`（放行 data: 内嵌图）与 `html_to_plain_text`/`wrap_email_body_html` |
 | `core/update_check.py` | 应用内更新检查：GitHub Releases 对比 + 通知中心提醒 | 仅匿名 GET api.github.com（UA=Nmail/版本），24h 缓存；开关 `update_check_enabled`；按 ref_id=版本去重，升级后自动清理旧提醒 |
@@ -53,9 +56,10 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `ai/profiles.py` | AI 配置档案存储/解析（settings JSON + secrets 分离）+ 总开关 | 解析顺序：显式 profile_id > 激活档案 > 第一个；`resolve_config()` 在总开关停用时直接抛 `ProfileNotConfigured`（全任务统一拒绝）；不预建档案（全新安装为空列表）；旧单配置首读迁移为以模型名命名的档案，历史自动生成的「默认」档案一次性按模型名重命名；列表双写备份（`ai_profiles_backup`）——主值缺失/损坏时自愈恢复，绝不静默走旧配置重建；孤儿密钥对账：不被档案引用的 `ai_profile_key:*` 即读即清 |
 | `ai/tasks.py` | 分类/草稿/问答/写作/摘要综述 + 用量日志 | 所有任务接受 `profile_id` 并经 `_ai_config()` 按档案解析；所有调用写 `ai_logs` |
 | `ai/digest.py` | 每日摘要：统计（零成本 SQL）+ AI 综述（一次调用） | 当天已生成则复用 |
-| `ai/prompts.py` | 全部提示词模板 | 结构化输出要求纯 JSON，`_extract_json` 容错解析 |
+| `ai/prompts.py` | 全部提示词模板 | 结构化输出要求纯 JSON，`_extract_json` 容错解析；分类枚举段由 `ai/categories.py` 生成 |
+| `ai/categories.py` | 分类枚举单一来源（key/label/color/badge_cls/判定说明） | prompts 分类段、tasks 校验、pipeline 自动归档、digest 分桶、`/api/meta` 下发全部消费此处——**加分类只改本文件** |
 | `db/database.py` | 连接（WAL）+ `MIGRATIONS` 版本化迁移 + KV 设置 | 迁移只追加不改历史 |
-| `scheduler.py` | 每 60s tick：到期账号增量同步 + 摘要到点生成 + 定时草稿派发 | 「检查到期」而非每账号注册任务，改设置无需重建调度；定时草稿到期调 `send_draft_now`，成功/失败写通知中心，失败退回 editing |
+| `scheduler.py` | 每 60s tick：到期账号增量同步 + 摘要到点生成 + 定时草稿派发 | 「检查到期」而非每账号注册任务，改设置无需重建调度；定时草稿到期调 `core.outbox.send_user_draft`（不依赖 API 层），成功/失败写通知中心，失败退回 editing |
 
 ## 前端（frontend/src/）
 

@@ -8,20 +8,10 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { api } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
-import { CATEGORY_META } from '../types'
+import { categoryColorMap, useCategories } from '../api/useMeta'
 import Markdown from '../components/Markdown'
 
 echarts.use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
-
-// 与应用内分类徽章一致的固定色序（已通过调色板校验器：CVD ΔE 14.5）
-const CATEGORY_COLORS: Record<string, string> = {
-  work: '#6366f1',
-  personal: '#10b981',
-  notification: '#0ea5e9',
-  verification: '#f59e0b',
-  promo: '#f43f5e',
-  social: '#8b5cf6',
-}
 
 const INK = { primary: '#0b0b0b', secondary: '#52514e', muted: '#898781', grid: '#e1e0d9' }
 
@@ -52,6 +42,7 @@ function Chart({ option, height }: { option: echarts.EChartsCoreOption; height: 
 export default function DigestPage() {
   const queryClient = useQueryClient()
   const aiEnabled = useAIEnabled()
+  const categories = useCategories()
   const { data, isLoading } = useQuery({
     queryKey: ['digest'],
     queryFn: api.getDigest,
@@ -94,6 +85,9 @@ export default function DigestPage() {
   const categoryOption = useMemo<echarts.EChartsCoreOption>(() => {
     if (!digest) return {}
     const entries = Object.entries(digest.by_category)
+    // 颜色与徽章同源（/api/meta 下发；色序已过调色板校验器：CVD ΔE 14.5）
+    const labelOf = Object.fromEntries(categories.map((c) => [c.key, c.label]))
+    const colors = categoryColorMap(categories)
     return {
       grid: { left: 8, right: 40, top: 4, bottom: 0, containLabel: true },
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
@@ -105,7 +99,7 @@ export default function DigestPage() {
       yAxis: {
         type: 'category',
         inverse: true,
-        data: entries.map(([k]) => CATEGORY_META[k]?.label ?? k),
+        data: entries.map(([k]) => labelOf[k] ?? k),
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: { color: INK.secondary, fontSize: 12 },
@@ -114,13 +108,13 @@ export default function DigestPage() {
         type: 'bar',
         data: entries.map(([k, v]) => ({
           value: v,
-          itemStyle: { color: CATEGORY_COLORS[k] ?? '#898781', borderRadius: [0, 3, 3, 0] },
+          itemStyle: { color: colors[k] ?? '#898781', borderRadius: [0, 3, 3, 0] },
         })),
         barMaxWidth: 16,
         label: { show: true, position: 'right', color: INK.secondary, fontSize: 11 },
       }],
     }
-  }, [digest])
+  }, [digest, categories])
 
   const exportMd = () => {
     if (!digest) return

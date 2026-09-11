@@ -13,12 +13,12 @@ from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 
 from app.ai import tasks
+from app.ai.categories import AUTO_ARCHIVE_CATEGORIES
 from app.core.sync import add_notification
 from app.db.database import get_conn
 
 logger = logging.getLogger(__name__)
 
-AUTO_ARCHIVE_CATEGORIES = {"promo"}
 CLASSIFY_BATCH_SIZE = 20
 BODY_HEAD_CHARS = 600
 NOREPLY_RE = re.compile(r"no-?reply|donotreply|mailer-daemon", re.IGNORECASE)

@@ -1,20 +1,16 @@
 """AI 任务的提示词模板。
 
 约定：所有需要结构化输出的任务都要求模型只输出纯 JSON，不包裹代码块。
+分类枚举段由 ai/categories.py 生成（单一来源），本文件不手写分类清单。
 """
+from app.ai.categories import CATEGORIES, categories_prompt_block
 
-CLASSIFY_SYSTEM = """你是邮件分类助手。对给定的每封邮件输出分类结果，只输出纯 JSON 数组，不要任何其他文字。
+CLASSIFY_SYSTEM = f"""你是邮件分类助手。对给定的每封邮件输出分类结果，只输出纯 JSON 数组，不要任何其他文字。
 
 每封邮件输出一个对象：
-{"id": <原样返回的邮件 id>, "category": "<六选一>", "importance": "<四选一>", "needs_reply": <布尔>, "reason": "<不超过20字的中文理由>"}
+{{"id": <原样返回的邮件 id>, "category": "<{len(CATEGORIES)} 选一>", "importance": "<四选一>", "needs_reply": <布尔>, "reason": "<不超过20字的中文理由>"}}
 
-category 六选一：
-- work：工作/业务往来，需要人处理的正式通信
-- personal：亲友等个人来信
-- notification：系统通知（订单、账单、部署、安全提醒等自动发送）
-- verification：验证码/一次性密码
-- promo：营销/推广/订阅通讯/广告
-- social：社交网络通知（点赞、关注、评论）
+{categories_prompt_block()}
 
 importance 四选一：critical（验证码、紧急、账单扣款、安全）、high（明确需要行动或有截止日期）、normal、low（营销、可忽略）。
 

@@ -120,14 +120,22 @@ export interface SyncResult {
 
 export type Category = 'work' | 'personal' | 'notification' | 'verification' | 'promo' | 'social' | ''
 
-export const CATEGORY_META: Record<string, { label: string; cls: string }> = {
-  work: { label: '工作', cls: 'bg-indigo-100 text-indigo-700' },
-  personal: { label: '个人', cls: 'bg-emerald-100 text-emerald-700' },
-  notification: { label: '通知', cls: 'bg-sky-100 text-sky-700' },
-  verification: { label: '验证码', cls: 'bg-amber-100 text-amber-700' },
-  promo: { label: '营销', cls: 'bg-rose-100 text-rose-600' },
-  social: { label: '社交', cls: 'bg-violet-100 text-violet-700' },
+export interface CategoryMeta {
+  key: string
+  label: string
+  color: string
+  badge_cls: string
 }
+
+/** /api/meta 未就绪时的内置回退；真源在后端 app/ai/categories.py（经 /api/meta 下发）。 */
+export const CATEGORY_FALLBACK: CategoryMeta[] = [
+  { key: 'work', label: '工作', color: '#6366f1', badge_cls: 'bg-indigo-100 text-indigo-700' },
+  { key: 'personal', label: '个人', color: '#10b981', badge_cls: 'bg-emerald-100 text-emerald-700' },
+  { key: 'notification', label: '通知', color: '#0ea5e9', badge_cls: 'bg-sky-100 text-sky-700' },
+  { key: 'verification', label: '验证码', color: '#f59e0b', badge_cls: 'bg-amber-100 text-amber-700' },
+  { key: 'promo', label: '营销', color: '#f43f5e', badge_cls: 'bg-rose-100 text-rose-600' },
+  { key: 'social', label: '社交', color: '#8b5cf6', badge_cls: 'bg-violet-100 text-violet-700' },
+]
 
 export interface EmailSummary {
   id: number

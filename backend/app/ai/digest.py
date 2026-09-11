@@ -10,12 +10,11 @@ from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 
 from app.ai import tasks
+from app.ai.categories import CATEGORY_ORDER as CATEGORIES
 from app.core.sync import add_notification
 from app.db.database import get_conn
 
 logger = logging.getLogger(__name__)
-
-CATEGORIES = ("work", "personal", "notification", "verification", "promo", "social")
 
 
 def _to_local_dt(iso: str | None) -> datetime | None:

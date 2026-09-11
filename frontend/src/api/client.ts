@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   ChatSession,
   ComposeExtras,
+  CategoryMeta,
   Draft,
   EmailDetail,
   EmailListResp,
@@ -174,6 +175,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ ids, action, ...(folder ? { folder } : {}) }),
     }),
+  getMeta: () => request<{ categories: CategoryMeta[] }>('/api/meta'),
 
   // ── 写信工作台草稿 ──
   createUserDraft: (payload: Partial<UserDraft>) =>

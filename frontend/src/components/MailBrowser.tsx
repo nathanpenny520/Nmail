@@ -6,8 +6,9 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, type EmailQuery } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
+import { categoryBadgeMap, useCategories } from '../api/useMeta'
 import {
-  CATEGORY_META, type EmailDetail, type EmailSummary, type FolderInfo,
+  type EmailDetail, type EmailSummary, type FolderInfo,
 } from '../types'
 import { useCompose } from './compose/ComposeContext'
 import EmailReader from './EmailReader'
@@ -26,6 +27,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const compose = useCompose()
   const aiEnabled = useAIEnabled()
+  const categoryMeta = categoryBadgeMap(useCategories())
 
   // 账号/文件夹选择持久化：刷新或切标签页回来不重置（对齐分屏宽度等本地记忆）
   const [accountId, setAccountId] = useState<number | null>(() => {
@@ -472,7 +474,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               title="按 AI 分类筛选"
             >
               <option value="">全部分类</option>
-              {Object.entries(CATEGORY_META).map(([key, meta]) => (
+              {Object.entries(categoryMeta).map(([key, meta]) => (
                 <option key={key} value={key}>
                   {meta.label}
                 </option>
@@ -610,11 +612,11 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
                   {item.subject || '（无主题）'}
                   <span className="ml-1.5 font-normal text-gray-400">{item.snippet}</span>
                 </span>
-                {item.category && CATEGORY_META[item.category] && (
+                {item.category && categoryMeta[item.category] && (
                   <span
-                    className={`shrink-0 rounded px-1 py-0.5 t-xs font-medium ${CATEGORY_META[item.category].cls}`}
+                    className={`shrink-0 rounded px-1 py-0.5 t-xs font-medium ${categoryMeta[item.category].cls}`}
                   >
-                    {CATEGORY_META[item.category].label}
+                    {categoryMeta[item.category].label}
                   </span>
                 )}
                 {item.has_attachments && <Paperclip className="h-3 w-3 shrink-0 text-gray-400" />}

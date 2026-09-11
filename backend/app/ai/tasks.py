@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterator
 
 from app.ai import llm, profiles, prompts
+from app.ai.categories import CATEGORY_KEYS
 from app.db.database import get_conn
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,7 @@ def classify_batch(items: list[dict], account_id: int | None = None,
         if not r:
             continue
         category = r.get("category", "")
-        if category not in ("work", "personal", "notification", "verification", "promo", "social"):
+        if category not in CATEGORY_KEYS:
             continue
         importance = r.get("importance", "normal")
         if importance not in ("critical", "high", "normal", "low"):
