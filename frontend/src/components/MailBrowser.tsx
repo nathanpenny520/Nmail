@@ -254,50 +254,55 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   const inFullRead = selectedId != null && readerFull
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full flex-col">
+      {/* 页眉：全局搜索 + 收信 / AI 整理 / 写信（全屏阅读时隐藏） */}
+      {!inFullRead && (
+        <header className="flex shrink-0 items-center gap-1.5 border-b border-gray-200 bg-white px-3 py-2">
+          <div className="relative min-w-0 max-w-2xl flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-2 t-md outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              placeholder="搜索邮件，回车确认（覆盖所有文件夹）"
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && applyQ()}
+            />
+          </div>
+          <span className="min-w-2 flex-1" />
+          <button
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg bg-indigo-600 px-2.5 py-1.5 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            title="立即从服务器收信"
+          >
+            <RefreshCw className={`mr-1 h-3.5 w-3.5 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+            收信
+          </button>
+          {!archived && (
+            <button
+              className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 t-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+              onClick={() => organizeMutation.mutate()}
+              disabled={organizeMutation.isPending}
+              title="让 AI 为收件箱中未分类的邮件补跑分类，营销邮件自动归档"
+            >
+              <Sparkles className={`mr-1 h-3.5 w-3.5 ${organizeMutation.isPending ? 'animate-pulse' : ''}`} />
+              {organizeMutation.isPending ? '整理中…' : 'AI 整理'}
+            </button>
+          )}
+          <button
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 t-sm font-medium text-gray-700 hover:bg-gray-50"
+            onClick={() => setCompose({ mode: 'new' })}
+          >
+            <Pencil className="mr-1 h-3.5 w-3.5" /> 写信
+          </button>
+        </header>
+      )}
+      <div className="flex min-h-0 flex-1">
       {/* 邮件列表（分屏左栏；全屏阅读时隐藏） */}
       {!inFullRead && (
       <>
       <section ref={listRef} style={{ width: listWidth }} className="flex shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white">
         <div className="space-y-1.5 border-b border-gray-100 p-2">
-          <div className="flex items-center gap-1.5">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-              <input
-                className="w-full rounded-lg border border-gray-300 py-1 pl-7 pr-2 t-md outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                placeholder="搜索邮件，回车确认"
-                value={qInput}
-                onChange={(e) => setQInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && applyQ()}
-              />
-            </div>
-            <button
-              className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg bg-indigo-600 px-2 py-1 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
-              title="立即从服务器收信"
-            >
-              <RefreshCw className={`mr-1 h-3 w-3 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-              收信
-            </button>
-            {!archived && (
-              <button
-                className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 t-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
-                onClick={() => organizeMutation.mutate()}
-                disabled={organizeMutation.isPending}
-                title="让 AI 为收件箱中未分类的邮件补跑分类，营销邮件自动归档"
-              >
-                <Sparkles className={`mr-1 h-3 w-3 ${organizeMutation.isPending ? 'animate-pulse' : ''}`} />
-                {organizeMutation.isPending ? '整理中…' : 'AI 整理'}
-              </button>
-            )}
-            <button
-              className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border border-gray-300 px-2 py-1 t-sm font-medium text-gray-700 hover:bg-gray-50"
-              onClick={() => setCompose({ mode: 'new' })}
-            >
-              <Pencil className="mr-1 h-3 w-3" /> 写信
-            </button>
-          </div>
           <div className="flex items-center gap-1.5">
             <select
               className="min-w-0 flex-1 rounded-lg border border-gray-300 px-1.5 py-1 t-sm outline-none focus:border-indigo-500"
@@ -333,7 +338,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
               </select>
             )}
             <button
-              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 ${
+              className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border px-1.5 py-1 t-sm ${
                 starredOnly ? 'border-amber-300 bg-amber-50 text-amber-600' : 'border-gray-300 text-gray-500'
               }`}
               onClick={() => {
@@ -481,6 +486,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
           </div>
         )}
       </section>
+      </div>
 
       {compose && (
         <ComposeModal
