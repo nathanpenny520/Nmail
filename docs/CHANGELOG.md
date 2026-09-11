@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — Gmail / Outlook OAuth2 授权登录（XOAUTH2）
+## ed79b87 — Gmail / Outlook OAuth2 授权登录（XOAUTH2）
 - 依据 docs/自建邮箱客户端 Gmail+Outlook OAuth2 完整教程.md 落地：Google/微软已停用账号密码直连，Gmail/Outlook 账号改走 OAuth2 授权码 + PKCE 流程（用户自建 OAuth 客户端，client_id 填设置页；不内置凭据）
 - 后端：迁移 v13（accounts.auth_type/oauth_provider）；新增 `core/oauth.py`（PKCE/授权 URL/换令牌/令牌刷新按账号加锁防并发、XOAUTH2 编码、流程状态 TTL）与 `api/oauth.py`（status/config/authorize/flow 轮询 + `/oauth/callback` 回环回调直出自关闭 HTML，回调里完成换令牌→建/转账号→首同步）；`imap_client`/`mailbox` 支持 `access_token` 认证通路（IMAP `xoauth2`、SMTP `AUTH XOAUTH2` 带裸 docmd 回退）；删除账号联动清令牌，OAuth 账号拒绝改密
 - 令牌存储：secrets.json `oauth_client:{provider}` / `oauth_token:{account_id}`（expires_at 预扣 120s 余量；微软轮换 refresh_token 随保存覆盖），不回传前端

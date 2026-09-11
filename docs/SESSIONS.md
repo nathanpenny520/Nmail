@@ -18,10 +18,12 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-### S-0911-1756-OAuth2登录
+### S-0911-1756-OAuth2登录 ✅
 - 目标: 按 docs/自建邮箱客户端 Gmail+Outlook OAuth2 完整教程.md 落地 Gmail/Outlook OAuth2（XOAUTH2）账号授权登录——PKCE 授权码流程、令牌刷新与存储、IMAP/SMTP XOAUTH2 接入、添加账号走浏览器授权、设置页 OAuth 客户端配置
-- 范围: backend（db 迁移 v13、core/oauth.py 新增、imap_client/mailbox、api/oauth.py 新增、api/accounts、core/providers 文案）、frontend（types/client/AddAccountModal/SettingsPage）、docs
-- 开始: 2026-09-11 17:56
+- 范围: backend（db 迁移 v13、core/oauth.py 新增、imap_client/mailbox、api/oauth.py 新增、api/accounts、core/providers 文案）、frontend（types/client/AddAccountModal/SettingsPage/OauthSettings.tsx 新增）、docs（教程文档一并入库）
+- 产出: 提交 ed79b87（见 CHANGELOG「Gmail / Outlook OAuth2 授权登录」条目）；pytest 66 例全绿 + ruff + npm build + 隔离实例冒烟（迁移/动态回调地址/授权 URL 参数/回调三态/API 语义矩阵）
+- 遗留: 真实 Google/Microsoft OAuth 客户端的端到端授权（换真实令牌、IMAP/SMTP 实连收发）待用户按教程完成控制台配置后验证——设置页 OAuth 卡片有分步指引与回调地址复制；桌面型 OAuth 客户端对 localhost 回环不校验端口，Web 型需登记设置页显示的回调地址；个人 Outlook 账号需先在网页版开启 POP/IMAP 与「经过身份验证的 SMTP」
+- 时间: 2026-09-11 18:35 完成
 
 ### S-0911-1416-全面提升计划
 - 目标: 全量代码审核（架构/扩展性/质量/鲁棒性）复查后沉淀为可执行提升计划——以降耦合、降开发难度为主线，保留鲁棒性/安全/测试洞察
