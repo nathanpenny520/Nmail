@@ -21,11 +21,15 @@ from app.scheduler import MailScheduler
 
 def _find_dist_dir() -> Path | None:
     here = Path(__file__).resolve().parent  # .../app（源码或 site-packages）
-    candidates = [here / "static"]  # wheel 内打包的前端产物
-    if getattr(sys, "frozen", False):  # PyInstaller 单文件解包目录
+    candidates: list[Path] = []
+    if getattr(sys, "frozen", False):  # PyInstaller 单文件：只用随包资源
         base = Path(getattr(sys, "_MEIPASS", None) or Path(sys.executable).parent)
         candidates.append(base / "app" / "static")
-    candidates.append(here.parents[1] / "frontend" / "dist")  # 源码开发
+    else:
+        # 源码开发：frontend/dist 优先（跟随每次构建），app/static 是打包快照，
+        # 两者并存时若优先 static 会让开发者一直看到旧界面
+        candidates.append(here.parents[1] / "frontend" / "dist")
+        candidates.append(here / "static")
     for p in candidates:
         if p.is_dir():
             return p
