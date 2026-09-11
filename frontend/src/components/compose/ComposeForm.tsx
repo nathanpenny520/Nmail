@@ -5,6 +5,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import { useAIEnabled } from '../../api/useAI'
+import { fmtSize } from '../../utils/format'
 import type { Account, DraftAttachment, UserDraft } from '../../types'
 import { useCompose } from './ComposeContext'
 import AiWriteDialog from './AiWriteDialog'
@@ -14,12 +15,6 @@ import { Modal, toLocalInput } from './ui'
 
 const fieldInput =
   'min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1.5 t-md outline-none transition-colors placeholder:text-gray-300 hover:border-gray-200 focus:border-indigo-400 focus:bg-white'
-
-function fmtSize(n: number): string {
-  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)}M`
-  if (n >= 1024) return `${Math.ceil(n / 1024)}K`
-  return `${n}B`
-}
 
 function fmtSendAt(iso: string): string {
   return new Date(iso).toLocaleString('zh-CN', {

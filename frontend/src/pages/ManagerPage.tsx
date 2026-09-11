@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
 import { streamChat } from '../api/stream'
+import { relativeTime } from '../utils/format'
 import Markdown from '../components/Markdown'
 import type { Account, ChatSession } from '../types'
 
@@ -18,20 +19,6 @@ const QUICK_PROMPTS = [
   '总结一下各账号的情况',
   '这周收到过哪些验证码？',
 ]
-
-/** 后端 datetime('now') 为无时区标记的 UTC，补 Z 后按本地时间展示。 */
-function relativeTime(value: string): string {
-  const ts = new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z').getTime()
-  if (Number.isNaN(ts)) return value
-  const min = Math.floor((Date.now() - ts) / 60000)
-  if (min < 1) return '刚刚'
-  if (min < 60) return `${min} 分钟前`
-  const hour = Math.floor(min / 60)
-  if (hour < 24) return `${hour} 小时前`
-  const day = Math.floor(hour / 24)
-  if (day < 7) return `${day} 天前`
-  return value.slice(0, 10)
-}
 
 /** 「AI 总管家」：基于最近邮件全量上下文的全局对话入口（流式 + Markdown + 历史会话）。 */
 export default function ManagerPage() {

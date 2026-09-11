@@ -3,6 +3,7 @@ import { FilePenLine, Loader2, RotateCcw, Send, Sparkles, Trash2, Undo2, X } fro
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
+import { useFlash } from '../hooks/useFlash'
 import type { Draft } from '../types'
 
 type Tab = 'pending' | 'sent' | 'discarded'
@@ -161,16 +162,11 @@ function DraftDetail({ draft, tab, onChanged }: { draft: Draft; tab: Tab; onChan
   const [content, setContent] = useState(draft.content)
   const [instruction, setInstruction] = useState('')
   const [showInstruction, setShowInstruction] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const [message, flash] = useFlash()
   const queryClient = useQueryClient()
   const aiEnabled = useAIEnabled()
 
   useEffect(() => setContent(draft.content), [draft.id, draft.content])
-
-  const flash = (msg: string, ms = 4000) => {
-    setMessage(msg)
-    setTimeout(() => setMessage(null), ms)
-  }
   const refresh = () => {
     onChanged()
     void queryClient.invalidateQueries({ queryKey: ['drafts'] })

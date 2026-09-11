@@ -6,8 +6,10 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, type EmailQuery } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
+import { useFlash } from '../hooks/useFlash'
 import { useJob } from '../api/useJob'
 import { categoryBadgeMap, useCategories } from '../api/useMeta'
+import { shortDate } from '../utils/format'
 import {
   type EmailDetail, type EmailSummary, type FolderInfo, type JobInfo, type OrganizeResult,
 } from '../types'
@@ -62,7 +64,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [showImages, setShowImages] = useState(false)
-  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [syncMessage, setSyncMessage] = useFlash(5000)
 
   // 分屏布局：列表宽度可拖拽，阅读区可全屏，均记忆在本地
   const [listWidth, setListWidth] = useState(() => {
@@ -161,7 +163,6 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
       await api.syncAccount(accountId, target)
     } catch (err) {
       setSyncMessage(`同步失败：${(err as Error).message}`)
-      setTimeout(() => setSyncMessage(null), 6000)
     } finally {
       setFolderSyncing(false)
       invalidateMail()
@@ -184,7 +185,6 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
     },
     onError: (error: Error) => {
       setSyncMessage(`创建失败：${error.message}`)
-      setTimeout(() => setSyncMessage(null), 6000)
     },
   })
 
@@ -281,7 +281,6 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
             ? `已在后台开始同步 ${started} 个账号，新邮件到达后会自动刷新`
             : '已在后台开始同步，新邮件到达后会自动刷新',
       )
-      setTimeout(() => setSyncMessage(null), 5000)
     },
     onError: (error: Error) => setSyncMessage(`同步触发失败：${error.message}`),
   })
@@ -289,28 +288,26 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
   // AI 整理：提交后台 job（HTTP 立即返回），轮询进度，终态展示结果
   const { job: organizeJob, start: startOrganizeJob } = useJob((finished) => {
     if (finished.status === 'failed') {
-      setSyncMessage(`AI 整理失败：${finished.detail || '未知错误'}`)
-      setTimeout(() => setSyncMessage(null), 6000)
+      setSyncMessage(`AI 整理失败：${finished.detail || '未知错误'}`, 6000)
       return
     }
     const result = (finished.result ?? {}) as Partial<OrganizeResult>
     invalidateMail()
     if (result.skipped_no_ai) {
-      setSyncMessage('AI 未配置或已停用，请到设置 - AI 配置检查')
+      setSyncMessage('AI 未配置或已停用，请到设置 - AI 配置检查', 6000)
     } else {
       setSyncMessage(
         `AI 整理完成：分类 ${result.classified ?? 0} 封${(result.archived ?? 0) > 0 ? `，归档营销 ${result.archived} 封` : ''}`,
+        6000,
       )
     }
-    setTimeout(() => setSyncMessage(null), 6000)
   })
 
   const organizeMutation = useMutation({
     mutationFn: () => api.aiOrganize({ account_id: accountId ?? undefined, folder: 'INBOX', limit: 200 }),
     onSuccess: ({ job_id }) => startOrganizeJob(job_id),
     onError: (error: Error) => {
-      setSyncMessage(`AI 整理提交失败：${error.message}`)
-      setTimeout(() => setSyncMessage(null), 6000)
+      setSyncMessage(`AI 整理提交失败：${error.message}`, 6000)
     },
   })
   const organizing = organizeMutation.isPending || organizeJob?.status === 'running'
@@ -353,7 +350,6 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
       const failedNote = (r.failed ?? 0) > 0 ? `，${r.failed} 封失败` : ''
       setSyncMessage(`批量操作完成：${r.updated ?? 0} 封${failedNote}`)
     }
-    setTimeout(() => setSyncMessage(null), 5000)
   })
 
   const batchMutation = useMutation({
@@ -368,11 +364,9 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
       invalidateMail()
       const failedNote = result.failed > 0 ? `，${result.failed} 封失败` : ''
       setSyncMessage(`批量操作完成：${result.updated} 封${failedNote}`)
-      setTimeout(() => setSyncMessage(null), 5000)
     },
     onError: (error: Error) => {
-      setSyncMessage(`批量操作失败：${error.message}`)
-      setTimeout(() => setSyncMessage(null), 6000)
+      setSyncMessage(`批量操作失败：${error.message}`, 6000)
     },
   })
   const batchBusy = batchMutation.isPending || batchJob?.status === 'running'
@@ -745,18 +739,4 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
       </div>
     </div>
   )
-}
-
-function shortDate(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const now = new Date()
-  const sameDay = d.toDateString() === now.toDateString()
-  if (sameDay) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-  const sameYear = d.getFullYear() === now.getFullYear()
-  return d.toLocaleDateString('zh-CN', {
-    month: sameYear ? 'numeric' : undefined,
-    day: 'numeric',
-    year: sameYear ? undefined : 'numeric',
-  })
 }

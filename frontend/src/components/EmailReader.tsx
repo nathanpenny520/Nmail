@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
+import { formatDate } from '../utils/format'
 import type { EmailDetail } from '../types'
 import AiPanel from './AiPanel'
 import HtmlMail from './HtmlMail'
@@ -27,11 +28,6 @@ function formatSize(size: number): string {
   if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
   if (size >= 1024) return `${(size / 1024).toFixed(0)} KB`
   return `${size} B`
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return ''
-  return new Date(iso).toLocaleString('zh-CN', { hour12: false })
 }
 
 const btn =
