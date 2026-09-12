@@ -45,11 +45,13 @@ def prune_orphan_secrets(valid_ids: set[str]) -> None:
 def ensure_migrated() -> None:
     """备份恢复 / 旧单配置迁移 / 档案名规范化 / 孤儿密钥对账；幂等。"""
     profiles = get_setting(PROFILES_KEY)
-    if not isinstance(profiles, list):
-        # 主值缺失/损坏：先试备份恢复。有备份说明档案本来存在——绝不能静默走
-        # 旧配置重建（曾导致真实档案全部消失、其密钥成孤儿、失效旧 key 复活成现役）
-        backup = get_setting(PROFILES_BACKUP_KEY)
-        if isinstance(backup, list) and backup:
+    backup = get_setting(PROFILES_BACKUP_KEY)
+    backup_ok = isinstance(backup, list) and bool(backup)
+    # 主值缺失/损坏，或被外力清空：先试备份恢复。空主值看似合法，但正常删除走
+    # save_profiles（备份会同步为空）——"空主值 + 非空备份"只能是外力清空的指纹
+    # （曾导致真实档案全部消失、其密钥成孤儿、失效旧 key 复活成现役）
+    if not isinstance(profiles, list) or (not profiles and backup_ok):
+        if backup_ok:
             profiles = backup
             set_setting(PROFILES_KEY, profiles)
             if get_setting(ACTIVE_KEY) not in {p["id"] for p in profiles}:

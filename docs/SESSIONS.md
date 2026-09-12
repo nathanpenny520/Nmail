@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-0822-AI档案自愈缺口 ✅
+- 目标: 用户问"为什么没有自动读取本地的 AI 配置"——排障 + 恢复数据 + 堵自愈缺口
+- 排障结论: 本机 `ai_profiles` 昨日 16:32 被旧版 ensure_migrated 静默重建缺陷写成空列表（备份停在 14:31 为指纹——正常删除经 save_profiles 会同步备份），空列表不触发当时的"缺失/损坏才恢复"自愈；随后孤儿密钥对账清掉失档 key。与近期改动无关（当日所有测试均写 /tmp 临时目录）
+- 范围: backend/ai/profiles.py（自愈条件加"空主值+非空备份"）、tests/test_ai_profiles.py（新增 5 例）、docs；另经用户确认对真实数据目录执行了一次恢复写（ai_profiles ← 备份，激活 ← 85efe150）
+- 产出: 提交待回填（见 CHANGELOG「AI 档案被外力清空后不再自动恢复的自愈缺口」条目）；pytest 95 全绿
+- 遗留: 用户需在设置页重新粘贴有效 DeepSeek key（本机已无，且昨日两把旧 key 平台侧已失效）；设置页刷新即可见恢复的档案，代码修复需重启生效
+- 时间: 2026-09-12 08:22 完成
+
 ### S-0912-0034-SQLite并发竞态 ✅
 - 目标: 用户 macOS 启动即 500（`sqlite3.InterfaceError: bad parameter or other API misuse`，/api/settings 与 /api/ai/profiles，间歇自愈）——定位根因并修复
 - 范围: backend/db/database.py（get_conn 每线程连接 + close_thread_conn）、core/sync.py（同步线程收尾关连接）、tests/test_database.py（2 例回归）、docs

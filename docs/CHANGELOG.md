@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: AI 档案被外力清空后不再自动恢复的自愈缺口（macOS 实例数据已恢复）
+- 用户 mac 实例 AI 配置"消失"：排障确认主值 `ai_profiles` 在昨日 16:32 被旧版 ensure_migrated 静默重建缺陷写成空列表（备份停在 14:31 即为其指纹——正常删除走 save_profiles 会同步备份），空列表是合法 JSON，自愈只认"缺失/损坏"而不触发；随后孤儿密钥对账把失档 API key 清掉，造成"配置没了"
+- 修复：`ensure_migrated` 把"空主值 + 非空备份"纳入自愈条件（正常删除走 save_profiles 时备份同步为空，不会误恢复故意删空的场景）
+- 用户本机数据已按备份恢复（deepseek / api.deepseek.com / deepseek-flash，id 85efe150，设为激活）；密钥因孤儿对账已不在本机，需重新粘贴
+- 验证：pytest 95 例全绿（新增 test_ai_profiles 5 例：清空恢复/故意删空保持/损坏恢复/备份双写契约/全新安装）；ruff 通过
+- 说明：本次未触碰真实数据目录的写操作仅上述恢复（用户确认）；所有测试/冒烟均在临时目录
+
 ## 63dd644 — fix: SQLite 共享连接并发竞态（macOS 启动 500 根因）
 - 用户 macOS 冷启动首屏并发（/api/settings、/api/ai/profiles）报 `sqlite3.InterfaceError: bad parameter or other API misuse` 且间歇自愈——潜伏 bug 在所有平台都存在，Python 3.14 调度时序把它炸了出来
 - 根因（实测定位）：`get_conn()` 全局共享一条 sqlite3 连接，**Python sqlite3 层对同一连接的并发 execute 并不安全**——16 线程稳定复现 InterfaceError 与 `IndexError: tuple index out of range`，且只有带参数的语句中招（无参读/tx 写零错误）：语句缓存与参数绑定状态被并发重置；SQLite 序列化模式（threadsafety=3）只保护单次 C API 调用，兜不住 Python 层多步执行序列。原懒初始化还把半初始化连接（PRAGMA 未跑完）提前发布，属第二重竞态
