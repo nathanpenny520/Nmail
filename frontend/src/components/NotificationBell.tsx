@@ -89,7 +89,8 @@ export default function NotificationBell() {
   }
 
   return (
-    <div className="relative">
+    // flex 行内排布：铃铛与「开启桌面通知」按钮并排（旧写法块级堆叠，在顶部图标区会把行撑成两行）
+    <div className="relative flex items-center">
       <button
         className="relative flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
         onClick={() => setOpen((v) => !v)}
