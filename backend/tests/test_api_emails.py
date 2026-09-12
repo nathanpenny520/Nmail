@@ -68,11 +68,10 @@ def test_list_filter_matrix():
     assert _list(**base, folder="Archive")["total"] == 1
     assert _list(**base, folder="Archive")["items"][0]["id"] == e_other
 
-    # 搜索：≥3 字符走 FTS5，<3 字符回退 LIKE；搜索按设计忽略文件夹/归档过滤
-    assert _list(q="营销邮件")["total"] == 1
-    assert _list(q="邮")["total"] == 4  # LIKE 命中全部四封（含 Archive 里那封）
-
-    # 未触碰其他账号（无该参数时只看 INBOX，不因搜索扩大到别的账号数据）
+    # 搜索：≥3 字符走 FTS5，<3 字符回退 LIKE；搜索按设计忽略文件夹/归档过滤。
+    # 断言带 account_id（base）：全局 LIKE 会被其他测试夹具的邮件污染，账号内口径才稳定
+    assert _list(**base, q="营销邮件")["total"] == 1
+    assert _list(**base, q="邮")["total"] == 4  # LIKE 命中本账号全部四封（含 Archive 里那封）
     assert _list(**base, q="不存在的词xyz")["total"] == 0
 
 

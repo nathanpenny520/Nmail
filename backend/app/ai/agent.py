@@ -207,6 +207,16 @@ def execute_action(action_id: int, decision: str, args_override: dict | None = N
         conn.commit()
         return {"error": "未知工具"}
 
+    # 参数校验（审查 S1）：改参数批准是「人把关」场景，但类型/必填错误
+    # （如 read:"false" 被 bool() 当真）不能原样落库执行
+    try:
+        args = T.normalize_args(tool, args)
+    except ValueError as exc:
+        conn.execute("UPDATE ai_actions SET status = 'failed', error = ?, decided_at = ? WHERE id = ?",
+                     (f"参数校验失败：{exc}", datetime_now(), action_id))
+        conn.commit()
+        return {"error": f"参数校验失败：{exc}"}
+
     # 批准执行：权限复核（授权可能在等待期间被改小）+ 自动模式安全约束
     grants = T.resolve_grants([account_id] if account_id else [])
     if account_id and spec.grant not in grants:
@@ -220,7 +230,8 @@ def execute_action(action_id: int, decision: str, args_override: dict | None = N
                  (args_json, datetime_now(), action_id))
     conn.commit()
 
-    result = T.execute(tool, args, account_id or 0)
+    result = T.execute(tool, args, account_id or 0,
+                       [account_id] if account_id else [])
     ok = "error" not in result
     undo = result.pop("undo", None) if ok else None
     conn.execute(
@@ -375,7 +386,7 @@ def run_stream(question: str, history: list[dict] | None, session_id: int | None
 
         # 直接执行（读类，或自动模式约束内的写类）
         daily_actions += 1
-        result = T.execute(tool_name, args, primary)
+        result = T.execute(tool_name, args, primary, account_ids)
         ok_run = "error" not in result
         undo = result.pop("undo", None) if ok_run else None
         action_row_id = None

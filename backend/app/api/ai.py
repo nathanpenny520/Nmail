@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -139,8 +139,10 @@ def chat_manager_stream(payload: ManagerChatIn):
 
 def _manager_context(payload: ManagerChatIn) -> str:
     conn = get_conn()
-    since = (datetime.now() - timedelta(days=max(1, payload.days))).isoformat(timespec="seconds")
-    # date_sort 为统一 UTC 的排序键（迁移 v7）；混合时区的 e.date 字符串比较会漏算/多算日界
+    # date_sort 为统一 UTC 的排序键（迁移 v7）；边界必须同样以 UTC 生成——
+    # naive 本地时间直接比较会差一个时区偏移（UTC+8 下「最近 N 天」少 8 小时，审查 F3）
+    since_local = datetime.now().astimezone() - timedelta(days=max(1, payload.days))
+    since = since_local.astimezone(UTC).isoformat(timespec="seconds")
     where = " WHERE COALESCE(e.date_sort, e.date) >= ?"
     params: list = [since]
     if payload.account_id is not None:

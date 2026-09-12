@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
-from datetime import date, datetime, timedelta, UTC
+from datetime import date, datetime, timedelta
 
 from app.ai import tasks
 from app.ai.categories import CATEGORY_ORDER as CATEGORIES
@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 
 
 def _to_local_dt(iso: str | None) -> datetime | None:
+    """ISO 日期 → 本地时区 datetime。naive 视为本地时间——与 sync._norm_date 的
+    `astimezone(UTC)` 归一化假设一致（审查 F5：原先按 UTC 解释，两处假设相反）。
+    """
     if not iso:
         return None
     try:
-        dt = datetime.fromisoformat(iso)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC)
-        return dt.astimezone()
+        return datetime.fromisoformat(iso).astimezone()
     except (ValueError, OSError, OverflowError):
         # Windows 上极值年份的本地时区换算抛 OSError [Errno 22]，畸形日期不参与摘要
         return None
@@ -73,9 +73,11 @@ def _collect_stats() -> dict:
             trend[dt.date().isoformat()] += 1
 
     # 需要回复（未归档、未回复过）：已发送草稿视为已回复
+    # v0.4 P3 后草稿统一走 user_drafts（旧 drafts 表已退役只读），in_reply_to 指向被回复邮件
     sent_ids = {
-        r["email_id"] for r in conn.execute(
-            "SELECT DISTINCT email_id FROM drafts WHERE status = 'sent'"
+        r["in_reply_to"] for r in conn.execute(
+            "SELECT DISTINCT in_reply_to FROM user_drafts"
+            " WHERE status = 'sent' AND in_reply_to IS NOT NULL"
         ).fetchall()
     }
     need_reply = []
@@ -120,7 +122,8 @@ def _collect_stats() -> dict:
 
 def _has_draft(email_id: int) -> bool:
     row = get_conn().execute(
-        "SELECT 1 FROM drafts WHERE email_id = ? AND status IN ('pending','sent') LIMIT 1",
+        "SELECT 1 FROM user_drafts WHERE in_reply_to = ?"
+        " AND status IN ('pending_review','sent') LIMIT 1",
         (email_id,),
     ).fetchone()
     return bool(row)

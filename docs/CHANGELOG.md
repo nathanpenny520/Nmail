@@ -3,6 +3,19 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 审查修复 P0+P1：摘要判定 / AI 工具越权 / 时区 / 本地推理兼容等七项
+- 依据 v0.4 审查问题地图（2026-09-12，22 项逐条核实：15 项属实、3 项部分属实、C3 拦截计数核实为不成立），先修两个 P0 与五个 P1：
+- **P0-1 每日摘要「需要回复」失效**（F1）：`ai/digest.py` 仍查已退役的旧 `drafts` 表（sent_ids/_has_draft），用户已回复的邮件在摘要里恒显示需回复、「已有草稿」标记恒 False——改查 `user_drafts`（`status='sent' AND in_reply_to`；待审 pending_review 计入已有草稿标记且保持需回复）；新增 `test_digest.py` 两例回归
+- **P0-2 AI 工具会话范围越权**（F2）：`ai/tools.py` 的 search/list_recent/list_folders/create_folder/start_organize 接受模型传任意 `account_id` 不校验、digest_stats 无账号过滤（汇总全部账号）——`execute()` 统一收口：args.account_id 必须 ∈ 会话范围（缺省回落主账号）；`run` 签名加 scope 参数，`_scope_guard` 改按会话范围集合（顺带修复多账号会话读副账号邮件被误拒的问题）；digest_stats 四条 SQL 加范围过滤；agent 循环与审批端点传入范围；新增 3 例越权回归
+- **P1 时区**（F3/F5）：`api/ai.py` `_manager_context` 用 naive 本地时间与 UTC 的 date_sort 直接比较（UTC+8 下「最近 N 天」少 8 小时）→ 边界改 aware datetime 转 UTC 生成；`ai/digest.py` `_to_local_dt` 把 naive 按 UTC 解释，与 `sync._norm_date` 的按本地解释相反 → 统一为按本地（`astimezone()`）
+- **P1 本地推理兼容**（F4）：`llm.py` `iter_deltas` 无条件传 `stream_options={"include_usage": True}`，旧版 Ollama/LM Studio 等兼容端点直接报错、与「100% 本地推理」冲突 → 失败去参重试一次（退化为无用量回填的普通流）
+- **P1 自动模式收件人解析**（S2）：`recipient_allowed` 只按逗号切分，「姓名 <邮箱>」整串比对通讯录必不命中 → 带显示名的草稿恒降级审批；`contacts.py` 新增 `extract_addresses`（与 collect_addresses 同口径解析出纯 email）复用
+- **P1 审批参数校验**（S1）：`execute_action` 的 args_override 原样落库执行（如 `read:"false"` 被 bool() 当真、必填缺失）→ `tools.normalize_args` 按工具参数表做类型矫正+必填校验：execute 内联生效（agent 直执行路径同享）+ 审批路径前置校验，失败置 failed 不执行
+- **P1 回复后服务器已读回写**（C1）：发送回复仅本地 `is_read=1`，服务器 SEEN 不同步（网页端仍显示未读、重同步后本地漂回）→ `outbox._mark_original_seen` 尽力 IMAP STORE `\Seen`（失败仅告警，不影响发送结果）
+- 测试修整：`test_api_emails` 搜索断言收进账号范围（原全局 LIKE 断言 `q="邮"==4` 被任何新夹具邮件污染，本次新增用例即触发；意图不变：账号内跨文件夹 LIKE 搜索）
+- 验证：pytest 135 例全绿（净增 8：digest 2 + 越权 3 + 参数/收件人 3）；ruff（app 门禁）通过；隔离实例 `/api/health` 冒烟 ok
+- 遗留：C1 与 F4 的真实账号行为待用户重启 `python run.py` 后验证
+
 ## 816c90f — 文档补齐 + 文档上站（nmail-site /docs）
 - **主仓新增三篇用户文档**（官网与仓库共用）：
   - `docs/使用指南.md`——完整操作手册：界面导览（基座+页签+三栏）、收信与文件夹管理（拖拽/右键/快捷键表/真实归档）、AI 总管家（双模式/权限矩阵/自动边界/审计撤销/防注入）、写信草稿通讯录（富文本/自动保存/chips 联想/定时/AI 写作/统一草稿）、每日摘要、通知、设置速览、网络代理

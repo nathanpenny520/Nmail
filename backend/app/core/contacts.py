@@ -23,6 +23,24 @@ def split_addresses(raw: str) -> list[str]:
     return [p for p in (norm_email(x) for x in (raw or "").split(",")) if p]
 
 
+def extract_addresses(raw: str) -> list[str]:
+    """地址串 → 纯 email 列表（支持「Name <a@x>」，与 collect_addresses 同一解析口径）。
+
+    split_addresses 只按逗号切分；带显示名的条目（如「张三 <z@x.com>」）需要
+    提取纯地址后再比对（自动模式收件人约束，审查 S2）。
+    """
+    out: list[str] = []
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        m = re.match(r"^(.*?)<([^<>]+)>$", part)
+        addr = norm_email(m.group(2) if m else part)
+        if addr and addr not in out:
+            out.append(addr)
+    return out
+
+
 def collect_addresses(raw: str, account_id: int | None) -> int:
     """从逗号分隔地址串采集全部联系人（发送侧 To/Cc/Bcc，支持「Name <a@x>」）。"""
     n = 0

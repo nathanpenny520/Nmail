@@ -229,3 +229,97 @@ class _FakeMB:
 
     def flag(self, uids, flags, value):
         return None
+
+
+# ── 会话范围越权防护（v0.4 审查 F2 回归）─────────────────────
+
+def test_account_id_out_of_scope_rejected(monkeypatch):
+    """会话限定账号 A，模型传账号 B 的 account_id → 读类工具也拒绝。"""
+    aid_a = _aid()
+    aid_b = _aid()
+    _seed_email(aid_b, 21, "B 账号私有邮件")
+    _script(monkeypatch, [
+        json.dumps({"tool": "search_emails", "args": {"q": "私有", "account_id": aid_b}}),
+        "好的。",
+    ])
+    events = list(agent.run_stream("看看另一个账号", None, None, [aid_a], "approval", None))
+    results = _collect(events, "tool_result")
+    assert results and results[0]["ok"] is False
+    assert "不在当前会话范围" in results[0]["summary"]
+
+
+def test_digest_stats_scoped_to_session_accounts():
+    """digest_stats 只统计会话范围账号（原先汇总全部账号）。"""
+    from app.ai import tools as T
+
+    aid_a = _aid()
+    aid_b = _aid()
+    conn = database.get_conn()
+    conn.execute(
+        "INSERT INTO emails (account_id, folder, uid, subject, sender_email, is_read)"
+        " VALUES (?, 'INBOX', 31, 'A 的邮件', 'a@x.com', 0)", (aid_a,))
+    conn.execute(
+        "INSERT INTO emails (account_id, folder, uid, subject, sender_email, is_read)"
+        " VALUES (?, 'INBOX', 32, 'B 的邮件', 'b@x.com', 0)", (aid_b,))
+    conn.commit()
+    result = T.execute("digest_stats", {}, aid_a, [aid_a])
+    assert result["收件箱邮件数"] == 1 and result["未读"] == 1
+    out_of_scope = T.execute("digest_stats", {"account_id": aid_b}, aid_a, [aid_a])
+    assert "error" in out_of_scope
+
+
+def test_email_id_tools_reject_cross_account():
+    """按邮件 id 的工具对范围外账号的邮件拒绝（宁紧勿松）。"""
+    from app.ai import tools as T
+
+    aid_a = _aid()
+    eid_b = _seed_email(_aid(), 41, "别家的邮件")
+    result = T.execute("mark_emails", {"ids": [eid_b], "read": True}, aid_a, [aid_a])
+    assert "error" in result and "会话" in result["error"]
+
+
+# ── 参数归一化与审批校验（v0.4 审查 S1/S2 回归）──────────────
+
+def test_normalize_args_coercion_and_rejection():
+    """类型矫正：ids/整数字符串可转、布尔只认真值拼写；必填缺失/错型拒绝。"""
+    from app.ai import tools as T
+
+    assert T.normalize_args("mark_emails", {"ids": ["1", 2], "read": "false"}) == {
+        "ids": [1, 2], "read": False}
+    assert T.normalize_args("send_draft", {"draft_id": "9"}) == {"draft_id": 9}
+    import pytest
+
+    with pytest.raises(ValueError, match="draft_id"):
+        T.normalize_args("send_draft", {})
+    with pytest.raises(ValueError, match="draft_id"):
+        T.normalize_args("send_draft", {"draft_id": "abc"})
+    with pytest.raises(ValueError, match="folder"):
+        T.normalize_args("move_emails", {"ids": [1]})
+
+
+def test_execute_action_validates_args_override(monkeypatch):
+    """审批「改参数后批准」：必填缺失 → failed 落库，不执行。"""
+    aid = _aid()
+    _seed_email(aid, 62, "参数校验")
+    _script(monkeypatch, [
+        json.dumps({"tool": "move_emails", "args": {"ids": [1], "folder": "INBOX"}}),
+    ])
+    events = list(agent.run_stream("移动邮件", None, None, [aid], "approval", None))
+    action_id = _collect(events, "approval_required")[0]["action_id"]
+    result = agent.execute_action(action_id, "approve", {"ids": [1]})
+    assert "参数校验失败" in result.get("error", "")
+    assert database.get_conn().execute(
+        "SELECT status, error FROM ai_actions WHERE id = ?", (action_id,)
+    ).fetchone()["status"] == "failed"
+
+
+def test_recipient_allowed_parses_display_name():
+    """自动模式收件人约束解析「Name <邮箱>」（原先整串比对必不命中 → 恒降级审批）。"""
+    from app.ai import tools as T
+
+    aid = _aid()
+    contacts_core_upsert("old@friend.com", "老友", aid)
+    allowed, why = T.recipient_allowed("Old Friend <old@friend.com>", aid)
+    assert allowed and not why
+    denied, why2 = T.recipient_allowed("Stranger <stranger@evil.com>", aid)
+    assert not denied and "不在通讯录" in why2

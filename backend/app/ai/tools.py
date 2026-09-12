@@ -28,7 +28,7 @@ class ToolSpec:
     grant: str           # read | draft | organize | send | delete
     description: str     # 进系统提示词的一句话说明
     params: str          # 参数说明（prompt 用）
-    run: Callable[[dict, int], dict]  # (args, 主账号 id) → 结果 dict
+    run: Callable[[dict, int, list[int]], dict]  # (args, 主账号 id, 会话范围账号) → 结果 dict
 
 
 def _email_rows(ids: list[int]) -> list:
@@ -51,7 +51,7 @@ def _scope_guard(rows: list, account_ids: list[int]) -> None:
 
 # ── 读类工具 ────────────────────────────────────────────────────
 
-def _t_search(args: dict, primary: int) -> dict:
+def _t_search(args: dict, primary: int, scope: list[int]) -> dict:
     q = str(args.get("q") or "").strip()
     account_id = args.get("account_id") or primary
     limit = min(int(args.get("limit") or 10), MAX_LIST)
@@ -80,7 +80,7 @@ def _t_search(args: dict, primary: int) -> dict:
         for r in rows]}
 
 
-def _t_list_recent(args: dict, primary: int) -> dict:
+def _t_list_recent(args: dict, primary: int, scope: list[int]) -> dict:
     account_id = args.get("account_id") or primary
     folder = str(args.get("folder") or "INBOX")
     limit = min(int(args.get("limit") or 10), MAX_LIST)
@@ -95,10 +95,10 @@ def _t_list_recent(args: dict, primary: int) -> dict:
          "date": r["date"], "unread": not r["is_read"]} for r in rows]}
 
 
-def _t_read_email(args: dict, primary: int) -> dict:
+def _t_read_email(args: dict, primary: int, scope: list[int]) -> dict:
     email_id = int(args.get("email_id") or 0)
     rows = _email_rows([email_id])
-    _scope_guard(rows, [primary])
+    _scope_guard(rows, scope)
     if not rows:
         return {"error": "邮件不存在"}
     row = get_conn().execute(
@@ -114,12 +114,12 @@ def _t_read_email(args: dict, primary: int) -> dict:
             "date": row["date"], "body": text[:3000]}
 
 
-def _t_list_folders(args: dict, primary: int) -> dict:
+def _t_list_folders(args: dict, primary: int, scope: list[int]) -> dict:
     account_id = args.get("account_id") or primary
     return {"folders": [f["name"] for f in folders_core.cached_list(account_id)]}
 
 
-def _t_list_contacts(args: dict, primary: int) -> dict:
+def _t_list_contacts(args: dict, primary: int, scope: list[int]) -> dict:
     q = str(args.get("q") or "").strip()
     limit = min(int(args.get("limit") or 15), MAX_LIST)
     where, params = "", []
@@ -135,18 +135,26 @@ def _t_list_contacts(args: dict, primary: int) -> dict:
     return {"count": len(rows), "contacts": [dict(r) for r in rows]}
 
 
-def _t_digest_stats(args: dict, primary: int) -> dict:
+def _t_digest_stats(args: dict, primary: int, scope: list[int]) -> dict:
+    """邮箱概况统计（仅会话范围账号，防跨账号信息汇总）。"""
     conn = get_conn()
-    stat = lambda sql, p=(): conn.execute(sql, p).fetchone()[0]  # noqa: E731
-    inbox = stat("SELECT COUNT(*) FROM emails WHERE archived_local = 0 AND folder = 'INBOX'")
-    unread = stat("SELECT COUNT(*) FROM emails WHERE archived_local = 0 AND folder = 'INBOX' AND is_read = 0")
-    need_reply = stat("SELECT COUNT(*) FROM emails WHERE needs_reply = 1 AND archived_local = 0")
-    pending = stat("SELECT COUNT(*) FROM user_drafts WHERE status = 'pending_review'")
+    if not scope:
+        return {"收件箱邮件数": 0, "未读": 0, "待回复": 0, "待审草稿": 0, "分类分布": {}}
+    ph = ",".join("?" for _ in scope)
+    in_scope = f" AND account_id IN ({ph})"
+
+    def stat(sql: str) -> int:
+        return int(conn.execute(sql, scope).fetchone()[0] or 0)
+
+    inbox = stat("SELECT COUNT(*) FROM emails WHERE archived_local = 0 AND folder = 'INBOX'" + in_scope)
+    unread = stat("SELECT COUNT(*) FROM emails WHERE archived_local = 0 AND folder = 'INBOX' AND is_read = 0" + in_scope)
+    need_reply = stat("SELECT COUNT(*) FROM emails WHERE needs_reply = 1 AND archived_local = 0" + in_scope)
+    pending = stat("SELECT COUNT(*) FROM user_drafts WHERE status = 'pending_review'" + in_scope)
     by_category = {
         r["category"] or "未分类": r["n"]
         for r in conn.execute(
             "SELECT category, COUNT(*) n FROM emails WHERE archived_local = 0 AND folder = 'INBOX'"
-            " GROUP BY category").fetchall()
+            + in_scope + " GROUP BY category", scope).fetchall()
     }
     return {"收件箱邮件数": inbox, "未读": unread, "待回复": need_reply,
             "待审草稿": pending, "分类分布": by_category}
@@ -177,20 +185,20 @@ def _apply_flag(rows: list, flag: str, value: bool) -> dict:
     return {"updated": len(rows)}
 
 
-def _t_mark_emails(args: dict, primary: int) -> dict:
+def _t_mark_emails(args: dict, primary: int, scope: list[int]) -> dict:
     ids = [int(i) for i in (args.get("ids") or [])]
     rows = _email_rows(ids)
-    _scope_guard(rows, [primary])
+    _scope_guard(rows, scope)
     undo = [{"id": r["id"], "account_id": r["account_id"], "was": bool(r["is_read"])} for r in rows]
     result = _apply_flag(rows, "read", bool(args.get("read", True)))
     result["undo"] = undo
     return result
 
 
-def _t_star_emails(args: dict, primary: int) -> dict:
+def _t_star_emails(args: dict, primary: int, scope: list[int]) -> dict:
     ids = [int(i) for i in (args.get("ids") or [])]
     rows = _email_rows(ids)
-    _scope_guard(rows, [primary])
+    _scope_guard(rows, scope)
     undo = [{"id": r["id"], "account_id": r["account_id"], "was": bool(r["starred"])} for r in rows]
     result = _apply_flag(rows, "star", bool(args.get("star", True)))
     result["undo"] = undo
@@ -227,27 +235,27 @@ def _move_rows(rows: list, dest_provider: Callable[[int], str], label: str) -> d
     return {label: moved, "failed": failed, "undo": undo}
 
 
-def _t_archive_emails(args: dict, primary: int) -> dict:
+def _t_archive_emails(args: dict, primary: int, scope: list[int]) -> dict:
     ids = [int(i) for i in (args.get("ids") or [])]
     rows = _email_rows(ids)
-    _scope_guard(rows, [primary])
+    _scope_guard(rows, scope)
     return _move_rows(rows, folders_core.archive_folder_name, "archived")
 
 
-def _t_move_emails(args: dict, primary: int) -> dict:
+def _t_move_emails(args: dict, primary: int, scope: list[int]) -> dict:
     ids = [int(i) for i in (args.get("ids") or [])]
     folder = str(args.get("folder") or "")
     if not folder:
         return {"error": "缺少目标文件夹"}
     rows = _email_rows(ids)
-    _scope_guard(rows, [primary])
+    _scope_guard(rows, scope)
     return _move_rows(rows, lambda _aid: folder, "moved")
 
 
-def _t_trash_emails(args: dict, primary: int) -> dict:
+def _t_trash_emails(args: dict, primary: int, scope: list[int]) -> dict:
     ids = [int(i) for i in (args.get("ids") or [])]
     rows = _email_rows(ids)
-    _scope_guard(rows, [primary])
+    _scope_guard(rows, scope)
     by_account: dict[int, list] = {}
     for r in rows:
         by_account.setdefault(r["account_id"], []).append(r)
@@ -269,14 +277,14 @@ def _t_trash_emails(args: dict, primary: int) -> dict:
     return {"trashed": trashed, "failed": failed}  # 入废纸篓可服务器端手动恢复，不做 undo
 
 
-def _t_create_folder(args: dict, primary: int) -> dict:
+def _t_create_folder(args: dict, primary: int, scope: list[int]) -> dict:
     account_id = args.get("account_id") or primary
     name = str(args.get("name") or "")
     folders_core.create_folder(int(account_id), name)
     return {"created": name}
 
 
-def _t_create_draft(args: dict, primary: int) -> dict:
+def _t_create_draft(args: dict, primary: int, scope: list[int]) -> dict:
     """起草回复/新邮件 → 统一草稿表 pending_review（审批后经 outbox 发送）。"""
     to = str(args.get("to") or "").strip()
     subject = str(args.get("subject") or "").strip()
@@ -290,7 +298,7 @@ def _t_create_draft(args: dict, primary: int) -> dict:
     in_reply_to = None
     if email_id:
         row = _email_rows([int(email_id)])
-        _scope_guard(row, [primary])
+        _scope_guard(row, scope)
         if row:
             in_reply_to = int(email_id)
             if not subject:
@@ -309,7 +317,7 @@ def _t_create_draft(args: dict, primary: int) -> dict:
             "hint": "草稿已进入待审列表，用户批准后发送"}
 
 
-def _t_send_draft(args: dict, primary: int) -> dict:
+def _t_send_draft(args: dict, primary: int, scope: list[int]) -> dict:
     """发送待审草稿（自动模式专用直发；审批模式走审批卡后同样到这里）。"""
     from app.core import outbox
 
@@ -317,14 +325,14 @@ def _t_send_draft(args: dict, primary: int) -> dict:
     row = get_conn().execute("SELECT * FROM user_drafts WHERE id = ?", (draft_id,)).fetchone()
     if row is None:
         return {"error": "草稿不存在"}
-    if row["account_id"] != primary:
+    if row["account_id"] not in scope:
         raise PermissionError("草稿不属于当前会话的账号范围")
     outbox.send_user_draft(draft_id)
     return {"sent": True, "to": row["to_addrs"], "subject": row["subject"],
             "note": "发送不可撤销"}
 
 
-def _t_start_organize(args: dict, primary: int) -> dict:
+def _t_start_organize(args: dict, primary: int, scope: list[int]) -> dict:
     account_id = args.get("account_id") or primary
     job_id = jobs.submit("organize", account_id=int(account_id), folder="INBOX", limit=200)
     return {"job_id": job_id, "hint": "AI 整理已在后台开始，完成后通知"}
@@ -370,13 +378,96 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
 ]}
 
 
-def execute(name: str, args: dict, primary_account: int) -> dict:
-    """执行工具并返回结果；未知工具/异常统一为结构化错误。"""
+# ── 参数归一化与校验（审查 S1：审批「改参数后批准」原样落库执行）──
+# 模型输出与用户手改都可能给错型（如 read:"false" 会被 bool() 当真）。
+# 键为参数名，值为期望类型；未列出的参数不校验（工具实现自行忽略）。
+_PARAM_TYPES: dict[str, dict[str, str]] = {
+    "search_emails": {"q": "str", "limit": "int"},
+    "list_recent_emails": {"folder": "str", "limit": "int"},
+    "read_email": {"email_id": "int"},
+    "list_contacts": {"q": "str", "limit": "int"},
+    "mark_emails": {"ids": "ints", "read": "bool"},
+    "star_emails": {"ids": "ints", "star": "bool"},
+    "archive_emails": {"ids": "ints"},
+    "move_emails": {"ids": "ints", "folder": "str"},
+    "trash_emails": {"ids": "ints"},
+    "create_folder": {"name": "str"},
+    "create_draft": {"email_id": "int", "to": "str", "subject": "str", "body": "str"},
+    "send_draft": {"draft_id": "int"},
+}
+_REQUIRED_ARGS: dict[str, tuple[str, ...]] = {
+    "read_email": ("email_id",),
+    "move_emails": ("folder",),
+    "create_folder": ("name",),
+    "create_draft": ("to", "body"),
+    "send_draft": ("draft_id",),
+}
+
+
+def normalize_args(name: str, args: dict) -> dict:
+    """按工具参数表做类型矫正 + 必填校验；失败抛 ValueError（文案可直接回给用户）。
+
+    返回归一化后的新 dict（不改入参）。id/布尔类从严：字符串数字可转，
+    布尔只认真值拼写，其余一律拒绝。
+    """
+    out = dict(args or {})
+    for key in _REQUIRED_ARGS.get(name, ()):
+        v = out.get(key)
+        if v is None or v == "" or v == []:
+            raise ValueError(f"缺少必填参数 {key}")
+    for key, typ in _PARAM_TYPES.get(name, {}).items():
+        if out.get(key) is None:
+            continue
+        v = out[key]
+        try:
+            if typ == "int":
+                out[key] = int(v)
+            elif typ == "ints":
+                if isinstance(v, (str, int)):
+                    v = [v]
+                if not isinstance(v, list):
+                    raise ValueError
+                out[key] = [int(x) for x in v]
+            elif typ == "bool":
+                if isinstance(v, str):
+                    out[key] = v.strip().lower() in ("1", "true", "yes", "y", "是")
+                else:
+                    out[key] = bool(v)
+            elif typ == "str":
+                out[key] = str(v)
+        except (TypeError, ValueError):
+            raise ValueError(f"参数 {key} 的类型应为 {typ}") from None
+    return out
+
+
+def execute(name: str, args: dict, primary_account: int,
+            account_ids: list[int] | None = None) -> dict:
+    """执行工具并返回结果；未知工具/异常统一为结构化错误。
+
+    account_ids 为会话范围账号（agent 循环传整组；审批/撤销等单账号场景
+    缺省回落 [主账号]）。args 里的 account_id 必须落在范围内，缺省回落
+    主账号——模型传任意账号 id 的越权读取/操作（审查 F2）在此统一收口。
+    """
     spec = TOOLS.get(name)
     if spec is None:
         return {"error": f"未知工具：{name}"}
+    scope = [int(a) for a in (account_ids if account_ids is not None
+                              else ([primary_account] if primary_account else []))]
+    args = dict(args or {})
+    if args.get("account_id") is not None:
+        try:
+            aid = int(args["account_id"])
+        except (TypeError, ValueError):
+            return {"error": "account_id 需为整数"}
+        if aid not in scope:
+            return {"error": "账号不在当前会话范围内，已拒绝执行"}
+        args["account_id"] = aid
     try:
-        return spec.run(args or {}, primary_account)
+        args = normalize_args(name, args)
+    except ValueError as exc:
+        return {"error": f"参数校验失败：{exc}"}
+    try:
+        return spec.run(args, primary_account, scope)
     except PermissionError as exc:
         return {"error": str(exc)}
     except mailbox.MailError as exc:
@@ -418,7 +509,7 @@ def recipient_allowed(to_addrs: str, account_id: int) -> tuple[bool, str]:
     防邮件正文注入的地址被直接外发。返回 (是否允许, 原因)。
     """
     conn = get_conn()
-    for addr in contacts_core.split_addresses(to_addrs):
+    for addr in contacts_core.extract_addresses(to_addrs):
         row = conn.execute("SELECT 1 FROM contacts WHERE email = ?", (addr,)).fetchone()
         if row:
             continue

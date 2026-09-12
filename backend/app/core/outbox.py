@@ -6,12 +6,13 @@ A2/T4），且后台线程不应出现 HTTPException——本模块统一抛 mai
 """
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 
 from app.config import get_data_dir
 from app.core import mailbox
-from app.core.imap_client import reply_subject
+from app.core.imap_client import SEEN_FLAG, reply_subject
 from app.core.mail_html import (
     html_to_plain_text,
     markdown_to_email_html,
@@ -19,6 +20,8 @@ from app.core.mail_html import (
     wrap_email_body_html,
 )
 from app.db.database import get_conn, get_setting, tx
+
+logger = logging.getLogger(__name__)
 
 
 def draft_dir(draft_id: int) -> Path:
@@ -68,6 +71,27 @@ def migrate_legacy_ai_drafts() -> int:
                 ),
             )
     return len(rows)
+
+
+def _mark_original_seen(email_id: int) -> None:
+    """回复发送后把原邮件在服务器端也标为已读（IMAP STORE \\Seen，审查 C1）。
+
+    本地 is_read 已置位但服务器 SEEN 不同步时，网页端仍显示未读、重同步后
+    本地状态也会漂回。尽力而为：邮件可能已被移动/删除或服务器暂不可达，
+    失败只告警不回滚发送结果。
+    """
+    row = get_conn().execute(
+        "SELECT account_id, folder, uid FROM emails WHERE id = ?", (email_id,)
+    ).fetchone()
+    if row is None or not row["uid"]:
+        return
+    try:
+        handle = mailbox.load_account(int(row["account_id"]))
+        with mailbox.open_imap(handle) as mb:
+            mb.folder.set(row["folder"])
+            mb.flag([str(row["uid"])], [SEEN_FLAG], True)
+    except Exception as exc:  # noqa: BLE001 — 已读回写失败不影响发送成功
+        logger.warning("回复后回写服务器已读失败 (email %s): %s", email_id, exc)
 
 
 def send_user_draft(draft_id: int) -> None:
@@ -134,6 +158,8 @@ def send_user_draft(draft_id: int) -> None:
     if row["in_reply_to"]:
         conn.execute("UPDATE emails SET is_read = 1 WHERE id = ?", (row["in_reply_to"],))
     conn.commit()
+    if row["in_reply_to"]:
+        _mark_original_seen(int(row["in_reply_to"]))
     # 通讯录自动采集（v0.4 P4）：发送成功的收件人入册
     from app.core import contacts as contacts_core  # 局部导入避免环
 

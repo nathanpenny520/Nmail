@@ -55,16 +55,23 @@ def chat_messages(base_url: str, model: str, api_key: str | None,
 def iter_deltas(base_url: str, model: str, api_key: str | None,
                 messages: list[dict], usage_out: dict | None = None,
                 max_tokens: int = 2000, temperature: float = 0.3):
-    """流式对话：逐段 yield 文本增量；支持时在最后一个 chunk 回填 token 用量。"""
+    """流式对话：逐段 yield 文本增量；支持时在最后一个 chunk 回填 token 用量。
+
+    stream_options 先带后不带重试一次：部分 OpenAI 兼容端点（旧版 Ollama /
+    LM Studio 等）不认该参数会直接报错（审查 F4）——此时退回无用量回填的普通流。
+    """
     client = build_client(base_url, api_key)
-    stream = client.chat.completions.create(
-        model=model,
-        messages=messages,  # type: ignore[arg-type]
-        max_tokens=max_tokens,
-        temperature=temperature,
-        stream=True,
-        stream_options={"include_usage": True},
-    )
+    kwargs: dict = {
+        "model": model,
+        "messages": messages,  # type: ignore[arg-type]
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stream": True,
+    }
+    try:
+        stream = client.chat.completions.create(**kwargs, stream_options={"include_usage": True})
+    except Exception:  # noqa: BLE001 — 端点不认 stream_options，去掉参数重试
+        stream = client.chat.completions.create(**kwargs)
     for chunk in stream:
         if usage_out is not None and getattr(chunk, "usage", None) is not None:
             usage_out["prompt_tokens"] = getattr(chunk.usage, "prompt_tokens", 0) or 0
