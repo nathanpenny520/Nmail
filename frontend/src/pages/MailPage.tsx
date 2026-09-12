@@ -7,15 +7,12 @@ import { useJob } from '../api/useJob'
 import FolderTree, { type TreeSelection } from '../components/FolderTree'
 import MailBrowser from '../components/MailBrowser'
 import { Modal } from '../components/compose/ui'
-import DraftsPage from './DraftsPage'
-import UserDraftsPage from './UserDraftsPage'
+import DraftsHubPage from './DraftsHubPage'
 
 function selectionFromParams(view: string | null): TreeSelection {
   switch (view) {
-    case 'review':
-      return { type: 'review' }
-    case 'mydrafts':
-      return { type: 'mydrafts' }
+    case 'drafts':
+      return { type: 'drafts' }
     default:
       return { type: 'inbox', accountId: null }
   }
@@ -56,8 +53,7 @@ export default function MailPage() {
         {sel.type === 'folder' && (
           <MailBrowser key={`folder-${sel.accountId}-${sel.name}`} initialAccountId={sel.accountId} initialFolder={sel.name} />
         )}
-        {sel.type === 'review' && <DraftsPage />}
-        {sel.type === 'mydrafts' && <UserDraftsPage />}
+        {sel.type === 'drafts' && <DraftsHubPage />}
       </div>
       <ArchivedMigratePrompt />
     </div>

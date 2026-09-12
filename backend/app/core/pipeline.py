@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 from app.ai import tasks
 from app.ai.categories import AUTO_ARCHIVE_CATEGORIES
 from app.core import folders, imap_client, jobs, mailbox
+from app.core.mail_html import markdown_to_email_html
 from app.core.sync import add_notification
 from app.db.database import get_conn, get_setting
 
@@ -196,7 +197,11 @@ def process_new_emails(account: dict, email_ids: list[int]) -> None:
 
 
 def _generate_drafts(account: dict, items: list[dict]) -> None:
-    """为需要回复的邮件生成待审草稿（账号权限 gate：readonly 不生成）。"""
+    """为需要回复的邮件生成待审草稿（账号权限 gate：readonly 不生成）。
+
+    v0.4 P3：直接写 user_drafts（status=pending_review, origin=ai），与手写草稿
+    同表同发送通路（REDESIGN_PLAN §5.1）。
+    """
     if not items:
         return
     conn = get_conn()
@@ -210,7 +215,7 @@ def _generate_drafts(account: dict, items: list[dict]) -> None:
     created = 0
     for item in items:
         exists = conn.execute(
-            "SELECT 1 FROM drafts WHERE email_id = ? AND status = 'pending'",
+            "SELECT 1 FROM user_drafts WHERE in_reply_to = ? AND status = 'pending_review'",
             (item["id"],),
         ).fetchone()
         if exists:
@@ -224,8 +229,15 @@ def _generate_drafts(account: dict, items: list[dict]) -> None:
             logger.warning("draft generation failed for email %s: %s", item["id"], exc)
             continue
         conn.execute(
-            "INSERT INTO drafts (email_id, account_id, content, origin) VALUES (?, ?, ?, 'ai')",
-            (item["id"], account["id"], content),
+            "INSERT INTO user_drafts (account_id, mode, in_reply_to, to_addrs, subject,"
+            " body_html, status, origin) VALUES (?, 'reply', ?, ?, ?, ?, 'pending_review', 'ai')",
+            (
+                account["id"],
+                item["id"],
+                row["sender_email"] or "",
+                imap_client.reply_subject(row["subject"] or ""),
+                markdown_to_email_html(content),
+            ),
         )
         conn.commit()
         created += 1
@@ -239,7 +251,7 @@ def _generate_drafts(account: dict, items: list[dict]) -> None:
         add_notification(
             "ai_draft_summary",
             f"AI 为 {created} 封邮件生成了回复草稿",
-            "到「待审草稿」页审核发送",
+            "到「草稿」视图审核发送",
             str(account["id"]),
         )
 

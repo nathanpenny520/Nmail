@@ -28,9 +28,9 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<MailPage />} />
-            {/* v0.4 旧路由重定向（REDESIGN_PLAN §3.4）：待审草稿/草稿箱/已归档并入邮件基座的树视图 */}
-            <Route path="/drafts" element={<Navigate to="/?view=review" replace />} />
-            <Route path="/mydrafts" element={<Navigate to="/?view=mydrafts" replace />} />
+            {/* v0.4 旧路由重定向：待审草稿/草稿箱并入统一「草稿」视图（P3），归档并入树（P2） */}
+            <Route path="/drafts" element={<Navigate to="/?view=drafts" replace />} />
+            <Route path="/mydrafts" element={<Navigate to="/?view=drafts" replace />} />
             {/* v0.4 §4.6：本地归档视图退役，Archived 在各账号文件夹树中 */}
             <Route path="/archived" element={<Navigate to="/" replace />} />
             <Route path="/digest" element={<DigestPage />} />

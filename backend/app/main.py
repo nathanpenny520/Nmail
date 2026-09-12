@@ -43,6 +43,11 @@ class SPAStaticFiles(StaticFiles):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     run_migrations()
+    # v0.4 P3（REDESIGN_PLAN §5.1）：旧 drafts 表（AI 待审）一次性并入 user_drafts
+    # （Markdown→HTML 需 Python，KV 门控幂等；schema 变更在迁移 v19）
+    from app.core.outbox import migrate_legacy_ai_drafts
+
+    migrate_legacy_ai_drafts()
     cleanup_retention()  # R7：通知/用量日志保留策略，防本地库无界增长
     scheduler.start()
     yield

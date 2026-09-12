@@ -267,11 +267,23 @@ export interface UserDraft {
   bcc_addrs: string
   subject: string
   body_html: string
-  status: 'editing' | 'scheduled' | 'sent' | 'discarded' | string
+  /** v0.4 P3：editing | scheduled | pending_review（AI 待审）| sent | discarded */
+  status: 'editing' | 'scheduled' | 'pending_review' | 'sent' | 'discarded' | string
+  /** ai = AI 拟稿（待审流），human = 手写 */
+  origin: 'ai' | 'human' | string
+  instruction: string | null
   send_at: string | null
   attachments: DraftAttachment[]
   created_at: string
   updated_at: string
+  /** 回复目标邮件上下文（in_reply_to 关联；可能已被删除 → null） */
+  email: {
+    subject: string
+    sender_name: string
+    sender_email: string
+    date: string
+    snippet: string
+  } | null
 }
 
 /** 写信台模板/签名（Markdown 文本存储，插入时转 HTML） */

@@ -9,7 +9,6 @@ import type {
   ChatSession,
   ComposeExtras,
   CategoryMeta,
-  Draft,
   EmailDetail,
   EmailListResp,
   FolderCacheItem,
@@ -258,25 +257,22 @@ export const api = {
     request<{ ok: boolean; deleted: number }>('/api/notifications/clear-read', { method: 'POST' }),
 
   // ── AI 层 ──
-  getDrafts: (status: string = 'pending') =>
-    request<{ drafts: Draft[] }>(`/api/drafts?status=${status}`),
-  updateDraft: (id: number, content: string) =>
-    request<{ ok: boolean }>(`/api/drafts/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ content }),
-    }),
-  draftAction: (id: number, action: 'approve' | 'discard', content?: string) =>
-    request<{ ok: boolean }>(`/api/drafts/${id}/action`, {
-      method: 'POST',
-      body: JSON.stringify({ action, ...(content !== undefined ? { content } : {}) }),
-    }),
-  regenerateDraft: (emailId: number, instruction?: string) =>
-    request<{ ok: boolean; draft_id: number; content: string }>('/api/drafts/regenerate', {
+  /** 邮件视图一键拟稿（可带指令）：有待审稿则覆盖，无则新建（v0.4 并入 user-drafts） */
+  regenerateDraftForEmail: (emailId: number, instruction?: string) =>
+    request<{ ok: boolean; draft: UserDraft }>('/api/user-drafts/regenerate-for-email', {
       method: 'POST',
       body: JSON.stringify({ email_id: emailId, ...(instruction ? { instruction } : {}) }),
     }),
-  deleteDraft: (id: number) =>
-    request<{ ok: boolean }>(`/api/drafts/${id}`, { method: 'DELETE' }),
+  /** 带指令重写待审草稿 */
+  regenerateUserDraft: (id: number, instruction?: string) =>
+    request<{ ok: boolean; draft: UserDraft }>(`/api/user-drafts/${id}/regenerate`, {
+      method: 'POST',
+      body: JSON.stringify({ ...(instruction ? { instruction } : {}) }),
+    }),
+  discardUserDraft: (id: number) =>
+    request<{ draft: UserDraft }>(`/api/user-drafts/${id}/discard`, { method: 'POST' }),
+  reopenUserDraft: (id: number) =>
+    request<{ draft: UserDraft }>(`/api/user-drafts/${id}/reopen`, { method: 'POST' }),
   reopenDraft: (id: number) =>
     request<{ ok: boolean }>(`/api/drafts/${id}/reopen`, { method: 'POST' }),
   aiChat: (payload: { email_id?: number; email_ids?: number[]; question: string; history?: { role: string; content: string }[] }) =>

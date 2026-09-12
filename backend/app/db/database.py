@@ -358,6 +358,17 @@ MIGRATIONS: list[tuple[int, str]] = [
         WHERE EXISTS (SELECT 1 FROM emails WHERE archived_local = 1);
         """,
     ),
+    (
+        19,
+        """
+        -- v0.4 P3 草稿体系合并（REDESIGN_PLAN §5.1）：user_drafts 成为唯一草稿存储。
+        -- origin 区分 AI/手写；status 扩展 pending_review（待审）；旧 drafts 表的数据
+        -- 并入由启动期 migrate_legacy_ai_drafts() 执行（Markdown→HTML 需 Python，
+        -- KV legacy_drafts_migrated 门控幂等），旧表保留只读一个版本后清理。
+        ALTER TABLE user_drafts ADD COLUMN origin TEXT NOT NULL DEFAULT 'human';
+        ALTER TABLE user_drafts ADD COLUMN instruction TEXT;
+        """,
+    ),
 ]
 
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import accounts, ai, chats, drafts, emails, folders, jobs, notifications, oauth, profiles, sender_lists, settings, system
+from app.api import accounts, ai, chats, emails, folders, jobs, notifications, oauth, profiles, sender_lists, settings, system
 from app.api import compose_extras, digest, meta, user_drafts
 
 api_router = APIRouter()
@@ -14,7 +14,6 @@ api_router.include_router(oauth.router)
 api_router.include_router(oauth.callback_router)
 api_router.include_router(emails.router)
 api_router.include_router(notifications.router)
-api_router.include_router(drafts.router)
 api_router.include_router(user_drafts.router)
 api_router.include_router(compose_extras.router)
 api_router.include_router(ai.router)

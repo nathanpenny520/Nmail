@@ -49,10 +49,10 @@ export default function EmailReader({
   // 手动触发 AI 拟稿（可带要求提示词）：生成后直接跳到待审草稿页
   const draftMutation = useMutation({
     mutationFn: () =>
-      api.regenerateDraft(detail.id, draftInstr.trim() || undefined),
+      api.regenerateDraftForEmail(detail.id, draftInstr.trim() || undefined),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['drafts'] })
-      navigate('/drafts')
+      void queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
+      navigate('/?view=drafts')
     },
     onError: (err: Error) => {
       setListMessage(`拟稿失败：${err.message}`)

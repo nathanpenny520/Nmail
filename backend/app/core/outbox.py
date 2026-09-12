@@ -11,8 +11,14 @@ from pathlib import Path
 
 from app.config import get_data_dir
 from app.core import mailbox
-from app.core.mail_html import html_to_plain_text, sanitize_outgoing_html, wrap_email_body_html
-from app.db.database import get_conn
+from app.core.imap_client import reply_subject
+from app.core.mail_html import (
+    html_to_plain_text,
+    markdown_to_email_html,
+    sanitize_outgoing_html,
+    wrap_email_body_html,
+)
+from app.db.database import get_conn, get_setting, tx
 
 
 def draft_dir(draft_id: int) -> Path:
@@ -20,17 +26,63 @@ def draft_dir(draft_id: int) -> Path:
     return get_data_dir() / "drafts" / str(draft_id)
 
 
-def send_user_draft(draft_id: int) -> None:
-    """发送写信台草稿：状态校验 → 地址解析 → 消毒/派生纯文本 → 发送 → 标记 sent。
+def migrate_legacy_ai_drafts() -> int:
+    """一次性：旧 drafts 表（AI 待审草稿）数据并入 user_drafts（v0.4 P3，REDESIGN_PLAN §5.1）。
 
+    幂等：KV legacy_drafts_migrated 置位后跳过。content(Markdown)→body_html 与原
+    approve 发送路径同源（markdown_to_email_html）；status 映射
+    pending→pending_review / sent→sent / discarded→discarded；收件人=原发件人、
+    主题=Re: 原主题、in_reply_to=原邮件（软引用）。旧表保留只读，不再使用。
+    启动期调用（main.lifespan）；schema 变更在迁移 v19。
+    """
+    if get_setting("legacy_drafts_migrated"):
+        return 0
+    rows = get_conn().execute("SELECT * FROM drafts ORDER BY id").fetchall()
+    with tx() as conn:
+        # 门控与数据同一事务提交（set_setting 会自 commit，破坏外层事务，故直写 SQL）；
+        # 中断即整体回滚，下次启动重跑，绝不出现半份拷贝
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('legacy_drafts_migrated', 'true')"
+            " ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = datetime('now')"
+        )
+        for r in rows:
+            email = conn.execute(
+                "SELECT subject, sender_email FROM emails WHERE id = ?", (r["email_id"],)
+            ).fetchone()
+            subject = reply_subject(email["subject"]) if email else "回复"
+            to_addr = (email["sender_email"] if email else "") or ""
+            conn.execute(
+                "INSERT INTO user_drafts (account_id, mode, in_reply_to, to_addrs, subject,"
+                " body_html, status, origin, instruction, created_at, updated_at)"
+                " VALUES (?, 'reply', ?, ?, ?, ?, ?, 'ai', ?, ?, ?)",
+                (
+                    r["account_id"],
+                    r["email_id"],
+                    to_addr,
+                    subject,
+                    markdown_to_email_html(r["content"] or ""),
+                    {"pending": "pending_review"}.get(r["status"], r["status"]),
+                    r["instruction"],
+                    r["created_at"],
+                    r["updated_at"] or r["created_at"],  # 旧表 updated_at 可空
+                ),
+            )
+    return len(rows)
+
+
+def send_user_draft(draft_id: int) -> None:
+    """发送草稿（唯一实现，API 与调度器共用）：状态校验 → 地址解析 →
+    消毒/派生纯文本 → 发送 → 标记 sent。
+
+    v0.4：status 含 pending_review（AI 待审批准发送与手写发送同一条通路）。
     失败抛 MailError（code ∈ not_found | state | no_recipient | missing_credential
     | not_found(账号) | smtp_missing | send_failed），状态保持不变；
-    成功即置 sent、清 send_at、删附件目录。
+    成功即置 sent、清 send_at、删附件目录，并对回复目标邮件补标已读。
     """
     row = get_conn().execute("SELECT * FROM user_drafts WHERE id = ?", (draft_id,)).fetchone()
     if row is None:
         raise mailbox.MailError("not_found", "草稿不存在")
-    if row["status"] not in ("editing", "scheduled"):
+    if row["status"] not in ("editing", "scheduled", "pending_review"):
         raise mailbox.MailError("state", "该草稿已发送或已丢弃")
 
     to_list = mailbox.split_addresses(row["to_addrs"])
@@ -78,5 +130,8 @@ def send_user_draft(draft_id: int) -> None:
         " WHERE id = ?",
         (draft_id,),
     )
+    # 回复原邮件补标已读（原 approve 语义，迁移后对所有回复草稿生效）
+    if row["in_reply_to"]:
+        conn.execute("UPDATE emails SET is_read = 1 WHERE id = ?", (row["in_reply_to"],))
     conn.commit()
     shutil.rmtree(draft_dir(draft_id), ignore_errors=True)

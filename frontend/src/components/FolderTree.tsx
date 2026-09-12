@@ -5,7 +5,6 @@ import {
 } from 'lucide-react'
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { api } from '../api/client'
-import { useAIEnabled } from '../api/useAI'
 import type { Account, FolderCacheItem } from '../types'
 import ContextMenu, { type ContextMenuItem } from './ContextMenu'
 import { Modal } from './compose/ui'
@@ -14,8 +13,7 @@ import { Modal } from './compose/ui'
 export type TreeSelection =
   | { type: 'inbox'; accountId: number | null }
   | { type: 'folder'; accountId: number; name: string }
-  | { type: 'review' }
-  | { type: 'mydrafts' }
+  | { type: 'drafts' }
 
 const SPECIAL_META: Record<string, { icon: typeof Inbox }> = {
   sent: { icon: Send },
@@ -102,8 +100,6 @@ export default function FolderTree({
   const queryClient = useQueryClient()
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
   const accounts: Account[] = accountsQuery.data?.accounts ?? []
-  // 待审草稿是 AI 产物，AI 停用时隐藏（对齐旧导航 AI_ONLY 语义）
-  const aiEnabled = useAIEnabled()
 
   // 账号折叠状态记忆在本地；选中某账号时自动确保展开
   const [expanded, setExpanded] = useState<number[]>(() => {
@@ -227,15 +223,10 @@ export default function FolderTree({
         <Inbox className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">聚合收件箱</span>
       </button>
-      {aiEnabled && (
-        <button className={rowCls(selection.type === 'review')} onClick={() => onSelect({ type: 'review' })}>
-          <FilePenLine className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">待审草稿</span>
-        </button>
-      )}
-      <button className={rowCls(selection.type === 'mydrafts')} onClick={() => onSelect({ type: 'mydrafts' })}>
-        <FileText className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate">草稿箱</span>
+      {/* v0.4 P3：待审草稿+草稿箱合并为「草稿」单一视图（AI 停用时手写稿仍可见） */}
+      <button className={rowCls(selection.type === 'drafts')} onClick={() => onSelect({ type: 'drafts' })}>
+        <FilePenLine className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">草稿</span>
       </button>
 
       <div className="px-2 pb-1 pt-3 t-xs font-medium text-gray-400">账号</div>

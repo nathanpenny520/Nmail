@@ -3,6 +3,16 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — v0.4 P3: 草稿体系合并（待审+草稿箱 → 统一草稿）
+- 依据 docs/REDESIGN_PLAN.md §5.1/§13 P3
+- **数据统一**：user_drafts 成为唯一草稿存储（v19 加 origin ai/human + instruction 列，status 扩展 pending_review）；旧 drafts 表（AI 待审）数据由启动期 `outbox.migrate_legacy_ai_drafts()` 一次性并入——Markdown→HTML 与原 approve 发送同源、主题 Re: 化、收件人=原发件人、in_reply_to=原邮件软引用、状态映射 pending→pending_review/sent→sent/discarded→discarded；KV `legacy_drafts_migrated` 与数据同一事务原子提交（防中断出半份拷贝），旧表只读保留
+- **发送通路归一**：`outbox.send_user_draft` 接受 pending_review——AI 待审「批准并发送」与手写发送同一条路（In-Reply-To/消毒/Sent 归档全复用），并对回复原邮件补标已读；api/drafts.py 退役删除（/api/drafts 路由不复存在），丢弃/恢复/带指令重写并入 /api/user-drafts（discard/reopen/regenerate + regenerate-for-email 供邮件视图一键拟稿）；调度器定时发送不受影响（只拉 editing/scheduled）
+- **合并视图**：新增 DraftsHubPage（树单「草稿」节点进入）——分段筛选 待审/编辑中/定时中/已发送/已丢弃，行上 ✦AI/✎手写 徽章 + 指令徽章；待审稿操作=批准并发送/编辑后发送（进写信台同一通路）/重写（指令框）/丢弃；scheduled 可取消定时（回到来源态）；discarded 可恢复；详情预览走 HtmlMail 沙箱；列表 LEFT JOIN 原邮件带上下文
+- **pipeline**：AI 拟稿直接写 user_drafts(pending_review, origin=ai)，主题 Re: 化、收件人=发件人
+- **顺带修复**：通知面板在顶部图标区不可见（旧 bottom-0 锚定向上展开出视口）→ 改 top-full 向下展开（20e4b97）
+- 验证：pytest 101 例全绿（新增 test_user_drafts.py 3 例：旧数据并入+幂等/待审流转+发送状态机/列表状态过滤+邮件上下文）；ruff（app 门禁）通过；npm build 通过；隔离实例（8797）冒烟——重启后旧 drafts 迁移进 pending_review（API 验证 origin/to/Re: 主题/HTML/instruction 全对），浏览器确认 /drafts→/?view=drafts 重定向、树单草稿节点、分段筛选、AI 徽章与 Markdown 正文预览渲染正常；编辑中手写稿的启动页签恢复为既有设计（非回归）
+- 遗留：真实账号端到端（AI 生成→编辑后发送→原邮件标已读）待用户验证；树「草稿」节点未读/待审计数徽章顺延
+
 ## c56fd5c — v0.4 P2: 资源管理器（文件夹树完整版 · 归档=服务器移动）
 - 依据 docs/REDESIGN_PLAN.md §4/§13 P2
 - **归档语义改造（§4.6）**：archive=真实移动到每账号服务器端 Archived 文件夹（accounts.archive_folder，缺省 Archived，首归档惰性创建）；unarchive=移回收件箱；archived_local 降级为「待服务器归档」暂存标记（移动失败保留、下次管线自动重试）。单封走端点同步移动，批量/迁移走 imap_batch job；营销/黑名单自动归档经 pipeline `_sweep_server_archive` 落服务器
