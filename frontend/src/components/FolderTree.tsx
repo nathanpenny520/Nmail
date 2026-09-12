@@ -1,12 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Archive, Ban, ChevronDown, ChevronRight, FilePenLine, FileText, Folder, FolderPlus, Inbox,
-  Mail, Pencil, RefreshCw, Send, Trash2,
+  Archive, BarChart3, Ban, ChevronDown, ChevronRight, FilePenLine, FileText, Folder, FolderPlus,
+  Inbox, Mail, Pencil, RefreshCw, Send, Sparkles, Trash2,
 } from 'lucide-react'
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
+import { useAIEnabled } from '../api/useAI'
 import type { Account, FolderCacheItem } from '../types'
 import ContextMenu, { type ContextMenuItem } from './ContextMenu'
+import { useCompose } from './compose/ComposeContext'
 import { Modal } from './compose/ui'
 
 /** 邮件基座的树选中项（v0.4：智能视图 + 账号收件箱 + 服务器文件夹）。 */
@@ -98,6 +101,9 @@ export default function FolderTree({
   onDropEmails: (ids: number[], accountId: number, folder: string) => void
 }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const { setActiveTab } = useCompose()
+  const aiEnabled = useAIEnabled()
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
   const accounts: Account[] = accountsQuery.data?.accounts ?? []
 
@@ -122,6 +128,12 @@ export default function FolderTree({
           : null
     if (id != null) setExpanded((prev) => (prev.includes(id) ? prev : [...prev, id]))
   }, [selection])
+
+  // 树内的页面入口（AI 总管家/每日摘要）：跳转路由即产生页签（Layout 的 PAGE_TABS 机制）
+  const openPage = (path: string) => {
+    navigate(path)
+    setActiveTab(null)
+  }
 
   // 右键菜单与 CRUD 对话框
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null)
@@ -228,6 +240,27 @@ export default function FolderTree({
         <FilePenLine className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">草稿</span>
       </button>
+      {/* v0.4 审核意见：AI 总管家/每日摘要从右上角按钮移入树（点开为页签，离开邮件基座时树隐藏） */}
+      {aiEnabled && (
+        <>
+          <button
+            className={rowCls(false)}
+            onClick={() => openPage('/assistant')}
+            title="对话式 AI 助理：搜索、整理、起草、发送"
+          >
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-violet-500" />
+            <span className="truncate">AI 总管家</span>
+          </button>
+          <button
+            className={rowCls(false)}
+            onClick={() => openPage('/digest')}
+            title="每日邮件摘要与统计"
+          >
+            <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">每日摘要</span>
+          </button>
+        </>
+      )}
 
       <div className="px-2 pb-1 pt-3 t-xs font-medium text-gray-400">账号</div>
       {accountsQuery.isLoading && <div className="px-2 py-2 t-sm text-gray-400">加载中…</div>}

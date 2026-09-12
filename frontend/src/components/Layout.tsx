@@ -59,8 +59,9 @@ function WorkspaceTabs() {
   }
 
   const inboxActive = activeTabId === null && location.pathname === '/'
+  // 统一宽度：所有页签同宽（浏览器式），标题超长截断（审核意见：长短不一观感差）
   const tabCls = (active: boolean) =>
-    `flex min-w-0 shrink-0 items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 t-sm transition-colors ${
+    `flex w-44 shrink-0 items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 t-sm transition-colors ${
       active
         ? 'border-gray-200 bg-white font-medium text-indigo-700'
         : 'border-transparent text-gray-500 hover:bg-gray-200/60'
@@ -98,7 +99,7 @@ function WorkspaceTabs() {
               title={meta.label}
             >
               <Icon className="h-3.5 w-3.5 shrink-0" />
-              <span className="whitespace-nowrap">{meta.label}</span>
+              <span className="truncate">{meta.label}</span>
               <button
                 className="shrink-0 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100"
                 onClick={(e) => {
@@ -116,7 +117,7 @@ function WorkspaceTabs() {
           <div
             key={tab.tabId}
             onClick={() => setActiveTab(tab.tabId)}
-            className={`${tabCls(tab.tabId === activeTabId)} max-w-56 cursor-pointer group`}
+            className={`${tabCls(tab.tabId === activeTabId)} cursor-pointer group`}
             title={tab.title}
           >
             {tab.dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" title="有未保存改动" />}
@@ -135,11 +136,9 @@ function WorkspaceTabs() {
           </div>
         ))}
       </div>
-      {/* 右侧图标按钮区：点击才产生/激活页面页签（v0.4 无固定页签） */}
+      {/* 右侧图标按钮区：AI 总管家/每日摘要已移入树「智能视图」（审核意见），此处仅剩通知/设置/写信 */}
       <div className="flex shrink-0 items-center gap-0.5 pb-1.5 pl-1.5">
         <NotificationBell />
-        {aiEnabled && <IconTab to="/assistant" icon={Sparkles} title="AI 总管家" active={iconActive('/assistant')} />}
-        {aiEnabled && <IconTab to="/digest" icon={BarChart3} title="每日摘要" active={iconActive('/digest')} />}
         <IconTab to="/settings" icon={Settings} title="设置" active={iconActive('/settings')} />
         <button
           className={iconBtnCls(false)}
