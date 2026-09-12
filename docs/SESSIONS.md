@@ -21,7 +21,7 @@
 ### S-0912-1633-UX体验修 ✅
 - 目标: 用户反馈三组体验问题——①通讯录表格直改（姓名点击改名已有但不易发现；邮箱不可改）并核实「搜索后列更多」实为浏览器旧构建残留（当前构建两种状态同表）；②时间显示统一审计（发现 contacts.last_seen_at 与 user_drafts.updated_at 为 UTC naive 被按本地显示、更新检查日期 slice UTC 串）；③SMTP/IMAP 账号支持改服务器配置与授权码（原 PATCH 只收 password/ai_permission/style_prompt/use_proxy，改服务器须删号重来）
 - 范围: backend(api/contacts.py, api/accounts.py) + frontend(SettingsPage, DraftsHubPage, utils/format, api/client) + tests(test_contacts 扩充, test_accounts_api 新增) + docs(CHANGELOG/SESSIONS) + openapi 快照再生
-- 产出: 本提交（哈希见 CHANGELOG「UX 体验修」条目）；pytest 137 全绿（净增 2：账号服务器变更试连/清空重同步/OAuth2 拒改 + 通讯录邮箱直改查重）；ruff 门禁 + npm build 通过；隔离实例 /api/health 冒烟 ok、PATCH 路由 404 语义正常
+- 产出: 提交 1a1d0e4；pytest 137 全绿（净增 2：账号服务器变更试连/清空重同步/OAuth2 拒改 + 通讯录邮箱直改查重）；ruff 门禁 + npm build 通过；隔离实例 /api/health 冒烟 ok、PATCH 路由 404 语义正常
 - 关键决策: 账号服务器变更自动清空该账号本地邮件+sync_state 并后台重同步（防新服务器 UID 撞旧断点漏信）；OAuth2 账号拒绝改服务器（随服务商预设）；send_at 保持本地 naive 不动（datetime-local 语义），仅修真正存 UTC naive 的展示
 - 遗留: **后端改动需重启 python run.py 才生效**；前端已 build，强刷即见；通讯录直改/账号配置编辑待用户真机走查；「搜索后列更多」如复现，先强刷页面再报
 - 时间: 2026-09-12 16:33 开工，17:05 完成
