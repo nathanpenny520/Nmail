@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — 发版: v0.3.0 全平台——PyPI/Release/tap 即时生效，winget PR 已提，tap token 缺陷暴露
+## b805906 — 发版: v0.3.0 全平台——PyPI/Release/tap 即时生效，winget PR 已提，tap token 缺陷暴露
 - `release: v0.3.0`（cb2f047）+ tag 推送，release CI run 34688316397：PyPI `nmail-app` 0.3.0 ✅、GitHub Release 三平台资产（windows-x64.exe / macos-arm64 / linux-x64）✅、homebrew-tap ❌（403，重跑复现）
 - **homebrew-tap 的 secret `HOMEBREW_TAP_TOKEN` 从未在 Actions 成功工作**：v0.1.0 时该 job 尚未存在（formula 0.1.0/0.2.0 均手动提交 b31fa77/54ec4c4）；v0.3.0 首次真正跑到即 403——判定 fine-grained PAT 失效或权限不足（有效期/资源授权/Contents RW 待用户核对）
 - 手动同步 tap formula → 0.3.0（homebrew-nmail 提交 4b3fcbe，url/SHA256 对齐 Release 资产，`brew upgrade nmail` 即生效）
