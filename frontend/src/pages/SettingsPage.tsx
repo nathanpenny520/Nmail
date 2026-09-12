@@ -1215,10 +1215,10 @@ const viewKeyOf = (v: ContactView) => (v.kind === 'group' ? `group-${v.id}` : v.
 const SourceBadges = ({ sources }: { sources: string[] }) => (
   <span className="inline-flex gap-1">
     {sources.includes('auto') && (
-      <span className="rounded bg-emerald-50 px-1.5 py-0.5 t-xs text-emerald-600">自动</span>
+      <span className="whitespace-nowrap rounded bg-emerald-50 px-1.5 py-0.5 t-xs text-emerald-600">自动</span>
     )}
     {sources.includes('manual') && (
-      <span className="rounded bg-gray-100 px-1.5 py-0.5 t-xs text-gray-500">手动</span>
+      <span className="whitespace-nowrap rounded bg-gray-100 px-1.5 py-0.5 t-xs text-gray-500">手动</span>
     )}
   </span>
 )
@@ -1529,17 +1529,17 @@ function ContactsSection() {
               )}
               {message && <p className="mt-2 t-sm text-red-600">{message}</p>}
 
-              <div className="mt-3 max-h-[520px] overflow-y-auto overflow-hidden rounded-xl border border-gray-100">
-                <table className="w-full text-left">
+              <div className="mt-3 max-h-[520px] overflow-auto rounded-xl border border-gray-100">
+                <table className="w-full min-w-[640px] text-left">
                   <thead className="sticky top-0 bg-gray-50 t-xs text-gray-400">
                     <tr>
                       <th className="w-8 px-3 py-2" />
-                      <th className="px-3 py-2 font-medium">姓名</th>
-                      <th className="px-3 py-2 font-medium">邮件地址</th>
-                      <th className="px-3 py-2 font-medium">手机</th>
-                      <th className="px-3 py-2 font-medium">来源</th>
-                      <th className="px-3 py-2 text-right font-medium">往来次数</th>
-                      <th className="px-3 py-2 font-medium">最近联系</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-medium">姓名</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-medium">邮件地址</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-medium">手机</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-medium">来源</th>
+                      <th className="whitespace-nowrap px-3 py-2 text-right font-medium">往来次数</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-medium">最近联系</th>
                     </tr>
                   </thead>
                   <tbody>
