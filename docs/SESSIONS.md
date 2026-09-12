@@ -21,7 +21,7 @@
 ### S-0912-1250-P6AI总管家2.0 ✅
 - 目标: 落地 REDESIGN_PLAN §13 P6（方案核心）——AI 总管家升级为对话 Agent（§6 全部）
 - 范围: backend（迁移 v17、ai/agent.py+ai/tools.py 新增、api/ai.py agent 流/审批/撤销/审计端点、api/accounts ai-grants+容错）、frontend（ManagerPage 2.0 重写、stream.ts streamAgentEvents、SettingsPage AI 权限面板+操作记录查看器、client/types）、docs
-- 产出: 主提交见 CHANGELOG「v0.4 P6: AI 总管家 2.0」条目；pytest 113 全绿（+test_agent 6 例：LLM 打桩脚本化走通读循环/审批/权限拒绝/白名单降级/直发审计/撤销）；ruff app 门禁通过；npm build 通过；隔离实例（8794→8795）冒烟——总管家 2.0 界面与设置页 AI 权限面板截图确认
+- 产出: 主提交 56c1a95（见 CHANGELOG「v0.4 P6」条目）；pytest 113 全绿（+test_agent 6 例：LLM 打桩脚本化走通读循环/审批/权限拒绝/白名单降级/直发审计/撤销）；ruff app 门禁通过；npm build 通过；隔离实例（8794→8795）冒烟——总管家 2.0 界面与设置页 AI 权限面板截图确认
 - 关键决策: 工具协议走 JSON（_extract_json 容错，对非 JSON 抛 ValueError——agent 循环必须接住转最终回答，纯文本路径不可裸调）；审批流「本轮暂停、decide 端点执行」不挂长连接；令牌式安全三层=授权位交集×模式×收件人白名单+限额；ai_grants 坏 JSON 双处容错（_safe_grants/resolve_grants）
 - 遗留: **真实账号端到端待用户**（配 AI 后全工具走查+自动模式限额+注入测试）；原生 function calling、AI 专属邮箱管线直发、待审批角标顺延；下一阶段 P7 对外 API
 - 时间: 2026-09-12 13:30 完成

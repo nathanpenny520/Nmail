@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — v0.4 P6: AI 总管家 2.0（对话 Agent · 双模式 · 审计）
+## 56c1a95 — v0.4 P6: AI 总管家 2.0（对话 Agent · 双模式 · 审计）
 - 依据 docs/REDESIGN_PLAN.md §6/§13 P6（方案核心工作量）
 - **Agent 框架（§6.2）**：新增 `ai/agent.py`（多步循环 MAX_STEPS=8 防失控）+ `ai/tools.py`（15 个工具：6 读=search/list_recent/read_email/list_folders/list_contacts/digest_stats，9 写=mark/star/archive/move/trash/create_folder/create_draft/send_draft/start_organize）——薄壳转调既有能力，**无任意 HTTP/文件系统/命令类工具**（白名单即安全边界）；JSON 工具协议（`{"tool","args"}` 容错解析，本地模型通吃）；`POST /api/ai/agent/stream` SSE 事件流（text/tool_call/tool_result/approval_required/error/done，轨迹落会话）
 - **权限矩阵（§6.4）**：迁移 v17——accounts.ai_grants 五授权位 JSON（read/draft/organize/send/delete，按旧 ai_permission 映射回填：readonly→read；draft_review→read+draft+organize）+ is_ai_mailbox AI 专属邮箱位；多账号会话取交集宁紧勿松；设置页账号行「AI 权限」面板（5 开关+专属邮箱二次确认）
