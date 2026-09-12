@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — 发版脚本联动官网自动部署
+## cd8b7ad — 发版脚本联动官网自动部署
 - 背景：官网（nmail.whizzzest.com）内容全部构建期拉取（GitHub Releases + 主仓 docs），此前发版/改文档后站点不会自动跟上，需手动重建部署
 - `release.sh` 新增第 5 步「官网联动」：`gh workflow run deploy.yml -R nathanpenny520/nmail-site`（用本机 gh 登录态，零新增凭据），发版流程末尾自动触发官网重建，1–2 分钟内同步新版；触发失败仅提示、不阻塞发版
 - 配套在 nmail-site 仓库（提交 d8aafe7 + 12b2f93，已推送）：deploy.yml 加每日定时构建（兜底 docs/Releases 变更）与 workflow_dispatch；wrangler 入 devDependencies（修 CI 无 TTY 取消）；GITHUB_TOKEN 认证修构建期 GitHub API 限流；仓库 .npmrc 统一官方源——npmmirror 对平台可选包元数据缺失、持续产出无 version 的损坏 lock 条目，是 CI `npm ci` 全环境秒败真因（此前误判为 Secrets 未配）
