@@ -6,6 +6,8 @@ import type {
   AccountAddPayload,
   AIProfile,
   AIProfilesResp,
+  ApiCallItem,
+  ApiScope,
   ChatMessage,
   ChatSession,
   ComposeExtras,
@@ -13,6 +15,8 @@ import type {
   ContactItem,
   EmailDetail,
   EmailListResp,
+  ExtKeysResp,
+  ExtApiKey,
   FolderCacheItem,
   JobInfo,
   NotificationsResp,
@@ -395,4 +399,20 @@ export const api = {
   getDigest: () => request<DigestResp>('/api/digest'),
   generateDigest: () =>
     request<DigestResp['digest']>('/api/digest/generate', { method: 'POST' }),
+
+  // ── 对外 API 密钥管理（P7，REDESIGN_PLAN §7）──
+  getExtKeys: () => request<ExtKeysResp>('/api/extkeys'),
+  createExtKey: (payload: { name: string; scopes: ApiScope[]; daily_limit?: number | null }) =>
+    request<{ key: ExtApiKey }>('/api/extkeys', { method: 'POST', body: JSON.stringify(payload) }),
+  updateExtKey: (
+    id: number,
+    payload: { name?: string; scopes?: ApiScope[]; daily_limit?: number | null; reset?: boolean },
+  ) => request<{ key: ExtApiKey }>(`/api/extkeys/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  revokeExtKey: (id: number) => request<{ ok: boolean }>(`/api/extkeys/${id}`, { method: 'DELETE' }),
+  setExtApiEnabled: (enabled: boolean, log_enabled?: boolean) =>
+    request<{ ok: boolean }>('/api/extkeys/enabled', {
+      method: 'POST',
+      body: JSON.stringify(log_enabled === undefined ? { enabled } : { enabled, log_enabled }),
+    }),
+  getExtApiCalls: (limit: number = 100) => request<{ calls: ApiCallItem[] }>(`/api/extkeys/calls?limit=${limit}`),
 }

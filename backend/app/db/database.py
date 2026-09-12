@@ -421,6 +421,33 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE user_drafts ADD COLUMN instruction TEXT;
         """,
     ),
+    (
+        20,
+        """
+        -- v0.4 P7 对外 API（REDESIGN_PLAN §7）：API Key（明文存 secrets.json 所见即所存，
+        -- 表内只留 sha256 哈希用于校验）+ 调用日志。scope JSON: ["read","write","send","agent"]。
+        -- daily_limit NULL=不限；revoked=1 吊销（行保留供审计）。
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL DEFAULT '',
+            key_hash    TEXT NOT NULL UNIQUE,
+            scopes      TEXT NOT NULL DEFAULT '["read"]',
+            daily_limit INTEGER,
+            last_used_at TEXT,
+            revoked     INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS api_calls (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            key_id     INTEGER NOT NULL,
+            method     TEXT NOT NULL,
+            path       TEXT NOT NULL,
+            status     INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_api_calls_time ON api_calls(created_at DESC);
+        """,
+    ),
 ]
 
 
@@ -514,6 +541,8 @@ def cleanup_retention() -> None:
         " (SELECT id FROM notifications ORDER BY id DESC LIMIT 500)"
     )
     conn.execute("DELETE FROM ai_logs WHERE created_at < datetime('now', '-90 days')")
+    # P7 对外 API 调用日志：30 天（限流计数以 api_calls 当日行为准，30 天足够排查）
+    conn.execute("DELETE FROM api_calls WHERE created_at < datetime('now', '-30 days')")
 
 
 def get_setting(key: str, default: Any = None) -> Any:

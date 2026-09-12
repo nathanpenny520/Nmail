@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import api_router
+from app.api.ext import log_ext_call as _log_ext_call
 from app.config import APP_NAME, APP_VERSION, DIST_DIR
 from app.core import batch_ops, pipeline  # noqa: F401 — 导入即注册 jobs runner（organize/imap_batch）
 from app.db.database import cleanup_retention, run_migrations
@@ -62,6 +63,9 @@ app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
 # 解析到 127.0.0.1 后用自己的域名作 Host 访问。两道校验零依赖、不影响正常使用：
 # - Host 必须是本机主机名（端口与实际监听一致时才严格比对）；
 # - 浏览器附带的 Origin（POST/fetch 恒带；同源 GET 一般不带）必须是本机源。
+# 例外（v0.4 P7，REDESIGN_PLAN §7.4）：/api/ext/* 持 X-Api-Key 认证，豁免两道
+# 来源校验——外部脚本经自建隧道到达时 Host/Origin 本来就不是本机；浏览器跨站
+# 请求带不上自定义头（触发预检而本服务不应答），drive-by 风险由 Key 兜住。
 _LOCAL_HOSTNAMES = {"127.0.0.1", "localhost", "::1"}
 
 
@@ -71,6 +75,14 @@ def _is_local_host(hostname: str) -> bool:
 
 @app.middleware("http")
 async def _local_source_guard(request: Request, call_next):
+    if request.url.path.startswith("/api/ext/"):
+        response = await call_next(request)
+        if request.url.path != "/api/ext/v1/health":  # 存活探测高频轮询，不记日志
+            from starlette.concurrency import run_in_threadpool
+
+            await run_in_threadpool(_log_ext_call, request, response.status_code)
+        return response
+
     server = request.scope.get("server")
     server_port = server[1] if server else None
 

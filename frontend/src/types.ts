@@ -477,3 +477,37 @@ export interface ChatMessage {
   model: string
   created_at: string
 }
+
+// ── P7 对外 API（REDESIGN_PLAN §7）────────────────────────────
+
+export type ApiScope = 'read' | 'write' | 'send' | 'agent'
+
+export interface ExtApiKey {
+  id: number
+  name: string
+  /** 明文回显（secrets.json 所见即所存）；已吊销的行不含此字段 */
+  key?: string
+  scopes: ApiScope[]
+  daily_limit: number | null
+  last_used_at: string | null
+  revoked: boolean
+  created_at: string
+}
+
+export interface ExtKeysResp {
+  enabled: boolean
+  log_enabled: boolean
+  rate_limit_per_min: number
+  base_url: string
+  keys: ExtApiKey[]
+}
+
+export interface ApiCallItem {
+  id: number
+  key_id: number
+  key_name: string
+  method: string
+  path: string
+  status: number
+  created_at: string
+}

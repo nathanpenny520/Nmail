@@ -3,6 +3,18 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — v0.4 P7: 对外 API（/api/ext/v1 · API Key 认证 · scope 分级）
+- 依据 docs/REDESIGN_PLAN.md §7/§13 P7（D3=A：仅 127.0.0.1，外部设备走用户自建隧道）
+- **`/api/ext/v1/*`**（`api/ext.py` 新增）：health（免认证）·accounts·emails（列表/搜索/详情/附件）·emails/actions（批量动作，移动类异步返回 job_id 经 /jobs/{id} 轮询）·drafts（列表/创建/approve 发送，统一草稿体系）·folders（+/sync 按需同步，名走查询参数）·contacts·digest·jobs/{id}·agent（chat 非流式+chat/stream SSE+actions/{id}/decide 审批）——端点全部薄壳转调既有实现（emails/user_drafts/folders/contacts/digest/agent），零新邮件操作
+- **认证与限流**：`X-Api-Key` 请求头 → sha256 查 api_keys 表（明文存 secrets.json `ext_api_key:{id}`，所见即所存与 AI key 同惯例，表内只留哈希）；scope 四级 read/write/send/agent；校验链=api_enabled 总开关（默认关，403）→密钥（401）→scope（403）→60 次/分钟内存滑动窗+每 Key 每日上限（429）；last_used_at 节流回写（≥60s 一次）
+- **来源校验豁免（main.py）**：`/api/ext/*` 跳过 Host/Origin 两道本机校验改持 API Key——隧道可用性前提；浏览器跨站带不上自定义请求头（预检不通），drive-by 由密钥兜住；`/health` 不记日志，其余 ext 调用（含被拒的，key_id=0）经中间件线程池落 api_calls（30 天保留，`api_log_enabled` 可关）
+- **迁移 v20**：api_keys（name/key_hash 唯一/scopes JSON/daily_limit 0=NULL 不限/last_used_at/revoked 行保留供对账）+ api_calls（key_id/method/path/status）
+- **设置页「API」分类**（`ExtApiSection.tsx` 新增）：总开关+日志开关（即改即生效）、密钥表（备注/遮蔽密钥显隐+复制/scope 徽章/上限/最近使用/重置=旧串立即失效/吊销）、生成表单（备注+四 scope 勾选+每日上限）、基础地址+curl 速览、调用日志（最近 50 条，无密钥调用显示「无密钥」）、安全提示（scope 最小化/定期轮换/看日志）
+- **`_AgentSSE` 加 origin 参数**（api/ai.py）：对外 agent 调用 origin=api，动作照常受账号授权位×模式约束、全量进 ai_actions 审计；ext 非流式 agent 把循环内 error 事件转 400（如无可用账号），不再 200 空回答
+- **文档**：`docs/对外API使用指南.md` 新增（三步上手/scope 安全模型/端点一览+调用示例/三种隧道最小配置 cloudflared·Tailscale·SSH/FAQ）；ARCHITECTURE 同步（ext/extkeys 模块、v20 数据表、安全模型豁免与密钥条目）
+- 验证：pytest 127 例全绿（新增 test_ext_api.py 13 例：health 免认证/未启用 403/缺坏 key 401/read 端点矩阵/scope 越权 403/批量动作契约/限流 429 monkeypatch/每日上限 429/密钥重置吊销往返/Host 豁免边界（ext 200 内部 403）/调用日志落库/agent 未配 AI 400）；ruff（app 门禁）通过；npm build（含 lint:font+tsc）通过；openapi.json+schema.d.ts 按新端点再生成；隔离实例（8807）冒烟——curl 矩阵（生成密钥→启用→读 accounts/drafts/contacts→坏 key 401→read-only 写 403→隧道场景外部 Origin+域名 Host 200→恶意 Host ext 豁免 200 内部 403→调用日志含被拒调用）+ 设置页 API 区截图确认
+- 遗留：**真实隧道场景待用户**（自建 cloudflared/Tailscale/SSH 任一，按指南 §3 复现外部设备调用）；agent/chat/stream 真实 AI 配置下走查顺延（P6 遗留项一并）
+
 ## fe3d111 — v0.4 P6 验收修复（用户实测三问题）
 - **总管家泄漏内部工具标记**：部分模型把自带的原生工具调用语法（实测 `<|DSML|invoke ...>` 形态）当普通文本输出，JSON 解析失败后整段泄漏给用户并终止会话——`_parse_model_action` 二次提取：JSON 协议失败后用正则抓取 DSML invoke 块（工具名+args JSON）还原为标准动作继续执行；系统提示词新增「禁止任何特殊标记语法」；纯文本回答不受影响
 - **系统右键冲突**：应用层全局屏蔽 contextmenu（输入框/编辑区保留），树与邮件行的自定义右键不再被浏览器菜单抢焦点

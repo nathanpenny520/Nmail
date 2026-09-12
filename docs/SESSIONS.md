@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-1410-P7对外API ✅
+- 目标: 落地 REDESIGN_PLAN §13 P7——对外 API `/api/ext/v1/*`（§7 全部）：API Key 认证（X-Api-Key）+ scope 分级（read/write/send/agent）+ 限流 60/min + 调用日志；设置页新增「API」分类（密钥生成/重置/吊销、明文回显、调用日志）；main.py 对 /api/ext/* 豁免 Host/Origin 校验（改持 Key）；迁移 v20（api_keys + api_calls）
+- 范围: backend（db v20、api/ext.py 新增、api/extkeys.py 新增、main.py、api/__init__、ai.py _AgentSSE origin、cleanup_retention）、frontend（ExtApiSection 新增、SettingsPage API 区、client/types、openapi/schema 再生成）、docs（对外API使用指南/ARCHITECTURE/CHANGELOG/SESSIONS）、tests（test_ext_api.py）
+- 产出: 主提交（见 CHANGELOG「v0.4 P7」条目）；pytest 127 全绿（+test_ext_api 13 例：health 免认证/未启用 403/坏 key 401/scope 越权 403/限流+每日上限 429/密钥重置吊销/Host 豁免边界/调用日志/agent 未配 AI 400）；ruff app 门禁通过；npm build 通过；隔离实例（8807）冒烟——curl 矩阵（生成→启用→读端点→隧道场景外部 Origin+域名 Host 200→恶意 Host ext 200/内部 403）+ 设置页 API 区截图确认
+- 关键决策: 密钥明文存 secrets.json `ext_api_key:{id}`（所见即所存）、表内 sha256 哈希认证；api_enabled 总开关默认关；/api/ext/* 豁免来源校验的安全依据=浏览器跨站带不上自定义头（预检不通）；限流/每日上限为内存软限制（重启清零，本地单机可接受）；ext 端点全薄壳转调内部实现零新邮件操作；批量移动类返回 job_id 复用既有异步机制
+- 遗留: **真实隧道场景待用户**（cloudflared/Tailscale/SSH 任一按 docs/对外API使用指南.md §3 复现外部设备调用）；agent/chat/stream 真实 AI 配置走查顺延（与 P6 遗留一并）；下一阶段 P8 官网（独立仓库 nmail-site，可随时并行）
+- 时间: 2026-09-12 14:55 完成
+
 ### S-0912-1340-P6验收修复 ✅
 - 目标: 用户实测 P6 三问题——①总管家会话出错（模型把原生 DSML 工具标记当文本输出泄漏）②文件夹排序大小写敏感（test 沉底）+ 系统右键与自定义右键冲突 ③邮件行右键没有该有的菜单
 - 范围: backend/ai/agent.py（_parse_model_action DSML 二次提取+提示词禁标记）、frontend/main.tsx（全局屏蔽系统右键，输入框保留）、FolderTree（大小写不敏感排序）、MailBrowser（邮件行右键菜单：打开/已读/星标/归档/删除/黑白名单）

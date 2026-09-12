@@ -15,7 +15,7 @@ def test_migrations_idempotent():
     after = database.get_conn().execute(
         "SELECT COUNT(*) c FROM schema_migrations"
     ).fetchone()["c"]
-    assert before == after == 18  # 版本数（最新 v19；18 预留给 API key）
+    assert before == after == 19  # 版本数（最新 v20；v18 跳过——原预留 API key 改走 v20）
 
 
 def test_tx_commit_atomic():

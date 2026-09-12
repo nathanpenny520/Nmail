@@ -255,10 +255,12 @@ def write(payload: WriteIn) -> dict:
 # ── AI 总管家 Agent（v0.4 P6，REDESIGN_PLAN §6）─────────────────
 
 class _AgentSSE:
-    """把 agent 事件生成器包装为 SSE；结束后把对话轨迹落库（会话持久化复用）。"""
+    """把 agent 事件生成器包装为 SSE；结束后把对话轨迹落库（会话持久化复用）。
+    origin 随调用方区分（内部 ui / 对外 API api，审计字段 §6.8）。"""
 
-    def __init__(self, payload: AgentStreamIn):
+    def __init__(self, payload: AgentStreamIn, origin: str = "ui"):
         self.payload = payload
+        self.origin = origin
         self.trace: list[str] = []
 
     def stream(self):
@@ -273,7 +275,7 @@ class _AgentSSE:
         try:
             for event in agent.run_stream(
                 payload.question, payload.history, payload.session_id,
-                account_ids, payload.mode, payload.profile_id,
+                account_ids, payload.mode, payload.profile_id, origin=self.origin,
             ):
                 etype = event.get("type")
                 if etype == "text" and event.get("text"):

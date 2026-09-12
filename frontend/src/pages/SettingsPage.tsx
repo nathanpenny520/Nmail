@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, BarChart3, BookUser, Bot, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { BadgeCheck, BarChart3, BookUser, Bot, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Plug, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
+import ExtApiSection from '../components/ExtApiSection'
 import { OauthConfigCard, ReauthorizeButton } from '../components/OauthSettings'
 import type { Account, AITestResult, AIProfile, Settings } from '../types'
 
@@ -33,6 +34,7 @@ const SECTIONS = [
   { key: 'contacts', label: '通讯录', icon: BookUser },
   { key: 'ai', label: 'AI 配置', icon: Bot },
   { key: 'usage', label: 'AI 用量', icon: BarChart3 },
+  { key: 'api', label: 'API', icon: Plug },
   { key: 'about', label: '关于', icon: Info },
 ] as const
 type SectionKey = (typeof SECTIONS)[number]['key']
@@ -596,6 +598,9 @@ export default function SettingsPage() {
 
         {/* ── 通讯录（v0.4 P4）── */}
         {section === 'contacts' && <ContactsSection />}
+
+        {/* ── 对外 API（v0.4 P7，REDESIGN_PLAN §7）── */}
+        {section === 'api' && <ExtApiSection />}
 
         {/* ── 关于 ── */}
         {section === 'about' && (
