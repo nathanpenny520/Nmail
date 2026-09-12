@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — v0.4 P6 验收修复（用户实测三问题）
+- **总管家泄漏内部工具标记**：部分模型把自带的原生工具调用语法（实测 `<|DSML|invoke ...>` 形态）当普通文本输出，JSON 解析失败后整段泄漏给用户并终止会话——`_parse_model_action` 二次提取：JSON 协议失败后用正则抓取 DSML invoke 块（工具名+args JSON）还原为标准动作继续执行；系统提示词新增「禁止任何特殊标记语法」；纯文本回答不受影响
+- **系统右键冲突**：应用层全局屏蔽 contextmenu（输入框/编辑区保留），树与邮件行的自定义右键不再被浏览器菜单抢焦点
+- **邮件行右键菜单补齐（§4.3 承诺项）**：列表行右键 = 打开/标已读未读/星标切换/归档/删除/发件人加白名单/黑名单（多选状态下作用于整组）
+- **文件夹排序**：大小写不敏感（`sensitivity: base` + numeric）——修复小写命名文件夹（如 test）沉底
+- 验证：pytest 114 例全绿（+DSML 提取用例：标记→标准动作、纯文本→None）；npm build 通过；隔离实例（8793）浏览器验证文件夹新排序与行右键菜单渲染
+
 ## 56c1a95 — v0.4 P6: AI 总管家 2.0（对话 Agent · 双模式 · 审计）
 - 依据 docs/REDESIGN_PLAN.md §6/§13 P6（方案核心工作量）
 - **Agent 框架（§6.2）**：新增 `ai/agent.py`（多步循环 MAX_STEPS=8 防失控）+ `ai/tools.py`（15 个工具：6 读=search/list_recent/read_email/list_folders/list_contacts/digest_stats，9 写=mark/star/archive/move/trash/create_folder/create_draft/send_draft/start_organize）——薄壳转调既有能力，**无任意 HTTP/文件系统/命令类工具**（白名单即安全边界）；JSON 工具协议（`{"tool","args"}` 容错解析，本地模型通吃）；`POST /api/ai/agent/stream` SSE 事件流（text/tool_call/tool_result/approval_required/error/done，轨迹落会话）

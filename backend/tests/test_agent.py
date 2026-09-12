@@ -79,6 +79,17 @@ def test_read_tool_loop_and_final_answer(monkeypatch):
     assert database.get_conn().execute("SELECT COUNT(*) c FROM ai_actions").fetchone()["c"] == 0
 
 
+def test_native_tool_markup_extraction():
+    """部分模型把原生工具标记（DSML）当文本输出 → 二次提取为标准动作，不泄漏给用户。"""
+    text = ('<|DSML|calls><|DSML|invoke name="list_folders">'
+            '<|DSML|parameter name="args" string="false">{"account_id": "3"}'
+            '</|DSML|parameter></|DSML|invoke></|DSML|calls>')
+    action = agent._parse_model_action(text)
+    assert action == {"tool": "list_folders", "args": {"account_id": "3"}}
+    # 纯文本（非 JSON 非标记）→ None，作为最终回答展示
+    assert agent._parse_model_action("这是给用户的普通回答。") is None
+
+
 def test_write_tool_requires_approval_then_execute(monkeypatch):
     """审批模式：create_draft 出审批卡（pending 落库）→ 批准后执行并审计。"""
     aid = _aid()

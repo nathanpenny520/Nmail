@@ -78,7 +78,8 @@ function buildForest(items: FolderCacheItem[]): FolderNode[] {
     else roots.push(node)
   }
   const sortRec = (nodes: FolderNode[]) => {
-    nodes.sort((a, b) => a.name.localeCompare(b.name))
+    // 大小写不敏感排序（v0.4 验收反馈：小写命名的文件夹不应沉底）
+    nodes.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { sensitivity: 'base', numeric: true }))
     nodes.forEach((n) => sortRec(n.children))
   }
   sortRec(roots)
@@ -387,7 +388,8 @@ function AccountBranch({
   })
   const items = cacheQuery.data?.folders ?? []
   const forest = buildForest(items).sort(
-    (x, y) => nodeRank(x) - nodeRank(y) || x.name.localeCompare(y.name),
+    (x, y) => nodeRank(x) - nodeRank(y)
+      || x.name.localeCompare(y.name, 'zh-Hans-CN', { sensitivity: 'base', numeric: true }),
   )
 
   return (

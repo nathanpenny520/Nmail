@@ -14,6 +14,7 @@ import {
   type EmailDetail, type EmailSummary, type FolderCacheItem, type JobInfo, type OrganizeResult,
 } from '../types'
 import { useCompose } from './compose/ComposeContext'
+import ContextMenu, { type ContextMenuItem } from './ContextMenu'
 import EmailReader from './EmailReader'
 
 const PAGE_SIZE = 50
@@ -229,6 +230,8 @@ export default function MailBrowser({
   // ── 键盘导航（VSCode/Gmail 风，REDESIGN_PLAN §4.3）──
   const [cursorId, setCursorId] = useState<number | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  // 邮件行右键菜单（§4.3；系统右键已在应用层全局屏蔽）
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; item: EmailSummary } | null>(null)
   useEffect(() => {
     // 列表变化时光标跟随选中，无选中则落在第一封
     if (selectedId != null && items.some((i) => i.id === selectedId)) {
@@ -605,6 +608,10 @@ export default function MailBrowser({
                 )
                 e.dataTransfer.effectAllowed = 'move'
               }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setRowMenu({ x: e.clientX, y: e.clientY, item })
+              }}
               onClick={() => selectEmail(item)}
               className={`block w-full cursor-pointer border-b border-l-2 border-gray-50 px-3 py-1 text-left transition-colors hover:bg-gray-50 ${
                 selectedId === item.id
@@ -716,6 +723,31 @@ export default function MailBrowser({
         )}
       </section>
       </div>
+      {/* 邮件行右键菜单（§4.3；系统右键已在应用层屏蔽） */}
+      {rowMenu && (() => {
+        const item = rowMenu.item
+        const multi = selectedIds.includes(item.id) && selectedIds.length > 1
+        const runSingle = (action: string) => actionMutation.mutate({ id: item.id, action })
+        const runBatch = (action: string) => batchMutation.mutate({ action })
+        const addList = (type: 'whitelist' | 'blacklist', label: string) => {
+          void api.addSenderList(item.sender_email, type).then(() => {
+            setSyncMessage(`${label}成功：${item.sender_email}`)
+            invalidateMail()
+          }).catch((err: Error) => setSyncMessage(`${label}失败：${err.message}`))
+        }
+        const items: ContextMenuItem[] = [
+          { label: '打开', onSelect: () => selectEmail(item) },
+          { label: item.is_read ? '标为未读' : '标为已读',
+            onSelect: () => (multi ? runBatch(item.is_read ? 'unread' : 'read') : runSingle(item.is_read ? 'unread' : 'read')) },
+          { label: item.starred ? '取消星标' : '加星标',
+            onSelect: () => (multi ? runBatch(item.starred ? 'unstar' : 'star') : runSingle(item.starred ? 'unstar' : 'star')) },
+          { label: '归档', onSelect: () => (multi ? runBatch('archive') : runSingle('archive')) },
+          { label: '删除', danger: true, onSelect: () => (multi ? runBatch('trash') : runSingle('trash')) },
+          { label: `发件人加入白名单`, onSelect: () => addList('whitelist', '加入白名单') },
+          { label: `发件人加入黑名单`, onSelect: () => addList('blacklist', '加入黑名单') },
+        ]
+        return <ContextMenu x={rowMenu.x} y={rowMenu.y} items={items} onClose={() => setRowMenu(null)} />
+      })()}
     </div>
   )
 }

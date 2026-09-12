@@ -18,6 +18,12 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-1340-P6验收修复 ✅
+- 目标: 用户实测 P6 三问题——①总管家会话出错（模型把原生 DSML 工具标记当文本输出泄漏）②文件夹排序大小写敏感（test 沉底）+ 系统右键与自定义右键冲突 ③邮件行右键没有该有的菜单
+- 范围: backend/ai/agent.py（_parse_model_action DSML 二次提取+提示词禁标记）、frontend/main.tsx（全局屏蔽系统右键，输入框保留）、FolderTree（大小写不敏感排序）、MailBrowser（邮件行右键菜单：打开/已读/星标/归档/删除/黑白名单）
+- 产出: 提交见 CHANGELOG「v0.4 P6 验收修复」条目；pytest 114 全绿（+DSML 提取用例）；npm build 通过；隔离实例验证文件夹排序与行右键菜单渲染
+- 时间: 2026-09-12 13:50 完成
+
 ### S-0912-1250-P6AI总管家2.0 ✅
 - 目标: 落地 REDESIGN_PLAN §13 P6（方案核心）——AI 总管家升级为对话 Agent（§6 全部）
 - 范围: backend（迁移 v17、ai/agent.py+ai/tools.py 新增、api/ai.py agent 流/审批/撤销/审计端点、api/accounts ai-grants+容错）、frontend（ManagerPage 2.0 重写、stream.ts streamAgentEvents、SettingsPage AI 权限面板+操作记录查看器、client/types）、docs
