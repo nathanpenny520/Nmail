@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-1100-P3草稿合并 ✅
+- 目标: 落地 REDESIGN_PLAN §13 P3——待审草稿+草稿箱合并为统一草稿体系（§5.1）；顺带修复通知面板顶部不可见
+- 范围: backend（迁移 v19、outbox.send 接受 pending_review + migrate_legacy_ai_drafts、api/user_drafts 扩展 discard/reopen/regenerate(+for-email)、api/drafts.py 退役删除、pipeline 拟稿写 user_drafts、main.lifespan 迁移调用）、frontend（DraftsHubPage 新增、DraftsPage/UserDraftsPage 删除、FolderTree 单草稿节点、App 重定向 /drafts+/mydrafts→/?view=drafts、EmailReader/NotificationBell 切新端点、client/types、openapi schema 再生成）、docs
+- 产出: 修复提交 20e4b97（通知面板向下展开）；主提交 554f896（见 CHANGELOG「v0.4 P3: 草稿体系合并」条目）；pytest 101 全绿（+test_user_drafts 3 例）；ruff app 门禁通过；npm build 通过；隔离实例（8797）验证旧 drafts→user_drafts 迁移 API 契约全对（origin/to/Re: 主题/HTML/instruction）+ 浏览器确认合并视图/树单节点/重定向/Markdown 预览
+- 关键决策: schema 变更走 v19 SQL、数据迁移走启动期 Python 函数（Markdown→HTML 无法纯 SQL；框架保持只追加 SQL）；迁移门控 KV 与数据同一事务（set_setting 会自 commit 破坏 tx()，改直写 SQL upsert）；hub 的「编辑中/定时中」手写稿启动页签恢复为既有设计保留
+- 遗留: 真实账号端到端（AI 生成→编辑后发送→原邮件标已读）待用户验证；树草稿节点计数徽章顺延；/api/drafts 前端残留无（已全切 user-drafts）
+- 时间: 2026-09-12 11:40 完成
+
 ### S-0912-1000-P2资源管理器 ✅
 - 目标: 落地 REDESIGN_PLAN §13 P2——文件夹树完整版（服务器文件夹节点/右键 CRUD/拖拽移动/按需同步）+ §4.6 归档改造（每账号服务器 Archived 文件夹，本地归档视图退役+存量迁移提示）+ All Mail 守卫
 - 范围: backend（迁移 v15、core/folders.py/api/folders.py 新增、api/emails 归档语义+迁移端点、core/batch_ops archive/unarchive、core/pipeline 服务器归档清扫、core/sync 管线仅 INBOX、accounts.py 端点迁出）、frontend（FolderTree v2 重写、ContextMenu 新增、MailBrowser 去下拉/拖拽源/快捷键、MailPage 迁移弹窗、client/types、openapi schema 再生成）、docs

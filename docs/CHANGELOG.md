@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — v0.4 P3: 草稿体系合并（待审+草稿箱 → 统一草稿）
+## 554f896 — v0.4 P3: 草稿体系合并（待审+草稿箱 → 统一草稿）
 - 依据 docs/REDESIGN_PLAN.md §5.1/§13 P3
 - **数据统一**：user_drafts 成为唯一草稿存储（v19 加 origin ai/human + instruction 列，status 扩展 pending_review）；旧 drafts 表（AI 待审）数据由启动期 `outbox.migrate_legacy_ai_drafts()` 一次性并入——Markdown→HTML 与原 approve 发送同源、主题 Re: 化、收件人=原发件人、in_reply_to=原邮件软引用、状态映射 pending→pending_review/sent→sent/discarded→discarded；KV `legacy_drafts_migrated` 与数据同一事务原子提交（防中断出半份拷贝），旧表只读保留
 - **发送通路归一**：`outbox.send_user_draft` 接受 pending_review——AI 待审「批准并发送」与手写发送同一条路（In-Reply-To/消毒/Sent 归档全复用），并对回复原邮件补标已读；api/drafts.py 退役删除（/api/drafts 路由不复存在），丢弃/恢复/带指令重写并入 /api/user-drafts（discard/reopen/regenerate + regenerate-for-email 供邮件视图一键拟稿）；调度器定时发送不受影响（只拉 editing/scheduled）
