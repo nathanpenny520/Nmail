@@ -18,10 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-### S-0912-1720-通讯录改版
+### S-0912-1720-通讯录改版 ✅
 - 目标: 用户反馈通讯录管理改为 Thunderbird 式双栏形态（左树=智能视图+自定义联系组，右列表，点行进详情视图），并加「自动采集」开关；通讯录仍留设置页（D7 不变）。已拍板：同邮箱多账号聚合一行、支持自定义组（CRUD+成员管理）、加手机号字段
 - 范围: backend(db/database.py v21, core/contacts.py, api/contacts.py, api/settings.py) + frontend(SettingsPage ContactsSection 重写, types, client, compose/ComposeContext openNew 加初始收件人) + tests(test_contacts 扩充) + docs(REDESIGN_PLAN §5.3/§5.4 修订, ARCHITECTURE, CHANGELOG, SESSIONS) + openapi 快照再生
-- 时间: 2026-09-12 17:20 开工
+- 产出: 提交 5ff1fbe + 哈希回填 bf49ff7；pytest 140 全绿（净增 3：采集开关门控/聚合列表+email 作用域改删+组连带/组 CRUD+成员管理）；ruff 门禁 + npm build 通过；openapi 快照+schema.d.ts 再生；隔离实例 curl 冒烟通过（建组加成员/改邮箱连带组成员表/开关持久化/删除清孤儿）
+- 关键决策: 管理口径=同邮箱聚合一行，PATCH/DELETE 按 email 作用于全部行（改邮箱连带 UPDATE contact_group_members）；组成员按 email 记（与聚合口径一致，删净联系人后 API 清孤儿行）；移除成员走 POST /members/remove（DELETE+body 在 Starlette TestClient 不可用）；开关命名「自动采集」而非「AI 自动采集」（采集是规则行为零 token）
+- 遗留: **需重启 python run.py 生效**（迁移 v21 启动自动跑）；前端已 build 强刷即见；拖拽联系人进组、「整组插入收件人」、CSV/vCard 导入导出（v0.5 占位不变）均未做；待用户真机走查
+- 时间: 2026-09-12 17:20 开工，17:55 完成
 
 ### S-0912-1633-UX体验修 ✅
 - 目标: 用户反馈三组体验问题——①通讯录表格直改（姓名点击改名已有但不易发现；邮箱不可改）并核实「搜索后列更多」实为浏览器旧构建残留（当前构建两种状态同表）；②时间显示统一审计（发现 contacts.last_seen_at 与 user_drafts.updated_at 为 UTC naive 被按本地显示、更新检查日期 slice UTC 串）；③SMTP/IMAP 账号支持改服务器配置与授权码（原 PATCH 只收 password/ai_permission/style_prompt/use_proxy，改服务器须删号重来）
