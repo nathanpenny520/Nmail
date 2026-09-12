@@ -118,7 +118,7 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
 
           {oauthProvider && (
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
-              {oauthProvider.configured ? (
+              {oauthProvider.can_authorize ? (
                 <>
                   <button
                     className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 t-md font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
@@ -134,13 +134,13 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
                   </button>
                   <p className="mt-1.5 t-xs leading-relaxed text-indigo-500/90">
                     免授权码：Google/微软已停用密码直连。授权成功后自动建号并开始后台同步。
+                    {oauthProvider.client_source === 'builtin' && ' 使用内置公开桌面客户端凭证，无需注册应用。'}
                   </p>
                 </>
               ) : (
                 <p className="t-xs leading-relaxed text-indigo-800/90">
-                  {oauthProvider.name} 已停用密码直连。推荐使用 OAuth2 授权登录：
-                  先到 <b>设置 → 邮箱账号 → OAuth2 授权登录</b> 完成一次性配置
-                  （填入你的 OAuth 客户端 client_id），回到这里即可一键授权。
+                  {oauthProvider.name} 已停用密码直连，且内置凭证暂不可用。
+                  请到 <b>设置 → 邮箱账号 → OAuth2 授权登录 → 高级</b> 配置你自己的 OAuth 客户端后重试。
                 </p>
               )}
               {oauthFlow.error && (

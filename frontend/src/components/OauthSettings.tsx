@@ -81,7 +81,7 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
     }),
     onSuccess: (result) => {
       setEditing(false)
-      setMessage(result.configured ? '已保存' : '已清除配置')
+      setMessage(result.configured ? '已保存，自建客户端优先生效' : '已清除，回到内置凭证')
       setTimeout(() => setMessage(null), 4000)
       void queryClient.invalidateQueries({ queryKey: ['oauth-status'] })
     },
@@ -91,20 +91,19 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
     },
   })
 
+  // 状态徽章：自建已配置（优先生效）＞ 内置凭证可用
+  const badge = provider.configured
+    ? { cls: 'bg-emerald-50 text-emerald-600', text: `自建客户端 ${provider.client_id_masked}` }
+    : { cls: 'bg-blue-50 text-blue-600', text: '内置凭证 · 可直接授权' }
+
   return (
     <div className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
       <div className="flex items-center gap-3">
-        {provider.configured
-          ? <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
-          : <ShieldCheck className="h-4 w-4 shrink-0 text-gray-300" />}
+        <ShieldCheck className={`h-4 w-4 shrink-0 ${provider.can_authorize ? 'text-emerald-500' : 'text-gray-300'}`} />
         <div className="min-w-0 flex-1">
           <div className="t-md font-medium text-gray-800">
             {provider.name}
-            <span className={`ml-2 rounded-full px-2 py-0.5 t-sm ${
-              provider.configured ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-200/70 text-gray-500'
-            }`}>
-              {provider.configured ? `已配置 ${provider.client_id_masked}` : '未配置'}
-            </span>
+            <span className={`ml-2 rounded-full px-2 py-0.5 t-sm ${badge.cls}`}>{badge.text}</span>
           </div>
           <div className="mt-0.5 t-sm text-gray-400">
             支持域名：{provider.domains.join(' / ')}
@@ -116,7 +115,7 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
           onClick={() => {
             setEditing((v) => {
               if (!v) {
-                setRedirectPath(provider.redirect_path)
+                setRedirectPath(provider.configured ? provider.redirect_path : '/oauth/callback')
                 setClientId('')
                 setClientSecret('')
               }
@@ -125,11 +124,14 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
             setMessage(null)
           }}
         >
-          {provider.configured ? '修改' : '配置'}
+          高级
         </button>
       </div>
       {editing && (
         <div className="mt-3 space-y-2">
+          <p className="t-xs leading-relaxed text-gray-500">
+            高级：使用你自己的 OAuth 客户端（自建永远优先于内置凭证）。把下方回调地址登记到你的客户端，再把 client_id 填进来。
+          </p>
           <input
             className={inputClass}
             value={clientId}
@@ -185,9 +187,12 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
                   saveMutation.mutate()
                 }}
               >
-                清除配置
+                清除自建配置
               </button>
             )}
+            <span className="t-xs text-gray-400">
+              详细步骤与报错对照见项目仓库 <b>docs/OAuth2 使用指南.md</b>
+            </span>
           </div>
         </div>
       )}
@@ -199,7 +204,7 @@ export function OauthConfigCard() {
   const statusQuery = useQuery({ queryKey: ['oauth-status'], queryFn: api.getOauthStatus })
   const [open, setOpen] = useState(false)
   const providers = statusQuery.data?.providers ?? []
-  const anyConfigured = providers.some((p) => p.configured)
+  const allAuthorizable = providers.length > 0 && providers.every((p) => p.can_authorize)
 
   return (
     <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 px-4 py-3">
@@ -210,21 +215,20 @@ export function OauthConfigCard() {
         <ChevronDown className={`h-4 w-4 shrink-0 text-indigo-500 transition-transform ${open ? 'rotate-180' : ''}`} />
         <span className="flex-1 t-md font-medium text-indigo-900">
           OAuth2 授权登录（Gmail / Outlook）
-          {anyConfigured && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 t-sm text-emerald-700">可用</span>}
+          {allAuthorizable && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 t-sm text-emerald-700">可直接授权</span>}
         </span>
         <span className="t-sm text-indigo-400">免授权码直连，Google/微软已停用密码登录</span>
       </button>
       {open && (
         <div className="mt-3 space-y-3">
+          {/* 快速授权（默认）：内置公开桌面客户端凭证，零配置直接授权 */}
           <div className="rounded-lg bg-white/70 px-3 py-2 t-sm leading-relaxed text-gray-600">
-            <div className="font-medium text-gray-700">一次性配置：在对应服务商行点「配置」，把行内显示的回调地址登记到你的 OAuth 客户端，再把 client_id 填进来</div>
-            <ul className="mt-1 list-disc space-y-0.5 pl-4">
-              <li><b>Gmail</b>：Google Cloud 控制台 → 启用 Gmail API → OAuth 客户端 ID（选「桌面应用」类型，回环地址自动放行；Web 类型需登记回调并填写 client_secret）</li>
-              <li><b>Outlook</b>：Microsoft Entra 管理中心 → 应用注册 → 账户类型选「任何组织目录 + 个人 Microsoft 账户」→ 平台选「移动和桌面应用」并添加行内回调地址</li>
-              <li><b>回调路径</b>：自建客户端默认 <code>/oauth/callback</code>；使用登记为根路径 <code>/</code> 的公开桌面客户端时，把路径改成 <code>/</code>（Google/微软只豁免端口不豁免路径）</li>
-              <li>个人 Outlook 账号还需在 Outlook 网页版 设置 → 邮件 → 同步电子邮件，开启「让设备和应用使用 POP/IMAP」与「经过身份验证的 SMTP」（每个邮箱各一次）</li>
-              <li>完整步骤与报错对照表见项目仓库 <b>docs/OAuth2 使用指南.md</b>（GitHub 仓库 docs 目录）</li>
-            </ul>
+            <div className="font-medium text-gray-700">快速授权（默认）</div>
+            <p className="mt-0.5">
+              添加账号 → 输入邮箱地址 → 点「授权登录」→ 浏览器完成登录即可，无需注册任何应用。
+              凭证为公开信息（源自开源邮件客户端公开源码），Nmail 与凭证来源方无官方关联；
+              如被服务商限制，可在下方各服务商行的「高级」中配置自己的客户端。
+            </p>
           </div>
           {providers.map((p) => <ProviderRow key={p.key} provider={p} />)}
         </div>

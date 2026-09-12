@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-1220-P5OAuth内置凭证 ✅
+- 目标: 落地 REDESIGN_PLAN §13 P5——OAuth 内置凭证快速授权（D1=A 用户硬性要求）；先落审核修正（通知按钮并排 + 页签 ✕ 贴右缘）
+- 范围: backend（core/oauth.py 内置凭证/回退链/绑定刷新、api/oauth.py 三态+免预检+降级引导、tests/test_oauth.py）、frontend（types 三态字段、OauthSettings 快速授权/高级分层、AddAccountModal can_authorize）、docs（OAuth2 使用指南重构、ARCHITECTURE、CHANGELOG、gitignored 方案文档附录 C 翻案批注）
+- 产出: 审核修正提交 b262021、3b24fc8；主提交见 CHANGELOG「v0.4 P5」条目；pytest 107 全绿（+内置回退/绑定刷新/零配置 authorize 3 例，status/存取用例按新语义更新）；ruff app 门禁通过；npm build 通过；隔离实例（8795）冒烟——status 三态全对、零配置 authorize URL（内置 client_id + 根路径回调、URL 无 secret）、设置页分层 UI 截图确认
+- 关键决策: 令牌记录签发 client_id、刷新按 client_for_refresh 绑定签发方（防内置/自建切换互杀 refresh_token）；PUT config 的 configured 语义收窄为「自建已配置」（内置回退不影响该展示）；凭据值入公开代码为用户明确拍板（D1=A），翻案记录在 gitignored 方案文档附录 C
+- 遗留: **真实账号端到端待用户**（零配置授权→回调→收发信，两台机器各验一次）；若服务商限制内置凭证走高级区自建（引导已内置）；下一阶段 P6 AI 总管家 2.0（方案核心工作量）
+- 时间: 2026-09-12 12:45 完成
+
 ### S-0912-1150-P4通讯录 ✅
 - 目标: 落地 REDESIGN_PLAN §13 P4——通讯录（§5.2-5.4）：自动采集 + 写信台 chips 联想 + 设置页管理界面；先落审核修正（AI/摘要入树 + 页签统一宽度）
 - 范围: backend（迁移 v16、core/contacts.py、api/contacts.py、sync/outbox 采集钩子）、frontend（RecipientChipsInput 新增、ComposeForm 三地址段改造、SettingsPage ContactsSection、client/types、openapi 再生成）、docs

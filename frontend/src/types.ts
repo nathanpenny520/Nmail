@@ -87,11 +87,19 @@ export interface Account {
 export interface OauthProviderStatus {
   key: 'gmail' | 'outlook'
   name: string
+  /** 用户自建客户端已配置（优先生效；设置页展示用） */
   configured: boolean
+  /** 内置公开桌面客户端凭证可用（v0.4 P5） */
+  builtin_available: boolean
+  /** 可发起授权（自建 OR 内置） */
+  can_authorize: boolean
+  /** 生效客户端来源：user=自建 | builtin=内置 */
+  client_source: 'user' | 'builtin' | string
+  /** 生效客户端的掩码 client_id */
   client_id_masked: string
-  /** 该客户端登记的回调路径（缺省 /oauth/callback；根路径登记的客户端为 /） */
+  /** 生效客户端登记的回调路径（内置为 /；自建缺省 /oauth/callback） */
   redirect_path: string
-  /** 按监听端口与回调路径拼好的完整回环地址，登记到 OAuth 客户端时使用 */
+  /** 按监听端口与回调路径拼好的完整回环地址，登记到自建 OAuth 客户端时使用 */
   redirect_uri: string
   domains: string[]
   imap_server: string

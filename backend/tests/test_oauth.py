@@ -83,14 +83,21 @@ def test_match_provider_domains():
 # ── 客户端配置存取 ────────────────────────────────────────────
 
 def test_save_client_roundtrip_and_clear():
+    """v0.4 P5：自建客户端存取用 get_user_client（get_client 含内置回退与 source）。"""
     try:
         oauth.save_client("gmail", "  my-id.apps.googleusercontent.com  ", "  sec ")
-        client_cfg = oauth.get_client("gmail")
+        client_cfg = oauth.get_user_client("gmail")
         assert client_cfg == {"client_id": "my-id.apps.googleusercontent.com", "client_secret": "sec"}
         assert oauth.configured("gmail")
+        # 自建优先：生效客户端带 source=user 且 client_id 为自建值
+        eff = oauth.get_client("gmail")
+        assert eff["source"] == "user" and eff["client_id"].startswith("my-id")
         oauth.save_client("gmail", "", "")  # 双空 = 清除
-        assert oauth.get_client("gmail") is None
-        assert not oauth.configured("gmail")
+        assert oauth.get_user_client("gmail") is None
+        # 清除后回退内置凭证：仍可授权，source=builtin
+        eff = oauth.get_client("gmail")
+        assert eff["source"] == "builtin"
+        assert oauth.configured("gmail")
     finally:
         set_secret(oauth.client_key("gmail"), None)
 
@@ -99,12 +106,12 @@ def test_save_client_redirect_path_roundtrip():
     """根路径登记的公开桌面客户端：redirect_path 落盘；默认路径不落盘；坏值兜底回退默认。"""
     try:
         oauth.save_client("gmail", "cid-rp", redirect_path="/")
-        assert oauth.get_client("gmail") == {
+        assert oauth.get_user_client("gmail") == {
             "client_id": "cid-rp", "client_secret": "", "redirect_path": "/"}
         assert oauth.callback_path(oauth.get_client("gmail")) == "/"
 
         oauth.save_client("gmail", "cid-rp", redirect_path=" /oauth/callback ")
-        assert oauth.get_client("gmail") == {"client_id": "cid-rp", "client_secret": ""}
+        assert oauth.get_user_client("gmail") == {"client_id": "cid-rp", "client_secret": ""}
         assert oauth.callback_path(oauth.get_client("gmail")) == oauth.CALLBACK_PATH
 
         assert oauth.callback_path(None) == oauth.CALLBACK_PATH  # 未配置
@@ -113,6 +120,70 @@ def test_save_client_redirect_path_roundtrip():
             assert oauth.callback_path({"redirect_path": bad}) == oauth.CALLBACK_PATH
     finally:
         set_secret(oauth.client_key("gmail"), None)
+
+
+# ── 内置公开凭证（v0.4 P5，D1=A）─────────────────────────────
+
+def test_builtin_fallback_and_priority():
+    """无自建配置 → 生效客户端=内置（回调路径 /）；配置自建 → 自建优先生效。"""
+    try:
+        set_secret(oauth.client_key("gmail"), None)
+        eff = oauth.get_client("gmail")
+        assert eff["source"] == "builtin"
+        assert eff["client_id"] == oauth.BUILTIN_CLIENTS["gmail"]["client_id"]
+        assert eff["client_secret"]  # Gmail 内置为 Web 型，带 secret
+        assert oauth.callback_path(eff) == "/"  # 内置登记为根路径
+        assert oauth.builtin_available("gmail") and oauth.configured("gmail")
+
+        oauth.save_client("gmail", "my-own-id", redirect_path="/x")
+        eff = oauth.get_client("gmail")
+        assert eff["source"] == "user" and eff["client_id"] == "my-own-id"
+        assert oauth.callback_path(eff) == "/x"
+    finally:
+        set_secret(oauth.client_key("gmail"), None)
+
+
+def test_client_for_refresh_binds_to_issuer():
+    """refresh_token 与签发客户端绑定：记录的是内置 id → 即便已配自建也用内置刷新。"""
+    try:
+        set_secret(oauth.client_key("outlook"), None)
+        builtin_id = oauth.BUILTIN_CLIENTS["outlook"]["client_id"]
+        got = oauth.client_for_refresh("outlook", builtin_id)
+        assert got["source"] == "builtin"  # 不被自建抢占
+
+        oauth.save_client("outlook", "user-cid")
+        assert oauth.client_for_refresh("outlook", "user-cid")["source"] == "user"
+        # 无记录（旧版令牌）→ 回退生效客户端（自建优先）
+        assert oauth.client_for_refresh("outlook", None)["source"] == "user"
+        # 记录的 id 两边都不是 → 回退生效客户端
+        assert oauth.client_for_refresh("outlook", "unknown-cid")["source"] == "user"
+    finally:
+        set_secret(oauth.client_key("outlook"), None)
+
+
+def test_refresh_uses_issuer_client(monkeypatch):
+    """令牌记录了内置签发者 + 已配自建 → 刷新仍用内置客户端与 secret。"""
+    try:
+        builtin_id = oauth.BUILTIN_CLIENTS["outlook"]["client_id"]
+        set_secret(oauth.token_key(9101), json.dumps({
+            "provider": "outlook", "email": "u@outlook.com",
+            "access_token": "at-old", "refresh_token": "rt-old",
+            "expires_at": time.time() - 1, "client_id": builtin_id,
+        }))
+        oauth.save_client("outlook", "user-cid", "user-sec")
+        captured: dict = {}
+
+        def fake_refresh(provider, *, client_id, refresh_token, client_secret=None):
+            captured.update(client_id=client_id, client_secret=client_secret)
+            return {"access_token": "at-new", "refresh_token": "rt-new", "expires_in": 3600}
+
+        monkeypatch.setattr(oauth, "refresh_tokens", fake_refresh)
+        assert oauth.ensure_access_token(9101) == "at-new"
+        assert captured == {"client_id": builtin_id, "client_secret": None}
+        assert oauth.load_token(9101)["client_id"] == builtin_id
+    finally:
+        oauth.delete_token(9101)
+        set_secret(oauth.client_key("outlook"), None)
 
 
 # ── 令牌存储与刷新（httpx 打桩，不出网）──────────────────────
@@ -265,10 +336,15 @@ def test_api_status_and_config_roundtrip():
     assert "redirect_uri" not in data  # 回调地址随各客户端登记路径逐服务商给出
     keys = {p["key"] for p in data["providers"]}
     assert keys == {"gmail", "outlook"}
-    for p in data["providers"]:  # 未配置 → 默认路径
-        assert p["redirect_path"] == "/oauth/callback"
+    for p in data["providers"]:
+        # 未配自建 → 内置凭证生效：三态齐全，回调路径为根路径（这类客户端只豁免端口）
+        assert p["configured"] is False
+        assert p["builtin_available"] is True
+        assert p["can_authorize"] is True
+        assert p["client_source"] == "builtin"
+        assert p["redirect_path"] == "/"
         assert p["redirect_uri"].startswith("http://localhost:")
-        assert p["redirect_uri"].endswith("/oauth/callback")
+        assert p["redirect_uri"].endswith("/")
 
     try:
         assert client.put("/api/oauth/config", json={
@@ -280,6 +356,7 @@ def test_api_status_and_config_roundtrip():
         gmail = next(p for p in status["providers"] if p["key"] == "gmail")
         outlook = next(p for p in status["providers"] if p["key"] == "outlook")
         assert gmail["configured"] is True
+        assert gmail["client_source"] == "user"
         assert "api-cid" in gmail["client_id_masked"]
         assert gmail["redirect_uri"].endswith("/oauth/callback")
         assert outlook["redirect_path"] == "/"
@@ -303,10 +380,18 @@ def test_api_config_rejects_unknown_provider_and_same_secret():
         assert resp.status_code == 400
 
 
-def test_api_authorize_requires_configured_client():
-    resp = client.post("/api/oauth/authorize", json={"email": "u@gmail.com", "provider": "gmail"})
-    assert resp.status_code == 400
-    assert "client_id" in resp.json()["detail"]
+def test_api_authorizes_with_builtin_client():
+    """v0.4 P5：零配置（内置凭证）即可发起授权，回调路径为内置登记的根路径。"""
+    try:
+        set_secret(oauth.client_key("gmail"), None)
+        resp = client.post("/api/oauth/authorize", json={"email": "u@gmail.com", "provider": "gmail"})
+        assert resp.status_code == 200
+        qs = parse_qs(urlsplit(resp.json()["auth_url"]).query)
+        assert qs["client_id"][0] == oauth.BUILTIN_CLIENTS["gmail"]["client_id"]
+        assert qs["redirect_uri"][0].startswith("http://localhost:")
+        assert qs["redirect_uri"][0].endswith("/")
+    finally:
+        set_secret(oauth.client_key("gmail"), None)
 
 
 def test_api_authorize_rejects_bad_email_or_domain():

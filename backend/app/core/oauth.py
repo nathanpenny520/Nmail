@@ -1,18 +1,25 @@
 """Gmail / Outlook.com OAuth2（XOAUTH2）授权与令牌管理。
 
-授权码 + PKCE 流程：浏览器在 Google/微软完成登录后，回环回调打到本机
-/oauth/callback（API 层），后端凭 code + code_verifier 换令牌。OAuth 客户端
-由用户自建（client_id 填在设置页，教程见 docs/自建邮箱客户端
-Gmail+Outlook OAuth2 完整教程.md），Nmail 不内置凭据。
+授权码 + PKCE 流程：浏览器在 Google/微软完成登录后，回环回调打到本机回调路径
+（API 层），后端凭 code + code_verifier 换令牌。
+
+客户端来源（v0.4 P5，REDESIGN_PLAN §8.3，D1=A 用户拍板）：
+内置公开桌面客户端凭证开箱即用（BUILTIN_CLIENTS），用户自建客户端
+（设置页高级区）永远优先。凭证来源：开源邮件客户端 Thunderbird 公开源码文件
+mailnews/base/src/OAuth2Providers.sys.mjs（MPL 2.0，client_id/secret 为公开字符串）。
+免责：Nmail 与 Mozilla Foundation、Thunderbird 项目无任何官方关联、合作或背书；
+凭证可用性由 Google/微软单方决定，可能被限制或吊销——失效时按引导在高级区
+切换自建客户端（client_for_refresh 保证令牌与签发客户端绑定刷新，混用即失效）。
 
 存储约定（secrets.json）：
 - oauth_client:{provider} → JSON {client_id, client_secret?, redirect_path?}
-  （secret 可选：桌面型客户端走纯 PKCE 不需要；Web 型客户端必填。redirect_path
-  为该客户端在服务商控制台登记的回调路径，缺省 CALLBACK_PATH——登记为
-  loopback 根路径的公开桌面客户端填 "/"，Google/微软只豁免端口不豁免路径）
+  （用户自建；secret 可选：桌面型纯 PKCE 不需要，Web 型必填。redirect_path 为
+  该客户端登记的回调路径，缺省 CALLBACK_PATH——登记为 loopback 根路径的
+  公开桌面客户端填 "/"，Google/微软只豁免端口不豁免路径）
 - oauth_token:{account_id} → JSON {provider, email, access_token, refresh_token,
-  expires_at}（expires_at 为本地 Unix 时间戳，提前 _TOKEN_MARGIN 秒刷新；
-  微软 v2 端点轮换 refresh_token，轮换值随保存覆盖）
+  expires_at, client_id}（client_id=签发该令牌的客户端，刷新时据此选客户端；
+  expires_at 为本地 Unix 时间戳，提前 _TOKEN_MARGIN 秒刷新；微软 v2 端点轮换
+  refresh_token，轮换值随保存覆盖）
 
 XOAUTH2 编码（Gmail/Outlook 共用，\x01 为二进制 SOH，教程 §1）：
 user=<email>\\x01auth=Bearer <token>\\x01\\x01 → base64
@@ -129,13 +136,32 @@ def xoauth2_string(email: str, access_token: str) -> str:
     return f"user={email}\x01auth=Bearer {access_token}\x01\x01"
 
 
-# ── OAuth 客户端配置（用户在设置页填写）──────────────────────────
+# ── OAuth 客户端：内置公开凭证（默认）+ 用户自建（优先）──────────
 
 def client_key(provider_key: str) -> str:
     return f"oauth_client:{provider_key}"
 
 
-def get_client(provider_key: str) -> dict | None:
+# 内置公开桌面客户端凭证（v0.4 P5，D1=A：用户 2026-09-12 拍板内置，风险知情接受——
+# 详见 REDESIGN_PLAN §8.3 第 7 点与 docs/CHANGELOG）。来源与免责见模块 docstring；
+# 值与本地 gitignored 文档《内置公开OAuth凭证一键授权方案.md》§2.1 一致。
+# redirect_path="/"：这类客户端登记为 loopback 根路径，Google/微软只豁免端口不豁免路径。
+BUILTIN_CLIENTS: dict[str, dict] = {
+    "gmail": {
+        "client_id": "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com",
+        "client_secret": "kSmqreRr0qwBWJgbf5Y-PjSU",  # Web 型客户端，换令牌需附 secret
+        "redirect_path": "/",
+    },
+    "outlook": {
+        "client_id": "9e5f94bc-e8a4-4e73-b8be-63364c29d753",
+        "client_secret": "",  # 公共客户端，纯 PKCE
+        "redirect_path": "/",
+    },
+}
+
+
+def get_user_client(provider_key: str) -> dict | None:
+    """用户自建客户端（secrets 原样，无 source 标记）；未配置返回 None。"""
     raw = get_secret(client_key(provider_key))
     if not raw:
         return None
@@ -146,8 +172,37 @@ def get_client(provider_key: str) -> dict | None:
     return data if data.get("client_id") else None
 
 
+def get_client(provider_key: str) -> dict | None:
+    """生效客户端：用户自建优先，内置凭证回退。带 source 标记。"""
+    user = get_user_client(provider_key)
+    if user:
+        return {**user, "source": "user"}
+    builtin = BUILTIN_CLIENTS.get(provider_key)
+    return {**builtin, "source": "builtin"} if builtin else None
+
+
+def builtin_available(provider_key: str) -> bool:
+    return provider_key in BUILTIN_CLIENTS
+
+
 def configured(provider_key: str) -> bool:
+    """是否可发起授权（自建 OR 内置）。"""
     return get_client(provider_key) is not None
+
+
+def client_for_refresh(provider_key: str, token_client_id: str | None) -> dict | None:
+    """刷新令牌应使用的客户端：refresh_token 与签发客户端绑定（换 client 会被拒）。
+
+    优先返回签发该令牌的客户端（内置或自建）；无记录（旧版令牌）回退当前生效客户端。
+    """
+    if token_client_id:
+        builtin = BUILTIN_CLIENTS.get(provider_key)
+        if builtin and builtin["client_id"] == token_client_id:
+            return {**builtin, "source": "builtin"}
+        user = get_user_client(provider_key)
+        if user and user.get("client_id") == token_client_id:
+            return {**user, "source": "user"}
+    return get_client(provider_key)
 
 
 def save_client(provider_key: str, client_id: str, client_secret: str = "",
@@ -293,8 +348,13 @@ def delete_token(account_id: int) -> None:
     set_secret(token_key(account_id), None)
 
 
-def store_tokens(account_id: int, provider_key: str, email: str, tokens: dict) -> None:
-    """落库令牌（expires_at 提前 _TOKEN_MARGIN 秒，刷新轮换值覆盖保存）。"""
+def store_tokens(account_id: int, provider_key: str, email: str, tokens: dict,
+                 client_id: str = "") -> None:
+    """落库令牌（expires_at 提前 _TOKEN_MARGIN 秒，刷新轮换值覆盖保存）。
+
+    client_id=签发该令牌的客户端：refresh_token 与客户端绑定，刷新时据此选边
+    （client_for_refresh），避免「授权用内置、之后配了自建」导致刷新失败。
+    """
     expires_in = int(tokens.get("expires_in") or 3600)
     record = {
         "provider": provider_key,
@@ -302,6 +362,7 @@ def store_tokens(account_id: int, provider_key: str, email: str, tokens: dict) -
         "access_token": tokens["access_token"],
         "refresh_token": tokens.get("refresh_token"),
         "expires_at": time.time() + expires_in - _TOKEN_MARGIN,
+        "client_id": client_id,
     }
     set_secret(token_key(account_id), json.dumps(record))
 
@@ -338,17 +399,19 @@ def ensure_access_token(account_id: int) -> str:
         provider = PROVIDERS.get(record.get("provider") or "")
         if provider is None:
             raise OAuthError("OAuth 服务商标识无效，请重新授权")
-        client = get_client(provider.key)
+        # 令牌与签发客户端绑定：优先用签发时的客户端（内置/自建）刷新
+        client = client_for_refresh(provider.key, record.get("client_id"))
         if client is None:
-            raise OAuthError(f"{provider.name} 的 OAuth 客户端配置已被移除，请在设置页重新填写")
+            raise OAuthError(f"{provider.name} 的 OAuth 客户端不可用，请在设置页重新配置或重新授权")
         try:
             tokens = refresh_tokens(
                 provider, client_id=client["client_id"],
                 refresh_token=record["refresh_token"],
-                client_secret=client.get("client_secret"))
+                client_secret=client.get("client_secret") or None)
         except OAuthError:
             raise
-        store_tokens(account_id, provider.key, record["email"], tokens)
+        store_tokens(account_id, provider.key, record["email"], tokens,
+                     client_id=client["client_id"])
         return tokens["access_token"]
 
 

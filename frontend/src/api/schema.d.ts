@@ -283,7 +283,11 @@ export interface paths {
         };
         /**
          * Oauth Status
-         * @description 各服务商配置状态 + 各自应登记的回调地址（设置页展示与复制）。
+         * @description 各服务商配置状态 + 生效客户端信息（设置页展示与复制）。
+         *
+         *     v0.4 P5 三态：configured=用户自建已配置（优先生效）；builtin_available=内置
+         *     公开凭证可用；can_authorize=可发起授权（两者取或）。client_id_masked 与
+         *     redirect_uri 均按生效客户端计算。
          */
         get: operations["oauth_status_api_oauth_status_get"];
         put?: never;
@@ -1172,6 +1176,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Contacts
+         * @description 通讯录列表/搜索（≥3 字走 email/name 子串；按使用频次与最近联系排序）。
+         */
+        get: operations["list_contacts_api_contacts_get"];
+        put?: never;
+        /**
+         * Create Contact
+         * @description 手动新增（全局作用域，source=manual：不被自动采集覆盖）。
+         */
+        post: operations["create_contact_api_contacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contacts/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggest Contacts
+         * @description 写信联想（跨账号去重、按使用频次×最近排序）。
+         */
+        get: operations["suggest_contacts_api_contacts_suggest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contacts/{contact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Contact */
+        delete: operations["delete_contact_api_contacts__contact_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Contact */
+        patch: operations["update_contact_api_contacts__contact_id__patch"];
+        trace?: never;
+    };
     "/api/digest": {
         parameters: {
             query?: never;
@@ -1300,6 +1366,28 @@ export interface components {
             templates?: components["schemas"]["TemplateItem"][];
             /** Signatures */
             signatures?: components["schemas"]["SignatureItem"][];
+        };
+        /** ContactIn */
+        ContactIn: {
+            /** Email */
+            email: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+        };
+        /** ContactUpdateIn */
+        ContactUpdateIn: {
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
         };
         /** EmailActionIn */
         EmailActionIn: {
@@ -4014,6 +4102,179 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_contacts_api_contacts_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_contact_api_contacts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_contacts_api_contacts_suggest_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_contact_api_contacts__contact_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_contact_api_contacts__contact_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactUpdateIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

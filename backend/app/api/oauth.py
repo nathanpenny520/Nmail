@@ -39,7 +39,12 @@ def _redirect_uri(request: Request, path: str = oauth.CALLBACK_PATH) -> str:
 
 @router.get("/status")
 def oauth_status(request: Request) -> dict:
-    """各服务商配置状态 + 各自应登记的回调地址（设置页展示与复制）。"""
+    """各服务商配置状态 + 生效客户端信息（设置页展示与复制）。
+
+    v0.4 P5 三态：configured=用户自建已配置（优先生效）；builtin_available=内置
+    公开凭证可用；can_authorize=可发起授权（两者取或）。client_id_masked 与
+    redirect_uri 均按生效客户端计算。
+    """
     providers = []
     for provider in oauth.PROVIDERS.values():
         client = oauth.get_client(provider.key)
@@ -48,11 +53,14 @@ def oauth_status(request: Request) -> dict:
         if client_id:
             masked = (f"{client_id[:6]}…{client_id[-8:]}"
                       if len(client_id) > 18 else client_id)
-        path = oauth.callback_path(client)
+        path = oauth.callback_path(client) if client else oauth.CALLBACK_PATH
         providers.append({
             "key": provider.key,
             "name": provider.name,
-            "configured": client is not None,
+            "configured": oauth.get_user_client(provider.key) is not None,
+            "builtin_available": oauth.builtin_available(provider.key),
+            "can_authorize": client is not None,
+            "client_source": (client or {}).get("source", ""),
             "client_id_masked": masked,
             "redirect_path": path,
             "redirect_uri": _redirect_uri(request, path),
@@ -82,7 +90,8 @@ def save_oauth_config(payload: OauthConfigIn) -> dict:
             or any(c.isspace() or c in "?#" for c in path):
         raise HTTPException(400, "回调路径需以 / 开头，且不含空格与 ? #（登记为根路径的客户端填 /）")
     oauth.save_client(payload.provider, payload.client_id, payload.client_secret, path)
-    return {"ok": True, "configured": oauth.configured(payload.provider)}
+    # configured 此处取「自建是否已配置」语义（内置回退不影响该状态展示）
+    return {"ok": True, "configured": oauth.get_user_client(payload.provider) is not None}
 
 
 class OauthAuthorizeIn(BaseModel):
@@ -103,8 +112,9 @@ def start_authorization(payload: OauthAuthorizeIn, request: Request) -> dict:
         raise HTTPException(400, f"邮箱域名不在 {provider.name} 的支持范围内")
     client = oauth.get_client(payload.provider)
     if client is None:
-        raise HTTPException(400, f"尚未配置 {provider.name} 的 OAuth 客户端，"
-                                 "请先到 设置-邮箱账号-OAuth2 登录 填写 client_id")
+        raise HTTPException(400, f"{provider.name} 暂无可用的 OAuth 客户端"
+                                 "（内置凭证不可用且未配置自建客户端），"
+                                 "请到 设置-邮箱账号-OAuth2 高级区配置自己的客户端")
     redirect_uri = _redirect_uri(request, oauth.callback_path(client))
     state, flow = oauth.create_flow(email, payload.provider, redirect_uri)
     auth_url = oauth.build_auth_url(
@@ -162,7 +172,8 @@ def oauth_callback(code: str = "", state: str = "", error: str = "") -> HTMLResp
             code_verifier=flow["code_verifier"], redirect_uri=flow["redirect_uri"],
             client_secret=client.get("client_secret") or None)
         account_id = _upsert_oauth_account(flow["email"], provider)
-        oauth.store_tokens(account_id, provider.key, flow["email"], tokens)
+        oauth.store_tokens(account_id, provider.key, flow["email"], tokens,
+                           client_id=client.get("client_id", ""))
         account = get_conn().execute(
             "SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
         sync_engine.start_sync({"id": account_id, **{k: account[k] for k in
@@ -172,7 +183,9 @@ def oauth_callback(code: str = "", state: str = "", error: str = "") -> HTMLResp
                      ok=True)
     except oauth.OAuthError as exc:
         oauth.settle_flow(state, False, exc.message)
-        return _page("授权失败", exc.message, ok=False)
+        # v0.4 P5 降级引导：内置凭证被服务商限制/吊销时，一键指路自建客户端
+        detail = f"{exc.message}（如反复失败，可在 设置-邮箱账号-OAuth2 高级区 配置自己的 OAuth 客户端后重试）"
+        return _page("授权失败", detail, ok=False)
     except Exception as exc:  # noqa: BLE001 — 回调是浏览器直接导航的落地页，绝不裸 500
         detail = f"{type(exc).__name__}: {exc}"[:300]
         oauth.settle_flow(state, False, detail)

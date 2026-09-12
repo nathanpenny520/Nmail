@@ -3,6 +3,17 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — v0.4 P5: OAuth 内置凭证快速授权（D1=A）+ 审核修正
+- 依据 docs/REDESIGN_PLAN.md §8.3/§13 P5（D1=A：用户 2026-09-12 拍板内置，推翻 2026-09-11 附录 B 否决结论，风险知情接受——翻案批注已记入 gitignored 方案文档附录 C）
+- **内置公开桌面客户端凭证**：`core/oauth.BUILTIN_CLIENTS`（值=Thunderbird 公开源码 OAuth2Providers.sys.mjs 的公开字符串；来源与免责声明见模块 docstring）——添加 Gmail/Outlook 零配置：输入地址 → 点「授权登录」即可。回退链 `get_client()`：用户自建永远优先，未配置回退内置（source 标记 user/builtin）；内置登记回调路径 `/`（这类客户端只豁免端口不豁免路径，附录 B 实测结论）
+- **令牌绑定签发客户端**：oauth_token 记录新增 client_id（签发者）；刷新经 `client_for_refresh` 按签发者选边——「授权用内置、之后配自建」（或反之）不会用错客户端导致 refresh_token 失效；旧版无记录令牌回退生效客户端
+- **接口**：`/api/oauth/status` 三态（configured=自建已配置 / builtin_available / can_authorize + client_source + 生效客户端掩码与回调地址，openapi 已再生成）；PUT config 的 configured 语义收窄为「自建已配置」；授权失败回调页附「高级区配置自建客户端」降级引导
+- **前端分层（§8.2）**：OauthSettings 卡片改「快速授权（默认，说明一行：零配置直接授权+公开信息免责）+ 各服务商行状态徽章（自建 xxx / 内置凭证·可直接授权）+「高级」按钮（自建表单收进行内，长教程移出操作区、留文档链接）」；AddAccountModal 授权按钮条件改 can_authorize，内置来源时提示「无需注册应用」，不可用时引导高级区
+- **审核修正**：通知铃与「开启桌面通知」按钮块级堆叠把顶部图标区撑成两行 → flex 并排（b262021）；页签关闭 ✕ 在固定宽后悬在文字旁 → 标题 flex-1 占满、✕ 贴右缘（3b24fc8）
+- **文档**：OAuth2 使用指南重构（§0 快速授权零配置置顶，原注册教程降级为 §1 高级）；ARCHITECTURE 两行同步
+- 验证：pytest 107 例全绿（新增 test_oauth 3 例：内置回退+自建优先/refresh 绑定签发者/零配置 authorize；status 三态与自建往返用例更新）；ruff（app 门禁）通过；npm build 通过；隔离实例（8795）冒烟——status 三态字段全对、零配置 authorize URL（client_id=内置、redirect_uri=根路径、URL 不含 secret）、设置页分层 UI 截图确认
+- 遗留：**真实账号端到端授权待用户**（零配置点授权 → 浏览器登录 → 回调建号 → 收发信；两台机器各自验证）；若服务商限制内置凭证，走高级区自建（引导已内置）
+
 ## a4c87f9 — v0.4 P4: 通讯录（自动采集 · 写信联想 · 管理界面）+ 审核修正
 - 依据 docs/REDESIGN_PLAN.md §5.2-5.4/§13 P4
 - **审核修正（e0a9bd9）**：AI 总管家/每日摘要入口从右上角按钮移入文件夹树「智能视图」分区（点开为页签，右上角仅剩 通知/设置/新邮件）；顶部页签统一宽度（w-44，浏览器式，标题截断）——修复「不同标签页长短不一」（关闭按钮 opacity-0 占位 + 基座页签无关闭位所致）
