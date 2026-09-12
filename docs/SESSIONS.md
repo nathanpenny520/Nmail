@@ -24,7 +24,7 @@
 - 产出: 主提交 0ede5e2（见 CHANGELOG「v0.4 P7」条目）；pytest 127 全绿（+test_ext_api 13 例：health 免认证/未启用 403/坏 key 401/scope 越权 403/限流+每日上限 429/密钥重置吊销/Host 豁免边界/调用日志/agent 未配 AI 400）；ruff app 门禁通过；npm build 通过；隔离实例（8807）冒烟——curl 矩阵（生成→启用→读端点→隧道场景外部 Origin+域名 Host 200→恶意 Host ext 200/内部 403）+ 设置页 API 区截图确认
 - 关键决策: 密钥明文存 secrets.json `ext_api_key:{id}`（所见即所存）、表内 sha256 哈希认证；api_enabled 总开关默认关；/api/ext/* 豁免来源校验的安全依据=浏览器跨站带不上自定义头（预检不通）；限流/每日上限为内存软限制（重启清零，本地单机可接受）；ext 端点全薄壳转调内部实现零新邮件操作；批量移动类返回 job_id 复用既有异步机制
 - 遗留: **真实隧道场景待用户**（cloudflared/Tailscale/SSH 任一按 docs/对外API使用指南.md §3 复现外部设备调用）；agent/chat/stream 真实 AI 配置走查顺延（与 P6 遗留一并）
-- P8 同会话完成: 官网独立仓库 **nmail-site**（`../nmail-site`，init 提交 77f5407）——Astro 静态站（首页/下载/功能/更新日志/动态/projects.json），构建期拉 GitHub Releases（离线回退本地常量），wrangler.toml + CI workflow 备好；**部署待用户**（建 GitHub 仓推送 → CF Pages 连仓库或 `wrangler pages deploy` → CNAME nmail.whizzzest.com，步骤见其 README）；v0.4 至此 P1–P8 全部落地
+- P8 同会话完成: 官网独立仓库 **nmail-site**（`../nmail-site`，init 77f5407；用户拍板 public 后由本会话建仓推送 `github.com/nathanpenny520/nmail-site`）——Astro 静态站（首页/下载/功能/更新日志/动态/projects.json），构建期拉 GitHub Releases（离线回退本地常量）；**CF Pages 已部署上线** <https://nmail-site.pages.dev>（wrangler 直部署，项目 nmail-site）；**仅剩一步待用户**：Dashboard → nmail-site → Custom domains 添加 `nmail.whizzzest.com`（CLI 不支持 Pages 域管理，同账户自动建 CNAME+证书）；v0.4 至此 P1–P8 全部落地
 - 时间: 2026-09-12 14:55 完成
 
 ### S-0912-1340-P6验收修复 ✅
