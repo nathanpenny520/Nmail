@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — v0.4 P5: OAuth 内置凭证快速授权（D1=A）+ 审核修正
+## a487546 — v0.4 P5: OAuth 内置凭证快速授权（D1=A）+ 审核修正
 - 依据 docs/REDESIGN_PLAN.md §8.3/§13 P5（D1=A：用户 2026-09-12 拍板内置，推翻 2026-09-11 附录 B 否决结论，风险知情接受——翻案批注已记入 gitignored 方案文档附录 C）
 - **内置公开桌面客户端凭证**：`core/oauth.BUILTIN_CLIENTS`（值=Thunderbird 公开源码 OAuth2Providers.sys.mjs 的公开字符串；来源与免责声明见模块 docstring）——添加 Gmail/Outlook 零配置：输入地址 → 点「授权登录」即可。回退链 `get_client()`：用户自建永远优先，未配置回退内置（source 标记 user/builtin）；内置登记回调路径 `/`（这类客户端只豁免端口不豁免路径，附录 B 实测结论）
 - **令牌绑定签发客户端**：oauth_token 记录新增 client_id（签发者）；刷新经 `client_for_refresh` 按签发者选边——「授权用内置、之后配自建」（或反之）不会用错客户端导致 refresh_token 失效；旧版无记录令牌回退生效客户端
