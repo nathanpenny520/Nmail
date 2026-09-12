@@ -99,7 +99,7 @@ function WorkspaceTabs() {
               title={meta.label}
             >
               <Icon className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{meta.label}</span>
+              <span className="min-w-0 flex-1 truncate">{meta.label}</span>
               <button
                 className="shrink-0 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100"
                 onClick={(e) => {
@@ -122,7 +122,7 @@ function WorkspaceTabs() {
           >
             {tab.dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" title="有未保存改动" />}
             <Pencil className="h-3 w-3 shrink-0" />
-            <span className="truncate">{tab.title}</span>
+            <span className="min-w-0 flex-1 truncate">{tab.title}</span>
             <button
               className="shrink-0 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100"
               onClick={(e) => {
