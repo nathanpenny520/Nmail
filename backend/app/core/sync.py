@@ -297,6 +297,8 @@ def _sync_folder(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001
     new_count = 0
     latest_subject = ""
     new_email_ids: list[int] = []
+    from app.core import contacts as contacts_core  # 局部导入避免环（contacts 不依赖 sync）
+
     for chunk in iter_new_mail(mb, folder, last_uid, first_sync_days=FIRST_SYNC_DAYS):
         if not chunk:
             continue
@@ -304,6 +306,8 @@ def _sync_folder(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001
         for parsed_msg in chunk:
             email_id = _upsert_email(account_id, folder, parsed_msg)
             _save_attachments(account_id, email_id, parsed_msg)
+            # 通讯录自动采集（v0.4 P4）：新邮件发件人入册
+            contacts_core.collect_sender(parsed_msg.sender_email, parsed_msg.sender_name, account_id)
             chunk_ids.append(email_id)
             last_uid = max(last_uid, parsed_msg.uid)
             new_count += 1

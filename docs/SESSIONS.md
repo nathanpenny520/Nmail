@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-1150-P4通讯录 ✅
+- 目标: 落地 REDESIGN_PLAN §13 P4——通讯录（§5.2-5.4）：自动采集 + 写信台 chips 联想 + 设置页管理界面；先落审核修正（AI/摘要入树 + 页签统一宽度）
+- 范围: backend（迁移 v16、core/contacts.py、api/contacts.py、sync/outbox 采集钩子）、frontend（RecipientChipsInput 新增、ComposeForm 三地址段改造、SettingsPage ContactsSection、client/types、openapi 再生成）、docs
+- 产出: 审核修正提交 e0a9bd9；主提交见 CHANGELOG「v0.4 P4: 通讯录」条目；pytest 104 全绿（+test_contacts 3 例）；ruff app 门禁通过；npm build 通过；隔离实例（8796）冒烟——suggest 中英文命中、写信台联想出「张三 <...> 5 次」→Enter 生成 chip、设置页通讯录表格完整，均截图确认
+- 关键决策: contacts 唯一索引用表达式 COALESCE(account_id,0)+email 兜 NULL 作用域，upsert 用 SELECT-then-UPDATE/INSERT（SQLite 表达式索引不支持 upsert 冲突目标）；chips 组件保持「逗号分隔地址串」为值——ComposeForm 自动保存/后端解析零改动；手动改名即转 manual 保护采集不覆盖
+- 遗留: 真实账号采集效果待用户验证（收发各一即见）；CSV/vCard 导入导出顺延 v0.5；下一阶段 P5 OAuth 内置凭证快速授权
+- 时间: 2026-09-12 12:10 完成
+
 ### S-0912-1100-P3草稿合并 ✅
 - 目标: 落地 REDESIGN_PLAN §13 P3——待审草稿+草稿箱合并为统一草稿体系（§5.1）；顺带修复通知面板顶部不可见
 - 范围: backend（迁移 v19、outbox.send 接受 pending_review + migrate_legacy_ai_drafts、api/user_drafts 扩展 discard/reopen/regenerate(+for-email)、api/drafts.py 退役删除、pipeline 拟稿写 user_drafts、main.lifespan 迁移调用）、frontend（DraftsHubPage 新增、DraftsPage/UserDraftsPage 删除、FolderTree 单草稿节点、App 重定向 /drafts+/mydrafts→/?view=drafts、EmailReader/NotificationBell 切新端点、client/types、openapi schema 再生成）、docs

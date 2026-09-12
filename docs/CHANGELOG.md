@@ -3,6 +3,16 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — v0.4 P4: 通讯录（自动采集 · 写信联想 · 管理界面）+ 审核修正
+- 依据 docs/REDESIGN_PLAN.md §5.2-5.4/§13 P4
+- **审核修正（e0a9bd9）**：AI 总管家/每日摘要入口从右上角按钮移入文件夹树「智能视图」分区（点开为页签，右上角仅剩 通知/设置/新邮件）；顶部页签统一宽度（w-44，浏览器式，标题截断）——修复「不同标签页长短不一」（关闭按钮 opacity-0 占位 + 基座页签无关闭位所致）
+- **自动采集（零操作）**：v16 contacts 表（source auto/manual、use_count、last_seen_at；表达式唯一索引 COALESCE(account_id,0)+email 兜住 NULL 作用域去重）；sync 新邮件入库采集发件人；`outbox.send_user_draft` 发送成功采集 To/Cc/Bcc（支持「Name <a@x>」形态）；手动编辑过姓名（source=manual）的行不被采集覆盖、仅累计计数
+- **写信联想**：新增 RecipientChipsInput——收件人/抄送/密送改 chips 形态（值仍是逗号分隔地址串，自动保存/发送无感）；输入触发 `/api/contacts/suggest`（150ms 防抖，use_count×最近加权、跨账号去重），↑↓ 选择、Enter 确认、逗号/失焦提交、退格删上一枚、非法地址红框
+- **管理界面**：设置页新增「通讯录」分类——搜索、手动新增（全局作用域）、行内改名（转 manual）、删除；来源徽章（自动采集/手动）；导入/导出按钮置灰（v0.5）
+- **接口新增**：`GET /api/contacts`（列表/搜索）、`GET /api/contacts/suggest`（写信联想）、`POST/PATCH/DELETE /api/contacts[/{id}]`（openapi 快照已再生成）
+- 验证：pytest 104 例全绿（新增 test_contacts.py 3 例：采集 upsert+manual 保护/地址串采集+联想排序/API CRUD+守卫）；ruff（app 门禁）通过；npm build 通过；隔离实例（8796）冒烟——suggest 中英文/拼音子串命中、写信台输入「张」出联想（张三 <...> 5 次）→Enter 生成 chip、设置页通讯录表格（来源徽章/计数/删除）截图确认
+- 遗留：真实账号下采集效果待用户验证（收几封信+发一封即见）；CSV/vCard 导入导出顺延 v0.5；拼音首字母匹配（trigram 覆盖全拼）待真实数据再调
+
 ## 554f896 — v0.4 P3: 草稿体系合并（待审+草稿箱 → 统一草稿）
 - 依据 docs/REDESIGN_PLAN.md §5.1/§13 P3
 - **数据统一**：user_drafts 成为唯一草稿存储（v19 加 origin ai/human + instruction 列，status 扩展 pending_review）；旧 drafts 表（AI 待审）数据由启动期 `outbox.migrate_legacy_ai_drafts()` 一次性并入——Markdown→HTML 与原 approve 发送同源、主题 Re: 化、收件人=原发件人、in_reply_to=原邮件软引用、状态映射 pending→pending_review/sent→sent/discarded→discarded；KV `legacy_drafts_migrated` 与数据同一事务原子提交（防中断出半份拷贝），旧表只读保留

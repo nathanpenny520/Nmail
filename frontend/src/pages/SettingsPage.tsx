@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, BarChart3, Bot, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { BadgeCheck, BarChart3, BookUser, Bot, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
@@ -30,6 +30,7 @@ const fmtTokens = (n: number) =>
 const SECTIONS = [
   { key: 'general', label: '通用', icon: SlidersHorizontal },
   { key: 'accounts', label: '邮箱账号', icon: Mail },
+  { key: 'contacts', label: '通讯录', icon: BookUser },
   { key: 'ai', label: 'AI 配置', icon: Bot },
   { key: 'usage', label: 'AI 用量', icon: BarChart3 },
   { key: 'about', label: '关于', icon: Info },
@@ -598,6 +599,9 @@ export default function SettingsPage() {
           </section>
         )}
 
+        {/* ── 通讯录（v0.4 P4）── */}
+        {section === 'contacts' && <ContactsSection />}
+
         {/* ── 关于 ── */}
         {section === 'about' && (
           <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -1076,5 +1080,177 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
         )}
       </div>
     </div>
+  )
+}
+
+// ── 通讯录（v0.4 P4，REDESIGN_PLAN §5.4）：自动采集 + 手动增删改，即时生效无保存栏 ──
+function ContactsSection() {
+  const queryClient = useQueryClient()
+  const [q, setQ] = useState('')
+  const listQuery = useQuery({ queryKey: ['contacts', q], queryFn: () => api.getContacts(q) })
+  const contacts = listQuery.data?.contacts ?? []
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState({ email: '', name: '' })
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editName, setEditName] = useState('')
+  const [message, setMessage] = useState('')
+
+  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['contacts'] })
+
+  const addMutation = useMutation({
+    mutationFn: () => api.createContact({ email: form.email.trim(), name: form.name.trim() }),
+    onSuccess: () => {
+      setForm({ email: '', name: '' })
+      setMessage('')
+      invalidate()
+    },
+    onError: (err: Error) => setMessage(`新增失败：${err.message}`),
+  })
+  const renameMutation = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => api.updateContact(id, { name }),
+    onSuccess: () => {
+      setEditingId(null)
+      invalidate()
+    },
+  })
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.deleteContact(id),
+    onSuccess: invalidate,
+  })
+
+  return (
+    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 className="t-lg font-semibold">通讯录</h2>
+      <p className="mt-1 t-sm text-gray-400">
+        收信与发信的往来地址自动入册（手动编辑过的姓名不会被覆盖）；写信时收件人输入框会自动联想。
+      </p>
+
+      <div className="mt-4 flex items-center gap-2">
+        <input
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 t-md outline-none focus:border-indigo-500"
+          placeholder="搜索姓名或邮箱"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <button
+          className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700"
+          onClick={() => setAdding(!adding)}
+        >
+          <Plus className="h-3.5 w-3.5" /> 新增联系人
+        </button>
+        <button
+          className="shrink-0 cursor-not-allowed whitespace-nowrap rounded-lg border border-gray-200 px-3 py-1.5 t-sm text-gray-300"
+          title="v0.5 提供 CSV/vCard 导入导出"
+          disabled
+        >
+          导入/导出
+        </button>
+      </div>
+
+      {adding && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-2">
+          <input
+            className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2.5 py-1 t-sm outline-none focus:border-indigo-500"
+            placeholder="邮箱地址（必填）"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            autoFocus
+          />
+          <input
+            className="w-40 shrink-0 rounded-lg border border-gray-300 px-2.5 py-1 t-sm outline-none focus:border-indigo-500"
+            placeholder="姓名（可选）"
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          />
+          <button
+            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            disabled={!form.email.trim() || addMutation.isPending}
+            onClick={() => addMutation.mutate()}
+          >
+            保存
+          </button>
+          <button
+            className="shrink-0 rounded-lg border border-gray-300 px-3 py-1 t-sm text-gray-500 hover:bg-gray-50"
+            onClick={() => setAdding(false)}
+          >
+            取消
+          </button>
+        </div>
+      )}
+      {message && <p className="mt-2 t-sm text-red-600">{message}</p>}
+
+      <div className="mt-4 overflow-hidden rounded-xl border border-gray-100">
+        <table className="w-full text-left">
+          <thead className="bg-gray-50 t-xs text-gray-400">
+            <tr>
+              <th className="px-3 py-2 font-medium">姓名</th>
+              <th className="px-3 py-2 font-medium">邮箱</th>
+              <th className="px-3 py-2 font-medium">来源</th>
+              <th className="px-3 py-2 text-right font-medium">往来次数</th>
+              <th className="px-3 py-2 font-medium">最近联系</th>
+              <th className="w-16 px-3 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {listQuery.isLoading && (
+              <tr><td colSpan={6} className="px-3 py-6 text-center t-sm text-gray-400">加载中…</td></tr>
+            )}
+            {!listQuery.isLoading && contacts.length === 0 && (
+              <tr><td colSpan={6} className="px-3 py-6 text-center t-sm text-gray-300">还没有联系人——收发过邮件后会自动出现</td></tr>
+            )}
+            {contacts.map((c) => (
+              <tr key={c.id} className="border-t border-gray-50">
+                <td className="px-3 py-2 t-md">
+                  {editingId === c.id ? (
+                    <input
+                      className="w-40 rounded-lg border border-indigo-300 px-2 py-0.5 t-sm outline-none focus:border-indigo-500"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') renameMutation.mutate({ id: c.id, name: editName })
+                        if (e.key === 'Escape') setEditingId(null)
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <button
+                      className="cursor-text rounded px-1 py-0.5 hover:bg-gray-100"
+                      title="点击修改姓名（修改后不被自动采集覆盖）"
+                      onClick={() => {
+                        setEditingId(c.id)
+                        setEditName(c.name)
+                      }}
+                    >
+                      {c.name || <span className="text-gray-300">（未命名）</span>}
+                    </button>
+                  )}
+                </td>
+                <td className="px-3 py-2 t-md text-gray-600">{c.email}</td>
+                <td className="px-3 py-2">
+                  {c.source === 'manual' ? (
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 t-xs text-gray-500">手动</span>
+                  ) : (
+                    <span className="rounded bg-emerald-50 px-1.5 py-0.5 t-xs text-emerald-600">自动采集</span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right t-md text-gray-500">{c.use_count}</td>
+                <td className="px-3 py-2 t-sm text-gray-400">
+                  {c.last_seen_at ? c.last_seen_at.slice(0, 10) : '—'}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <button
+                    className="rounded-md border border-gray-200 bg-white p-1 text-gray-400 hover:text-red-600"
+                    title="删除联系人"
+                    onClick={() => deleteMutation.mutate(c.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }

@@ -8,6 +8,7 @@ import { useAIEnabled } from '../../api/useAI'
 import { fmtSize } from '../../utils/format'
 import type { Account, DraftAttachment, UserDraft } from '../../types'
 import { useCompose } from './ComposeContext'
+import RecipientChipsInput from './RecipientChipsInput'
 import AiWriteDialog from './AiWriteDialog'
 import { SignatureMenu, TemplateMenu, TemplateManager, SignatureEditor } from './InsertDialogs'
 import { EditorSurface, EditorToolbar, useMailEditor } from './RichEditor'
@@ -255,15 +256,14 @@ export default function ComposeForm({
         </div>
       )}
 
-      {/* 字段区：收件人 / 抄送密送（默认折叠）/ 主题 / 附件 */}
+      {/* 字段区：收件人 / 抄送密送（默认折叠）/ 主题 / 附件。收件人走 chips+联想（v0.4 P4） */}
       <div className="shrink-0 divide-y divide-gray-100 border-b border-gray-100">
         <div className="flex items-center gap-1.5 px-4 py-1.5">
           <span className="w-11 shrink-0 t-sm text-gray-400">收件人</span>
-          <input
-            className={fieldInput}
+          <RecipientChipsInput
             value={to}
-            onChange={(e) => setTo(e.target.value)}
-            placeholder="多个地址用逗号分隔"
+            onChange={setTo}
+            placeholder="输入地址或从通讯录联想，回车确认"
             autoFocus={draft.mode === 'new' && !to && !subject && !bodyHtml}
           />
           {!showCc && (
@@ -278,7 +278,7 @@ export default function ComposeForm({
         {showCc && (
           <div className="flex items-center gap-1.5 px-4 py-1.5">
             <span className="w-11 shrink-0 t-sm text-gray-400">抄送</span>
-            <input className={fieldInput} value={cc} onChange={(e) => setCc(e.target.value)} />
+            <RecipientChipsInput value={cc} onChange={setCc} />
             {!showBcc && (
               <button
                 className="shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 t-sm text-indigo-500 hover:bg-indigo-50"
@@ -303,7 +303,7 @@ export default function ComposeForm({
         {showCc && showBcc && (
           <div className="flex items-center gap-1.5 px-4 py-1.5">
             <span className="w-11 shrink-0 t-sm text-gray-400">密送</span>
-            <input className={fieldInput} value={bcc} onChange={(e) => setBcc(e.target.value)} />
+            <RecipientChipsInput value={bcc} onChange={setBcc} />
             <button
               className="shrink-0 whitespace-nowrap rounded-md px-1.5 py-0.5 t-sm text-gray-400 hover:bg-gray-50 hover:text-gray-600"
               onClick={() => {

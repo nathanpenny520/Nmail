@@ -359,6 +359,28 @@ MIGRATIONS: list[tuple[int, str]] = [
         """,
     ),
     (
+        16,
+        """
+        -- v0.4 P4 通讯录（REDESIGN_PLAN §5.3）：往来联系人自动采集 + 写信联想。
+        -- account_id NULL = 全局手动联系人；表达式唯一索引兜住 NULL 不去重问题
+        CREATE TABLE IF NOT EXISTS contacts (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id   INTEGER,
+            email        TEXT NOT NULL,
+            name         TEXT NOT NULL DEFAULT '',
+            source       TEXT NOT NULL DEFAULT 'auto',  -- auto=采集 | manual=手动（不被采集覆盖）
+            notes        TEXT NOT NULL DEFAULT '',
+            use_count    INTEGER NOT NULL DEFAULT 0,
+            last_seen_at TEXT,
+            created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_uniq
+            ON contacts (COALESCE(account_id, 0), email);
+        CREATE INDEX IF NOT EXISTS idx_contacts_rank
+            ON contacts (use_count DESC, last_seen_at DESC);
+        """,
+    ),
+    (
         19,
         """
         -- v0.4 P3 草稿体系合并（REDESIGN_PLAN §5.1）：user_drafts 成为唯一草稿存储。

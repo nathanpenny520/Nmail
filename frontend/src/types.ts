@@ -286,6 +286,19 @@ export interface UserDraft {
   } | null
 }
 
+/** 通讯录联系人（v0.4 P4）：account_id null=全局手动；source manual=手动编辑过（采集不覆盖） */
+export interface ContactItem {
+  id: number
+  account_id: number | null
+  email: string
+  name: string
+  source: 'auto' | 'manual' | string
+  notes: string
+  use_count: number
+  last_seen_at: string | null
+  created_at: string
+}
+
 /** 写信台模板/签名（Markdown 文本存储，插入时转 HTML） */
 export interface ComposeTemplate {
   id: string

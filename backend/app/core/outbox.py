@@ -134,4 +134,10 @@ def send_user_draft(draft_id: int) -> None:
     if row["in_reply_to"]:
         conn.execute("UPDATE emails SET is_read = 1 WHERE id = ?", (row["in_reply_to"],))
     conn.commit()
+    # 通讯录自动采集（v0.4 P4）：发送成功的收件人入册
+    from app.core import contacts as contacts_core  # 局部导入避免环
+
+    contacts_core.collect_addresses(row["to_addrs"], int(row["account_id"]))
+    contacts_core.collect_addresses(row["cc_addrs"], int(row["account_id"]))
+    contacts_core.collect_addresses(row["bcc_addrs"], int(row["account_id"]))
     shutil.rmtree(draft_dir(draft_id), ignore_errors=True)

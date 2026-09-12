@@ -9,6 +9,7 @@ import type {
   ChatSession,
   ComposeExtras,
   CategoryMeta,
+  ContactItem,
   EmailDetail,
   EmailListResp,
   FolderCacheItem,
@@ -234,6 +235,20 @@ export const api = {
     request<{ draft: UserDraft }>(`/api/user-drafts/${id}/attachments/${attId}`, { method: 'DELETE' }),
   deleteUserDraft: (id: number) =>
     request<{ ok: boolean }>(`/api/user-drafts/${id}`, { method: 'DELETE' }),
+
+  // ── 通讯录（v0.4 P4）──
+  getContacts: (q: string = '') =>
+    request<{ contacts: ContactItem[] }>(`/api/contacts${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  suggestContacts: (q: string = '', limit: number = 8) =>
+    request<{ items: { email: string; name: string; use_count: number }[] }>(
+      `/api/contacts/suggest?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ),
+  createContact: (payload: { email: string; name?: string; notes?: string }) =>
+    request<{ contact: ContactItem }>('/api/contacts', { method: 'POST', body: JSON.stringify(payload) }),
+  updateContact: (id: number, payload: { name?: string; notes?: string }) =>
+    request<{ contact: ContactItem }>(`/api/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteContact: (id: number) =>
+    request<{ ok: boolean }>(`/api/contacts/${id}`, { method: 'DELETE' }),
 
   // ── 写信台模板/签名/Markdown 转换 ──
   getComposeExtras: () => request<ComposeExtras>('/api/compose-extras'),
