@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — v0.4 P7: 对外 API（/api/ext/v1 · API Key 认证 · scope 分级）
+## 0ede5e2 — v0.4 P7: 对外 API（/api/ext/v1 · API Key 认证 · scope 分级）
 - 依据 docs/REDESIGN_PLAN.md §7/§13 P7（D3=A：仅 127.0.0.1，外部设备走用户自建隧道）
 - **`/api/ext/v1/*`**（`api/ext.py` 新增）：health（免认证）·accounts·emails（列表/搜索/详情/附件）·emails/actions（批量动作，移动类异步返回 job_id 经 /jobs/{id} 轮询）·drafts（列表/创建/approve 发送，统一草稿体系）·folders（+/sync 按需同步，名走查询参数）·contacts·digest·jobs/{id}·agent（chat 非流式+chat/stream SSE+actions/{id}/decide 审批）——端点全部薄壳转调既有实现（emails/user_drafts/folders/contacts/digest/agent），零新邮件操作
 - **认证与限流**：`X-Api-Key` 请求头 → sha256 查 api_keys 表（明文存 secrets.json `ext_api_key:{id}`，所见即所存与 AI key 同惯例，表内只留哈希）；scope 四级 read/write/send/agent；校验链=api_enabled 总开关（默认关，403）→密钥（401）→scope（403）→60 次/分钟内存滑动窗+每 Key 每日上限（429）；last_used_at 节流回写（≥60s 一次）
