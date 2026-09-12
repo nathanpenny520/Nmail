@@ -66,7 +66,7 @@ def archive_folder_name(account_id: int) -> str:
 
 
 def cached_list(account_id: int) -> list[dict]:
-    """folders 缓存行（含 is_system / is_archive 派生标记，供前端树渲染与守卫）。"""
+    """folders 缓存行（含 is_system / is_archive 派生标记与未读数，供前端树渲染）。"""
     account = get_conn().execute(
         "SELECT archive_folder FROM accounts WHERE id = ?", (account_id,)
     ).fetchone()
@@ -78,6 +78,14 @@ def cached_list(account_id: int) -> list[dict]:
         " WHERE account_id = ? ORDER BY name",
         (account_id,),
     ).fetchall()
+    unread = {
+        r["folder"]: r["n"]
+        for r in get_conn().execute(
+            "SELECT folder, COUNT(*) n FROM emails"
+            " WHERE account_id = ? AND is_read = 0 AND archived_local = 0 GROUP BY folder",
+            (account_id,),
+        ).fetchall()
+    }
     return [
         {
             "name": r["name"],
@@ -86,6 +94,7 @@ def cached_list(account_id: int) -> list[dict]:
             "subscribed": bool(r["subscribed"]),
             "is_system": r["name"].upper() == "INBOX" or bool(r["special_use"]),
             "is_archive": r["name"] == archive_name,
+            "unread": unread.get(r["name"], 0),
         }
         for r in rows
     ]
@@ -96,6 +105,10 @@ def refresh_cache(account_id: int) -> list[dict]:
     handle = mailbox.load_account(account_id)
     with mailbox.open_imap(handle) as mb:
         listing = imap_client.list_folders(mb)
+    if not listing:
+        # 空 LIST（网络抖动/异常响应）不清缓存：宁用旧数据，勿把本地文件夹全部 purge（审查 C4）
+        logger.warning("refresh_cache: 账号 %s 的 LIST 返回空，保留本地文件夹缓存", account_id)
+        return cached_list(account_id)
     conn = get_conn()
     seen: set[str] = set()
     for item in listing:

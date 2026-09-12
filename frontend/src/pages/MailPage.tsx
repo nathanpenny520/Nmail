@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { useJob } from '../api/useJob'
+import { useFlash } from '../hooks/useFlash'
+import type { EmailSummary } from '../types'
 import FolderTree, { type TreeSelection } from '../components/FolderTree'
 import MailBrowser from '../components/MailBrowser'
 import { Modal } from '../components/compose/ui'
@@ -37,10 +39,65 @@ export default function MailPage() {
     }
   }
 
+  // 拖拽移动（REDESIGN_PLAN §4.3，v0.4 审查 U1）：乐观更新 + job 进度 + 失败回滚提示。
+  // 原实现 .catch(() => undefined) 吞掉一切错误——拖了没反应也不知道成败。
+  const [moveNote, flashMove] = useFlash(5000)
+  const { job: moveJob, start: startMoveJob } = useJob((finished) => {
+    invalidateAfterMove()
+    if (finished.status === 'failed') {
+      flashMove(`移动失败：${finished.detail || '未知错误'}（列表已还原）`, 6000)
+      return
+    }
+    const r = (finished.result ?? {}) as { updated?: number; failed?: number }
+    const failedNote = (r.failed ?? 0) > 0 ? `，${r.failed} 封失败` : ''
+    flashMove(`已移动 ${r.updated ?? 0} 封${failedNote}`)
+  })
+
+  const invalidateAfterMove = () => {
+    void queryClient.invalidateQueries({ queryKey: ['emails'] })
+    void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+    void queryClient.invalidateQueries({ queryKey: ['folder-cache'] })
+  }
+
+  const dropMutation = useMutation({
+    mutationFn: ({ ids, folder }: { ids: number[]; folder: string }) =>
+      api.batchAction(ids, 'move', folder),
+    onMutate: async ({ ids }) => {
+      // 乐观更新：先从本地缓存列表摘掉被拖走的邮件，失败回滚快照
+      await queryClient.cancelQueries({ queryKey: ['emails'] })
+      const snapshots = queryClient.getQueriesData<{ total: number; items: EmailSummary[] }>({
+        queryKey: ['emails'],
+      })
+      for (const [key, data] of snapshots) {
+        if (!data) continue
+        const removed = data.items.filter((it) => ids.includes(it.id)).length
+        if (removed === 0) continue
+        queryClient.setQueryData(key, {
+          ...data,
+          total: Math.max(0, data.total - removed),
+          items: data.items.filter((it) => !ids.includes(it.id)),
+        })
+      }
+      return { snapshots }
+    },
+    onError: (error: Error, _vars, ctx) => {
+      ctx?.snapshots.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      flashMove(`移动失败：${error.message}（列表已还原）`, 6000)
+    },
+    onSuccess: (result) => {
+      if (result.job_id != null) {
+        startMoveJob(result.job_id) // 大批量转后台 job，进度走 useJob 轮询
+        return
+      }
+      const failedNote = result.failed > 0 ? `，${result.failed} 封失败` : ''
+      flashMove(`已移动 ${result.updated} 封${failedNote}`)
+      invalidateAfterMove()
+    },
+  })
+
   const onDropEmails = (ids: number[], _accountId: number, folder: string) => {
     if (ids.length === 0) return
-    void api.batchAction(ids, 'move', folder).catch(() => undefined)
-    void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+    dropMutation.mutate({ ids, folder })
   }
 
   return (
@@ -55,6 +112,23 @@ export default function MailPage() {
         )}
         {sel.type === 'drafts' && <DraftsHubPage />}
       </div>
+      {(moveJob?.status === 'running' || moveNote) && (
+        <div className="pointer-events-none fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-indigo-200 bg-white px-4 py-1.5 t-sm text-indigo-600 shadow-lg">
+          {moveJob?.status === 'running' ? (
+            <>
+              <span className="h-1.5 w-28 overflow-hidden rounded-full bg-indigo-100">
+                <span
+                  className="block h-full rounded-full bg-indigo-500 transition-all duration-500"
+                  style={{ width: `${Math.max(5, Math.round(moveJob.progress * 100))}%` }}
+                />
+              </span>
+              正在移动 {Math.round(moveJob.progress * 100)}%{moveJob.detail ? ` · ${moveJob.detail}` : ''}
+            </>
+          ) : (
+            moveNote
+          )}
+        </div>
+      )}
       <ArchivedMigratePrompt />
     </div>
   )

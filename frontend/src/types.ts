@@ -163,6 +163,7 @@ export interface FolderCacheItem {
   subscribed: boolean
   is_system: boolean
   is_archive: boolean
+  unread: number
 }
 
 export interface AccountAddPayload {

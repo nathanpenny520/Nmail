@@ -15,6 +15,7 @@ from email.message import EmailMessage
 from imap_tools import AND, MailBox, MailMessageFlags
 from imap_tools.errors import MailboxLoginError
 
+from app.config import APP_VERSION
 from app.core import netproxy, oauth
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ def connect_imap(cfg: MailConfig) -> MailBox:
         mb.login(cfg.email, cfg.password)
     if _is_netease(cfg.imap_server):
         try:
-            mb.client._simple_command("ID", '("name" "Nmail" "version" "0.1.0")')
+            mb.client._simple_command("ID", f'("name" "Nmail" "version" "{APP_VERSION}")')
             mb.client._untagged_response("OK", None, "ID")
         except Exception:  # noqa: BLE001 — ID 失败不影响非网易服务器，留待后续命令暴露问题
             logger.debug("IMAP ID command failed for %s", cfg.imap_server)

@@ -98,7 +98,8 @@ def _collect_stats() -> dict:
             important.append({**item, "category": row["category"], "importance": row["importance"],
                               "reason": row["reply_reason"] or ""})
 
-    important.sort(key=lambda x: (x["importance"] != "critical", x["date_key"]), reverse=False)
+    # critical 优先、组内最新在前（原升序把最新一封排最后，审查 F7）
+    important.sort(key=lambda x: (x["importance"] == "critical", x["date_key"] or ""), reverse=True)
 
     return {
         "date": today.isoformat(),

@@ -3,7 +3,20 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — 审查修复 P0+P1：摘要判定 / AI 工具越权 / 时区 / 本地推理兼容等七项
+## 待提交 — 审查修复 P2 体验打磨：拖拽反馈 / 审批过期 / 未读徽章 / 已读节流等
+- 接上条（P0+P1，756fe37），落审查地图 P2 项：
+- **U1 拖拽移动反馈**（原 `.catch(() => undefined)` 吞错，最伤感知）：`MailPage.onDropEmails` 重写——乐观更新（被拖邮件先从本地列表摘除）+ 后台 job 进度浮条（复用 useJob 1s 轮询）+ 成功/失败提示；失败回滚快照并提示「列表已还原」；REDESIGN_PLAN §4.3 承诺按原设计落地
+- **U2 审批动作 24h 过期**：`expired` 原先只有 schema 注释、pending 永久挂起——scheduler.tick 新增 `expire_stale_actions`（pending 且 created_at 超 24h → expired + 原因落 error）
+- **U3 右键「移动到…」二级菜单**：ContextMenu 支持子菜单（悬停右侧展开、限高内滚），条目按被右键邮件**所属账号**的文件夹清单生成（聚合视图下与当前筛选账号区分），排除邮件当前所在夹；单封/多选分别走单封/批量动作
+- **U3 未读徽章**：`folders.cached_list` 每夹附 `unread`（一条 GROUP BY 本地 SQL，零外呼）→ 树节点右侧计数徽章（99+ 截断）；MailBrowser 的 invalidateMail 顺带失效 `folder-cache`（打标/移动/同步完成徽章即刷新）；草稿入口加 AI 待审数徽章（复用 `['user-drafts','pending_review']` 查询缓存，60s 兜底轮询）
+- **U4 已读合并写**：点击邮件先本地乐观置已读，800ms 内连续点击合并为一次批量 IMAP SEEN（原先逐封直发、快速浏览连打服务器）；卸载前把未落地队列 fire-and-forget 发出；失败提示由 20s 列表轮询校正
+- **C2 归档夹显示名**：树节点硬编码 `'Archived'` 改为显示服务器实名（账号可自定义 archive_folder 名，如「已归档」；图标仍标识归档属性）
+- 小项：**F6** IMAP ID 版本号从包元数据取（`config.APP_VERSION`，单一来源 pyproject，原硬编码 0.1.0）；**F7** 摘要「重要邮件」排序改 critical 优先、组内最新在前（原升序最新一封沉底）；**C4** `refresh_cache` 空 LIST 防御（网络抖动返回空时保留本地缓存并告警，不再误 purge 全部文件夹）
+- 核实后不修（记录口径）：**S3** 读类工具计入 200 次/日限额是 REDESIGN_PLAN §6.6 规范本身（全部动作≤200/天）；实际仅会话内内存计数含读、持久化审计只记写类，跨会话读不占额度，维持现状；**C3** 「已拦截 N 张图片」横幅用详情现算的消毒结果，口径天然一致，核实无不符路径
+- 验证：pytest 135 全绿；ruff（app 门禁）通过；npm run build（tsc + 字号门禁）通过；隔离实例 `/api/health` 冒烟 ok
+- 遗留：拖拽进度/徽章/二级菜单为 UI 行为，待用户重启后真机走查；`FolderCacheItem` 增 `unread` 字段（后端响应为无 schema dict，openapi 快照无变化，types.ts 手动同步）
+
+## 756fe37 — 审查修复 P0+P1：摘要判定 / AI 工具越权 / 时区 / 本地推理兼容等七项
 - 依据 v0.4 审查问题地图（2026-09-12，22 项逐条核实：15 项属实、3 项部分属实、C3 拦截计数核实为不成立），先修两个 P0 与五个 P1：
 - **P0-1 每日摘要「需要回复」失效**（F1）：`ai/digest.py` 仍查已退役的旧 `drafts` 表（sent_ids/_has_draft），用户已回复的邮件在摘要里恒显示需回复、「已有草稿」标记恒 False——改查 `user_drafts`（`status='sent' AND in_reply_to`；待审 pending_review 计入已有草稿标记且保持需回复）；新增 `test_digest.py` 两例回归
 - **P0-2 AI 工具会话范围越权**（F2）：`ai/tools.py` 的 search/list_recent/list_folders/create_folder/start_organize 接受模型传任意 `account_id` 不校验、digest_stats 无账号过滤（汇总全部账号）——`execute()` 统一收口：args.account_id 必须 ∈ 会话范围（缺省回落主账号）；`run` 签名加 scope 参数，`_scope_guard` 改按会话范围集合（顺带修复多账号会话读副账号邮件被误拒的问题）；digest_stats 四条 SQL 加范围过滤；agent 循环与审批端点传入范围；新增 3 例越权回归

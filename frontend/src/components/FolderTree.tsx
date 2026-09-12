@@ -136,6 +136,15 @@ export default function FolderTree({
     setActiveTab(null)
   }
 
+  // 草稿入口徽章：AI 待审草稿数（v0.4 审查 U3：树此前完全没有计数徽章）
+  const pendingDraftsQuery = useQuery({
+    queryKey: ['user-drafts', 'pending_review'],
+    queryFn: () => api.getUserDrafts('pending_review'),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
+  const pendingDraftCount = pendingDraftsQuery.data?.drafts.length ?? 0
+
   // 右键菜单与 CRUD 对话框
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null)
   const [dialog, setDialog] = useState<
@@ -240,6 +249,14 @@ export default function FolderTree({
       <button className={rowCls(selection.type === 'drafts')} onClick={() => onSelect({ type: 'drafts' })}>
         <FilePenLine className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">草稿</span>
+        {pendingDraftCount > 0 && (
+          <span
+            className="ml-auto shrink-0 rounded-full bg-violet-100 px-1.5 t-xs font-medium text-violet-600"
+            title={`${pendingDraftCount} 条草稿待审`}
+          >
+            {pendingDraftCount > 99 ? '99+' : pendingDraftCount}
+          </span>
+        )}
       </button>
       {/* v0.4 审核意见：AI 总管家/每日摘要从右上角按钮移入树（点开为页签，离开邮件基座时树隐藏） */}
       {aiEnabled && (
@@ -508,7 +525,16 @@ function FolderNodeRow({
         ) : (
           <Folder className="h-3.5 w-3.5 shrink-0 text-gray-400" />
         )}
-        <span className="truncate">{item.is_archive ? 'Archived' : node.label}</span>
+        {/* 归档夹显示服务器实名（账号可自定义 archive_folder 名，硬编码「Archived」会显示错，审查 C2） */}
+        <span className="truncate">{node.label}</span>
+        {item.unread > 0 && (
+          <span
+            className="ml-auto shrink-0 rounded-full bg-indigo-100 px-1.5 t-xs font-medium text-indigo-600"
+            title={`${item.unread} 封未读`}
+          >
+            {item.unread > 99 ? '99+' : item.unread}
+          </span>
+        )}
       </div>
       {node.children.map((child) => (
         <FolderNodeRow

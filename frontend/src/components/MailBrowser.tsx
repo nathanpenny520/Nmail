@@ -11,7 +11,8 @@ import { useJob } from '../api/useJob'
 import { categoryBadgeMap, useCategories } from '../api/useMeta'
 import { shortDate } from '../utils/format'
 import {
-  type EmailDetail, type EmailSummary, type FolderCacheItem, type JobInfo, type OrganizeResult,
+  type EmailDetail, type EmailListResp, type EmailSummary, type FolderCacheItem, type JobInfo,
+  type OrganizeResult,
 } from '../types'
 import { useCompose } from './compose/ComposeContext'
 import ContextMenu, { type ContextMenuItem } from './ContextMenu'
@@ -210,6 +211,7 @@ export default function MailBrowser({
     void queryClient.invalidateQueries({ queryKey: ['emails'] })
     void queryClient.invalidateQueries({ queryKey: ['email'] })
     void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    void queryClient.invalidateQueries({ queryKey: ['folder-cache'] }) // 树未读徽章跟随
   }
 
   // 筛选/翻页变化时清空批量选择
@@ -232,6 +234,13 @@ export default function MailBrowser({
   const searchRef = useRef<HTMLInputElement>(null)
   // 邮件行右键菜单（§4.3；系统右键已在应用层全局屏蔽）
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; item: EmailSummary } | null>(null)
+  // 右键「移动到…」的文件夹清单：按被右键邮件所属账号取（聚合视图下与当前筛选账号不同）
+  const moveFoldersQuery = useQuery({
+    queryKey: ['folder-cache', rowMenu?.item.account_id ?? accountId],
+    queryFn: () => api.getFolders((rowMenu?.item.account_id ?? accountId)!),
+    enabled: rowMenu != null,
+    staleTime: 5 * 60 * 1000,
+  })
   useEffect(() => {
     // 列表变化时光标跟随选中，无选中则落在第一封
     if (selectedId != null && items.some((i) => i.id === selectedId)) {
@@ -352,11 +361,45 @@ export default function MailBrowser({
   })
   const organizing = organizeMutation.isPending || organizeJob?.status === 'running'
 
+  // 已读合并写（v0.4 审查 U4）：点击先本地置已读（乐观），800ms 内连续点击
+  // 合并为一次批量请求；快速浏览不再逐封直发 IMAP SEEN。失败仅提示，20s 轮询会校正。
+  const readQueueRef = useRef<Set<number>>(new Set())
+  const readTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const markReadLocal = (ids: number[]) => {
+    const data = queryClient.getQueryData<EmailListResp>(listQueryKey)
+    if (!data) return
+    const idSet = new Set(ids)
+    queryClient.setQueryData(listQueryKey, {
+      ...data,
+      items: data.items.map((it) => (idSet.has(it.id) ? { ...it, is_read: true } : it)),
+    })
+  }
+  const flushReadQueue = () => {
+    readTimerRef.current = null
+    const ids = [...readQueueRef.current]
+    readQueueRef.current.clear()
+    if (ids.length === 0) return
+    void api.batchAction(ids, 'read').catch(() => {
+      setSyncMessage('已读标记失败，列表刷新后会恢复真实状态', 5000)
+    })
+  }
+  useEffect(() => () => {
+    // 卸载前把未落地的已读直接发出（fire-and-forget）
+    if (readTimerRef.current) clearTimeout(readTimerRef.current)
+    const ids = [...readQueueRef.current]
+    readQueueRef.current.clear()
+    if (ids.length > 0) void api.batchAction(ids, 'read').catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const selectEmail = (item: EmailSummary) => {
     setSelectedId(item.id)
     setShowImages(false)
     if (!item.is_read) {
-      actionMutation.mutate({ id: item.id, action: 'read' })
+      markReadLocal([item.id])
+      readQueueRef.current.add(item.id)
+      if (readTimerRef.current) clearTimeout(readTimerRef.current)
+      readTimerRef.current = setTimeout(flushReadQueue, 800)
     }
   }
 
@@ -735,12 +778,22 @@ export default function MailBrowser({
             invalidateMail()
           }).catch((err: Error) => setSyncMessage(`${label}失败：${err.message}`))
         }
+        // 「移动到…」二级菜单（§4.3）：列该邮件所属账号的文件夹，排除其当前所在
+        const moveTargets = (moveFoldersQuery.data?.folders ?? [])
+          .filter((f) => f.name !== item.folder)
+          .map((f) => ({
+            label: f.name,
+            onSelect: () => (multi
+              ? batchMutation.mutate({ action: 'move', folder: f.name })
+              : actionMutation.mutate({ id: item.id, action: 'move', folder: f.name })),
+          }))
         const items: ContextMenuItem[] = [
           { label: '打开', onSelect: () => selectEmail(item) },
           { label: item.is_read ? '标为未读' : '标为已读',
             onSelect: () => (multi ? runBatch(item.is_read ? 'unread' : 'read') : runSingle(item.is_read ? 'unread' : 'read')) },
           { label: item.starred ? '取消星标' : '加星标',
             onSelect: () => (multi ? runBatch(item.starred ? 'unstar' : 'star') : runSingle(item.starred ? 'unstar' : 'star')) },
+          { label: '移动到…', children: moveTargets },
           { label: '归档', onSelect: () => (multi ? runBatch('archive') : runSingle('archive')) },
           { label: '删除', danger: true, onSelect: () => (multi ? runBatch('trash') : runSingle('trash')) },
           { label: `发件人加入白名单`, onSelect: () => addList('whitelist', '加入白名单') },

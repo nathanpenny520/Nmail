@@ -85,6 +85,25 @@ def send_due_drafts() -> None:
             logger.exception("scheduled draft %s failed", row["id"])
 
 
+def expire_stale_actions() -> int:
+    """审批动作 24h 未处理自动过期（REDESIGN_PLAN §6.5；审查 U2：原先 pending 永久挂起）。
+
+    created_at 为 SQLite datetime('now')（UTC），边界用同源表达式比较；每次 tick
+    顺带执行（pending 量小，无索引也足够快）。
+    """
+    conn = get_conn()
+    cur = conn.execute(
+        "UPDATE ai_actions SET status = 'expired',"
+        " error = '超过 24 小时未处理，自动过期', decided_at = ?"
+        " WHERE status = 'pending' AND created_at <= datetime('now', '-24 hours')",
+        (datetime.now().isoformat(timespec="seconds"),),
+    )
+    conn.commit()
+    if cur.rowcount:
+        logger.info("expired %s stale pending ai_actions", cur.rowcount)
+    return cur.rowcount
+
+
 def poll_due_accounts() -> None:
     interval_minutes = int(get_setting("poll_interval_minutes", 5) or 5)
     now = datetime.now(UTC)
@@ -110,6 +129,11 @@ def poll_due_accounts() -> None:
         send_due_drafts()
     except Exception:  # noqa: BLE001
         logger.exception("scheduled draft dispatch crashed")
+
+    try:
+        expire_stale_actions()
+    except Exception:  # noqa: BLE001
+        logger.exception("ai_actions expiry scan crashed")
 
     if _digest_due():
         try:
