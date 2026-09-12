@@ -14,16 +14,16 @@
 }
 [data-font="standard"] {
   --fs-xs: 11px;
-  --fs-sm: 12px;
-  --fs-md: 13px;
-  --fs-lg: 14.5px;
+  --fs-sm: 12.5px;
+  --fs-md: 13.5px;
+  --fs-lg: 15px;
   --app-zoom: 1;
 }
 [data-font="large"] {
   --fs-xs: 11.5px;
-  --fs-sm: 12.5px;
-  --fs-md: 13.5px;
-  --fs-lg: 15px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
   --app-zoom: 1.12;
 }
 body > #root {
@@ -37,10 +37,12 @@ body > #root {
   zoom: 0.75;
 }
 
-.t-xs { font-size: var(--fs-xs); }
-.t-sm { font-size: var(--fs-sm); }
-.t-md { font-size: var(--fs-md); }
-.t-lg { font-size: var(--fs-lg); }
+/* 唯一字号入口（v0.4 门禁，见 scripts/lint-font.mjs）：应用 UI 一律用 t-*，
+   禁止 Tailwind 裸字号类与 text-[Npx]；行高随令牌走，保证跨档位行距一致。 */
+.t-xs { font-size: var(--fs-xs); line-height: 1.4; }
+.t-sm { font-size: var(--fs-sm); line-height: 1.45; }
+.t-md { font-size: var(--fs-md); line-height: 1.5; }
+.t-lg { font-size: var(--fs-lg); line-height: 1.35; }
 
 /* 拖拽分隔条时的全局状态 */
 body.dragging-col {

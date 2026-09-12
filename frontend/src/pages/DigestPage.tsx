@@ -149,20 +149,20 @@ export default function DigestPage() {
   }
 
   if (isLoading) {
-    return <div className="p-8 text-sm text-gray-400">加载摘要中…</div>
+    return <div className="p-8 t-md text-gray-400">加载摘要中…</div>
   }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">
+        <h1 className="t-lg font-semibold">
           每日摘要
-          {digest && <span className="ml-2 text-sm font-normal text-gray-400">{digest.date}</span>}
+          {digest && <span className="ml-2 t-md font-normal text-gray-400">{digest.date}</span>}
         </h1>
         <div className="flex items-center gap-2">
           {digest && (
             <button
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50"
               onClick={exportMd}
             >
               <Download className="h-3.5 w-3.5" /> 导出 Markdown
@@ -170,7 +170,7 @@ export default function DigestPage() {
           )}
           {aiEnabled && (
             <button
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               onClick={() => generateMutation.mutate()}
               disabled={generateMutation.isPending}
             >
@@ -184,13 +184,13 @@ export default function DigestPage() {
       </div>
 
       {!aiEnabled && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 t-md text-amber-800">
           AI 功能已停用（设置 - AI 配置可开启），暂停生成摘要；历史摘要仍可查看与导出。
         </div>
       )}
 
       {generateMutation.isError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 t-md text-red-700">
           生成失败：{(generateMutation.error as Error).message}
         </div>
       )}
@@ -198,7 +198,7 @@ export default function DigestPage() {
       {!digest ? (
         <div className="rounded-2xl border border-dashed border-gray-200 px-6 py-16 text-center">
           <Sparkles className="mx-auto h-8 w-8 text-indigo-200" />
-          <p className="mt-3 text-sm text-gray-400">
+          <p className="mt-3 t-md text-gray-400">
             还没有摘要。每天 {data?.dates.length === 0 ? '定时自动生成' : ''}，也可以现在手动生成一份。
           </p>
         </div>
@@ -207,10 +207,10 @@ export default function DigestPage() {
           {/* AI 综述 */}
           {digest.ai_overview && (
             <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-5">
-              <div className="flex items-center gap-2 text-xs font-semibold text-violet-700">
+              <div className="flex items-center gap-2 t-sm font-semibold text-violet-700">
                 <Sparkles className="h-3.5 w-3.5" /> AI 综述
               </div>
-              <div className="mt-1 text-sm leading-relaxed text-gray-800">
+              <div className="mt-1 t-md leading-relaxed text-gray-800">
                 <Markdown text={digest.ai_overview} />
               </div>
             </div>
@@ -225,8 +225,8 @@ export default function DigestPage() {
               { label: 'AI 已归档营销', value: digest.overview.auto_archived },
             ].map((tile) => (
               <div key={tile.label} className="rounded-2xl border border-gray-200 bg-white p-4 text-center shadow-sm">
-                <div className="text-3xl font-semibold tracking-tight text-gray-900">{tile.value}</div>
-                <div className="mt-1 text-xs text-gray-400">{tile.label}</div>
+                <div className="t-lg font-semibold tracking-tight text-gray-900">{tile.value}</div>
+                <div className="mt-1 t-sm text-gray-400">{tile.label}</div>
               </div>
             ))}
           </div>
@@ -234,13 +234,13 @@ export default function DigestPage() {
           {/* 图表行 */}
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="text-sm font-medium text-gray-700">近 7 天新邮件</h2>
+              <h2 className="t-md font-medium text-gray-700">近 7 天新邮件</h2>
               <div className="mt-3">
                 <Chart option={trendOption} height={200} />
               </div>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="text-sm font-medium text-gray-700">今日分类分布</h2>
+              <h2 className="t-md font-medium text-gray-700">今日分类分布</h2>
               <div className="mt-3">
                 <Chart option={categoryOption} height={200} />
               </div>
@@ -249,18 +249,18 @@ export default function DigestPage() {
 
           {/* 需要回复 */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-medium text-gray-700">
+            <h2 className="t-md font-medium text-gray-700">
               需要回复（{digest.need_reply.length}）
             </h2>
             {digest.need_reply.length === 0 ? (
-              <p className="mt-3 text-xs text-gray-400">没有等你回复的邮件，很清净。</p>
+              <p className="mt-3 t-sm text-gray-400">没有等你回复的邮件，很清净。</p>
             ) : (
               <ul className="mt-3 divide-y divide-gray-50">
                 {digest.need_reply.map((item) => (
                   <li key={item.email_id} className="flex items-center gap-3 py-2.5">
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm text-gray-800">{item.subject || '（无主题）'}</div>
-                      <div className="mt-0.5 text-xs text-gray-400">
+                      <div className="truncate t-md text-gray-800">{item.subject || '（无主题）'}</div>
+                      <div className="mt-0.5 t-sm text-gray-400">
                         {item.sender}
                         {item.reason && ` · ${item.reason}`}
                       </div>
@@ -268,7 +268,7 @@ export default function DigestPage() {
                     {item.has_draft && (
                       <Link
                         to="/drafts"
-                        className="shrink-0 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100"
+                        className="shrink-0 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 t-sm font-medium text-violet-700 hover:bg-violet-100"
                       >
                         草稿待审
                       </Link>
@@ -281,15 +281,15 @@ export default function DigestPage() {
 
           {/* 重要邮件 */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-medium text-gray-700">重要邮件</h2>
+            <h2 className="t-md font-medium text-gray-700">重要邮件</h2>
             {digest.important.length === 0 ? (
-              <p className="mt-3 text-xs text-gray-400">近期没有重要邮件。</p>
+              <p className="mt-3 t-sm text-gray-400">近期没有重要邮件。</p>
             ) : (
               <ul className="mt-3 divide-y divide-gray-50">
                 {digest.important.map((item) => (
                   <li key={item.email_id} className="flex items-center gap-3 py-2.5">
                     <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                      className={`shrink-0 rounded px-1.5 py-0.5 t-xs font-bold ${
                         item.importance === 'critical'
                           ? 'bg-red-100 text-red-700'
                           : 'bg-amber-100 text-amber-700'
@@ -298,12 +298,12 @@ export default function DigestPage() {
                       {item.importance === 'critical' ? '紧急' : '重要'}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm text-gray-800">{item.subject || '（无主题）'}</div>
-                      <div className="mt-0.5 text-xs text-gray-400">{item.sender}</div>
+                      <div className="truncate t-md text-gray-800">{item.subject || '（无主题）'}</div>
+                      <div className="mt-0.5 t-sm text-gray-400">{item.sender}</div>
                     </div>
                     <Link
                       to={`/?focus=${item.email_id}`}
-                      className="shrink-0 text-xs text-indigo-600 hover:underline"
+                      className="shrink-0 t-sm text-indigo-600 hover:underline"
                     >
                       查看
                     </Link>
@@ -316,10 +316,10 @@ export default function DigestPage() {
           {/* 各账号 */}
           {digest.by_account.length > 1 && (
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="text-sm font-medium text-gray-700">各账号今日</h2>
+              <h2 className="t-md font-medium text-gray-700">各账号今日</h2>
               <div className="mt-3 space-y-2">
                 {digest.by_account.map((a) => (
-                  <div key={a.email} className="flex items-center gap-3 text-xs">
+                  <div key={a.email} className="flex items-center gap-3 t-sm">
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: a.color }} />
                     <span className="w-52 truncate text-gray-600">{a.email}</span>
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">

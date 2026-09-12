@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — v0.4 P1: UI 骨架改版（砍侧栏 · 邮件基座 · 字号统一门禁）
+- 依据 docs/REDESIGN_PLAN.md §3/§9/§13 P1（2026-09-12 定稿），本阶段纯前端
+- **导航重设计**：删除应用左侧竖栏；「邮件」成为唯一常驻基座页签，AI 总管家/每日摘要/设置改为标签条右侧小图标按钮（点击才产生/激活页签，沿用 PAGE_TABS 记忆机制），通知铃与新邮件按钮同区；应用标识移至标签条最左
+- **文件夹树骨架**：新增 `FolderTree`（智能视图：聚合收件箱/待审草稿/草稿箱/已归档 + 账号折叠组：状态点/展开记忆/INBOX 子节点）+ `MailPage`（基座组合页，视图初值取 URL）；MailBrowser 支持 `initialAccountId` 由树下发（key 换绑重挂）；树 P1 为只读骨架，服务器文件夹节点与拖拽随 P2
+- **旧路由重定向**：/drafts→/?view=review、/mydrafts→/?view=mydrafts、/archived→/?view=archived；InboxPage/ArchivedPage 删除（并入 MailPage）；待审草稿节点与 AI/摘要图标在 AI 停用时隐藏（沿用 AI_ONLY 语义）
+- **字号统一**：t-* 令牌成为唯一字号入口——88 处裸 text-xs/sm 等 + 19 处 text-[Npx] 全量迁移（standard/large 档数值微调 +0.5px，t-* 补行高）；新增 `scripts/lint-font.mjs` 门禁（npm run build 前置）禁止裸字号类回潮，白名单 Markdown/HtmlMail 富文本渲染
+- 验证：npm run build（lint:font+tsc+vite）通过；隔离实例（8799，NMAIL_DATA_DIR=/tmp）浏览器冒烟——新布局/树选中/路由重定向/三档字号变量与视觉/AI 停用隐藏与恢复/写信按钮（无账号静默=既有行为）逐项截图确认
+- 待办：真实账号下的树导航视觉走查由用户在下轮验证；P2 将把账号/文件夹下拉与树统一
+
 ## 31941a4 — fix: AI 档案被外力清空后不再自动恢复的自愈缺口（macOS 实例数据已恢复）
 - 用户 mac 实例 AI 配置"消失"：排障确认主值 `ai_profiles` 在昨日 16:32 被旧版 ensure_migrated 静默重建缺陷写成空列表（备份停在 14:31 即为其指纹——正常删除走 save_profiles 会同步备份），空列表是合法 JSON，自愈只认"缺失/损坏"而不触发；随后孤儿密钥对账把失档 API key 清掉，造成"配置没了"
 - 修复：`ensure_migrated` 把"空主值 + 非空备份"纳入自愈条件（正常删除走 save_profiles 时备份同步为空，不会误恢复故意删空的场景）

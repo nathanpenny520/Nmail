@@ -306,7 +306,7 @@ export default function EmailReader({
           {/* 附件 */}
           {detail.attachments.length > 0 && (
             <div className="mt-6 border-t border-gray-100 pt-3">
-              <div className="mb-2 text-xs font-medium text-gray-500">
+              <div className="mb-2 t-sm font-medium text-gray-500">
                 附件（{detail.attachments.length}）
               </div>
               <div className="flex flex-wrap gap-2">
@@ -314,7 +314,7 @@ export default function EmailReader({
                   <a
                     key={att.id}
                     href={att.download_url}
-                    className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs text-gray-700 hover:border-indigo-300 hover:bg-indigo-50"
+                    className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 t-sm text-gray-700 hover:border-indigo-300 hover:bg-indigo-50"
                     title={att.filename}
                   >
                     <span className="max-w-52 truncate font-medium">{att.filename}</span>
@@ -345,12 +345,12 @@ function MoveMenu({
     <>
       <div className="fixed inset-0 z-10" onClick={onClose} />
       <div className="absolute left-0 top-full z-20 mt-1 max-h-72 w-56 overflow-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
-        {isLoading && <div className="px-3 py-2 text-xs text-gray-400">加载文件夹…</div>}
-        {error && <div className="px-3 py-2 text-xs text-red-500">{(error as Error).message}</div>}
+        {isLoading && <div className="px-3 py-2 t-sm text-gray-400">加载文件夹…</div>}
+        {error && <div className="px-3 py-2 t-sm text-red-500">{(error as Error).message}</div>}
         {data?.folders.map((f) => (
           <button
             key={f.name}
-            className={`block w-full truncate px-3 py-1.5 text-left text-xs hover:bg-indigo-50 ${
+            className={`block w-full truncate px-3 py-1.5 text-left t-sm hover:bg-indigo-50 ${
               f.name === current ? 'text-indigo-600 font-medium' : 'text-gray-600'
             }`}
             onClick={() => onPick(f.name)}

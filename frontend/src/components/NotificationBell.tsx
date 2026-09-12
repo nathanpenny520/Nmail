@@ -97,7 +97,7 @@ export default function NotificationBell() {
       >
         <Bell className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 t-xs font-bold leading-none text-white">
             {unread > 99 ? '99+' : unread}
           </span>
         )}
@@ -121,11 +121,11 @@ export default function NotificationBell() {
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
           <div className="absolute bottom-0 left-10 z-40 mb-1 w-80 rounded-xl border border-gray-200 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
-              <span className="text-xs font-semibold text-gray-700">通知中心</span>
+              <span className="t-sm font-semibold text-gray-700">通知中心</span>
               <div className="flex items-center gap-2">
                 {unread > 0 && (
                   <button
-                    className="text-[11px] text-indigo-600 hover:underline"
+                    className="t-xs text-indigo-600 hover:underline"
                     onClick={() => readAllMutation.mutate()}
                   >
                     全部已读
@@ -133,7 +133,7 @@ export default function NotificationBell() {
                 )}
                 {(data?.items.length ?? 0) > 0 && (
                   <button
-                    className="text-[11px] text-gray-400 hover:text-red-500"
+                    className="t-xs text-gray-400 hover:text-red-500"
                     title="删除全部已读通知"
                     onClick={() => clearReadMutation.mutate()}
                   >
@@ -144,7 +144,7 @@ export default function NotificationBell() {
             </div>
             <div className="max-h-80 overflow-y-auto">
               {(data?.items.length ?? 0) === 0 && (
-                <div className="px-4 py-8 text-center text-xs text-gray-300">暂无通知</div>
+                <div className="px-4 py-8 text-center t-sm text-gray-300">暂无通知</div>
               )}
               {data?.items.map((n) => (
                 <div
@@ -160,9 +160,9 @@ export default function NotificationBell() {
                   <div className="flex items-start gap-2 pr-5">
                     {!n.is_read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />}
                     <div className="min-w-0">
-                      <div className="truncate text-xs font-medium text-gray-800">{n.title}</div>
-                      {n.body && <div className="mt-0.5 line-clamp-2 text-[11px] text-gray-500">{n.body}</div>}
-                      <div className="mt-0.5 text-[10px] text-gray-300">{n.created_at}</div>
+                      <div className="truncate t-sm font-medium text-gray-800">{n.title}</div>
+                      {n.body && <div className="mt-0.5 line-clamp-2 t-xs text-gray-500">{n.body}</div>}
+                      <div className="mt-0.5 t-xs text-gray-300">{n.created_at}</div>
                     </div>
                   </div>
                   <button

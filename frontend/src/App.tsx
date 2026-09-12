@@ -4,13 +4,10 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { api } from './api/client'
 import { ComposeProvider } from './components/compose/ComposeContext'
-import ArchivedPage from './pages/ArchivedPage'
 import DigestPage from './pages/DigestPage'
-import DraftsPage from './pages/DraftsPage'
-import InboxPage from './pages/InboxPage'
+import MailPage from './pages/MailPage'
 import ManagerPage from './pages/ManagerPage'
 import SettingsPage from './pages/SettingsPage'
-import UserDraftsPage from './pages/UserDraftsPage'
 
 /** 把设置里的界面字号档位应用到 <html data-font>，全局 CSS 变量随之切换。 */
 function FontApplier() {
@@ -30,10 +27,11 @@ export default function App() {
       <ComposeProvider>
         <Routes>
           <Route element={<Layout />}>
-            <Route path="/" element={<InboxPage />} />
-            <Route path="/drafts" element={<DraftsPage />} />
-            <Route path="/mydrafts" element={<UserDraftsPage />} />
-            <Route path="/archived" element={<ArchivedPage />} />
+            <Route path="/" element={<MailPage />} />
+            {/* v0.4 旧路由重定向（REDESIGN_PLAN §3.4）：待审草稿/草稿箱/已归档并入邮件基座的树视图 */}
+            <Route path="/drafts" element={<Navigate to="/?view=review" replace />} />
+            <Route path="/mydrafts" element={<Navigate to="/?view=mydrafts" replace />} />
+            <Route path="/archived" element={<Navigate to="/?view=archived" replace />} />
             <Route path="/digest" element={<DigestPage />} />
             <Route path="/assistant" element={<ManagerPage />} />
             <Route path="/settings" element={<SettingsPage />} />

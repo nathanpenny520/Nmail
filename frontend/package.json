@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "lint:font": "node ../scripts/lint-font.mjs",
+    "build": "npm run lint:font && tsc --noEmit && vite build",
     "preview": "vite preview",
     "gen:api": "openapi-typescript openapi.json -o src/api/schema.d.ts"
   },

@@ -61,7 +61,7 @@ export function useOauthAuthorize(onDone: (email: string) => void) {
 }
 
 const inputClass =
-  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
+  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 t-md outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
 
 function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
   const queryClient = useQueryClient()
@@ -98,21 +98,21 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
           ? <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
           : <ShieldCheck className="h-4 w-4 shrink-0 text-gray-300" />}
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-gray-800">
+          <div className="t-md font-medium text-gray-800">
             {provider.name}
-            <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+            <span className={`ml-2 rounded-full px-2 py-0.5 t-sm ${
               provider.configured ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-200/70 text-gray-500'
             }`}>
               {provider.configured ? `已配置 ${provider.client_id_masked}` : '未配置'}
             </span>
           </div>
-          <div className="mt-0.5 text-xs text-gray-400">
+          <div className="mt-0.5 t-sm text-gray-400">
             支持域名：{provider.domains.join(' / ')}
           </div>
         </div>
-        {message && <span className="text-xs text-indigo-600">{message}</span>}
+        {message && <span className="t-sm text-indigo-600">{message}</span>}
         <button
-          className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-white hover:text-indigo-600"
+          className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1.5 t-sm text-gray-600 hover:bg-white hover:text-indigo-600"
           onClick={() => {
             setEditing((v) => {
               if (!v) {
@@ -153,9 +153,9 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
             autoComplete="off"
           />
           <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-700">{provider.redirect_uri}</code>
+            <code className="min-w-0 flex-1 truncate rounded bg-gray-100 px-2 py-1 t-xs text-gray-700">{provider.redirect_uri}</code>
             <button
-              className="inline-flex shrink-0 items-center gap-1 rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+              className="inline-flex shrink-0 items-center gap-1 rounded border border-gray-200 px-2 py-1 t-xs text-gray-600 hover:bg-gray-50"
               disabled={!provider.redirect_uri}
               onClick={() => {
                 void navigator.clipboard.writeText(provider.redirect_uri)
@@ -169,7 +169,7 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
           </div>
           <div className="flex items-center gap-2">
             <button
-              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               disabled={!clientId.trim() || saveMutation.isPending}
               onClick={() => saveMutation.mutate()}
             >
@@ -177,7 +177,7 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
             </button>
             {provider.configured && (
               <button
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:bg-white hover:text-red-600 disabled:opacity-50"
+                className="rounded-lg border border-gray-200 px-3 py-1.5 t-sm text-gray-500 hover:bg-white hover:text-red-600 disabled:opacity-50"
                 disabled={saveMutation.isPending}
                 onClick={() => {
                   setClientId('')
@@ -208,15 +208,15 @@ export function OauthConfigCard() {
         onClick={() => setOpen((v) => !v)}
       >
         <ChevronDown className={`h-4 w-4 shrink-0 text-indigo-500 transition-transform ${open ? 'rotate-180' : ''}`} />
-        <span className="flex-1 text-sm font-medium text-indigo-900">
+        <span className="flex-1 t-md font-medium text-indigo-900">
           OAuth2 授权登录（Gmail / Outlook）
-          {anyConfigured && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">可用</span>}
+          {anyConfigured && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 t-sm text-emerald-700">可用</span>}
         </span>
-        <span className="text-xs text-indigo-400">免授权码直连，Google/微软已停用密码登录</span>
+        <span className="t-sm text-indigo-400">免授权码直连，Google/微软已停用密码登录</span>
       </button>
       {open && (
         <div className="mt-3 space-y-3">
-          <div className="rounded-lg bg-white/70 px-3 py-2 text-xs leading-relaxed text-gray-600">
+          <div className="rounded-lg bg-white/70 px-3 py-2 t-sm leading-relaxed text-gray-600">
             <div className="font-medium text-gray-700">一次性配置：在对应服务商行点「配置」，把行内显示的回调地址登记到你的 OAuth 客户端，再把 client_id 填进来</div>
             <ul className="mt-1 list-disc space-y-0.5 pl-4">
               <li><b>Gmail</b>：Google Cloud 控制台 → 启用 Gmail API → OAuth 客户端 ID（选「桌面应用」类型，回环地址自动放行；Web 类型需登记回调并填写 client_secret）</li>
@@ -252,7 +252,7 @@ export function ReauthorizeButton({ account, onDone }: {
   }, [flow.error])
   return (
     <button
-      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-500 hover:bg-white hover:text-emerald-600 disabled:opacity-40"
+      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 t-sm text-gray-500 hover:bg-white hover:text-emerald-600 disabled:opacity-40"
       title="重新授权：打开浏览器完成登录，刷新访问令牌（不改邮箱地址与本地数据）"
       disabled={flow.pending}
       onClick={() => flow.start({ email: account.email, provider: account.oauth_provider })}

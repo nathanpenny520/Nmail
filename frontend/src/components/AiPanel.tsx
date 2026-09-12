@@ -66,12 +66,12 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
   return (
     <div className="fixed inset-y-0 right-0 z-30 flex w-96 flex-col border-l border-gray-200 bg-white shadow-2xl">
       <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
-        <span className="flex shrink-0 items-center gap-2 text-sm font-semibold text-violet-700">
+        <span className="flex shrink-0 items-center gap-2 t-md font-semibold text-violet-700">
           <Sparkles className="h-4 w-4" /> AI 助手
         </span>
         {profiles.length > 1 && (
           <select
-            className="rounded-lg border border-gray-300 px-1.5 py-1 text-[11px] outline-none focus:border-violet-500"
+            className="rounded-lg border border-gray-300 px-1.5 py-1 t-xs outline-none focus:border-violet-500"
             value={profileId}
             onChange={(e) => setProfileId(e.target.value)}
             title="本次对话使用的 AI 配置"
@@ -92,13 +92,13 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {messages.length === 0 && !pending && (
           <div className="space-y-2">
-            <p className="text-xs leading-relaxed text-gray-400">
+            <p className="t-sm leading-relaxed text-gray-400">
               基于当前邮件（{email.subject || '无主题'}）向 AI 提问：
             </p>
             {QUICK_PROMPTS.map((q) => (
               <button
                 key={q}
-                className="block w-full rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-left text-xs text-violet-700 hover:bg-violet-100"
+                className="block w-full rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-left t-sm text-violet-700 hover:bg-violet-100"
                 onClick={() => ask(q)}
               >
                 {q}
@@ -111,7 +111,7 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
           if (m.role === 'user') {
             return (
               <div key={i} className="flex justify-end">
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-violet-600 px-3 py-2 text-xs leading-relaxed text-white">
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-violet-600 px-3 py-2 t-sm leading-relaxed text-white">
                   {m.content}
                 </div>
               </div>
@@ -120,7 +120,7 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
           if (isLast && pending && m.content === '') {
             return (
               <div key={i} className="flex justify-start">
-                <div className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3 py-2 text-xs text-gray-500">
+                <div className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3 py-2 t-sm text-gray-500">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> 思考中…
                 </div>
               </div>
@@ -128,14 +128,14 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
           }
           return (
             <div key={i} className="flex justify-start">
-              <div className="max-w-[90%] rounded-2xl bg-gray-100 px-3 py-2 text-xs text-gray-800">
+              <div className="max-w-[90%] rounded-2xl bg-gray-100 px-3 py-2 t-sm text-gray-800">
                 <Markdown text={m.content} />
               </div>
             </div>
           )
         })}
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 t-sm text-red-600">
             {error}
           </div>
         )}
@@ -144,7 +144,7 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
       <div className="border-t border-gray-100 p-3">
         <div className="flex items-center gap-2">
           <input
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-xs outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 t-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
             placeholder="问点什么…"
             value={input}
             onChange={(e) => setInput(e.target.value)}

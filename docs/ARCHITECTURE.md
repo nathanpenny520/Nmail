@@ -71,10 +71,10 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 
 | 部分 | 内容 |
 |------|------|
-| `pages/` | InboxPage/ArchivedPage（共用 MailBrowser，分屏+可拖拽）、DraftsPage（草稿分屏）、DigestPage（ECharts 摘要）、ManagerPage（AI 总管家，SSE 流式）、SettingsPage（侧边栏分类：通用/邮箱账号/AI 配置/AI 用量/关于） |
-| `components/` | Layout（侧栏 + 工作区同层标签条 + 写信台覆盖层：写信标签激活时底层页面 display:none keep-alive）、MailBrowser（三态：列表/分屏/全屏）、EmailReader（消毒 iframe+操作栏+AI 面板）、HtmlMail（sandbox=allow-same-origin+allow-popups，外链新标签打开，ResizeObserver 高度自适应+zoom 注入）、compose/（写信工作台：ComposeContext 多标签状态中枢挂 App 级 + 草稿缓存恢复、ComposeWorkbench 当前标签表单、ComposeForm 字段+附件上传落盘+定时+自动保存、RichEditor=TipTap v3 富文本、AiWriteDialog 指令生成/快捷改写→预览→替换或插入、InsertDialogs 模板/签名菜单与管理弹窗、quote.ts 回复/转发引用、ui.tsx Dropdown/Modal）、AddAccountModal、AiPanel、NotificationBell（浏览器通知）、Markdown（react-markdown+gfm） |
-| `api/` | `client.ts`（REST 封装，FormData 不设 JSON 头）、`stream.ts`（SSE 解析，错误可见）、`useAI.ts`（AI 总开关 hook，与设置页共享 ['ai-profiles'] 缓存；停用时全应用隐藏 AI 入口） |
-| 字号系统 | `index.css` 三档 CSS 变量（`--fs-xs/sm/md/lg`），`<html data-font>` 切换（FontApplier 读设置应用）；`t-xs/sm/md/lg` 工具类；正文字号独立经 iframe zoom 注入 |
+| `pages/` | MailPage（**邮件基座**：FolderTree + 视图组合——聚合收件箱/账号收件箱走 MailBrowser、待审草稿=DraftsPage、草稿箱=UserDraftsPage、已归档=MailBrowser archived；视图初值取 URL，旧路由 /drafts /mydrafts /archived 重定向并入，见 REDESIGN_PLAN §3.4）、DraftsPage（AI 待审草稿分屏，经树进入）、UserDraftsPage（写信台草稿列表，同）、DigestPage（ECharts 摘要）、ManagerPage（AI 总管家，SSE 流式）、SettingsPage（侧边栏分类：通用/邮箱账号/AI 配置/AI 用量/关于） |
+| `components/` | Layout（**v0.4 无侧栏**：顶部标签条=邮件基座页签（唯一常驻）+ 可开启页面页签（AI/摘要/设置，经右侧图标按钮点击产生，记忆 localStorage）+ 写信页签覆盖层（写信激活时底层 display:none keep-alive）+ 右侧图标按钮区 通知/AI 总管家/每日摘要/设置/新邮件）、FolderTree（文件夹树：智能视图分区 + 账号折叠组（状态点/展开记忆），P1 只读骨架——服务器文件夹节点与拖拽随 P2）、MailBrowser（三态：列表/分屏/全屏；账号/文件夹选择与新建；`initialAccountId` 由树下发）、EmailReader（消毒 iframe+操作栏+AI 面板）、HtmlMail（sandbox=allow-same-origin+allow-popups，外链新标签打开，ResizeObserver 高度自适应+zoom 注入）、compose/（写信工作台：ComposeContext 多标签状态中枢挂 App 级 + 草稿缓存恢复、ComposeWorkbench 当前标签表单、ComposeForm 字段+附件上传落盘+定时+自动保存、RichEditor=TipTap v3 富文本、AiWriteDialog 指令生成/快捷改写→预览→替换或插入、InsertDialogs 模板/签名菜单与管理弹窗、quote.ts 回复/转发引用、ui.tsx Dropdown/Modal）、AddAccountModal、AiPanel、NotificationBell（浏览器通知）、Markdown（react-markdown+gfm） |
+| `api/` | `client.ts`（REST 封装，FormData 不设 JSON 头）、`stream.ts`（SSE 解析，错误可见）、`useAI.ts`（AI 总开关 hook，与设置页共享 ['ai-profiles'] 缓存；停用时全应用隐藏 AI 入口——含树「待审草稿」节点与 AI/摘要图标） |
+| 字号系统 | `index.css` 三档 CSS 变量（`--fs-xs/sm/md/lg`+行高），`<html data-font>` 切换（FontApplier 读设置应用）；**t-\* 是唯一字号入口**——`scripts/lint-font.mjs` 门禁（`npm run build` 前置）禁止 Tailwind 裸字号类与 `text-[Npx]`（白名单：Markdown/HtmlMail 富文本渲染），裸类不随档位缩放是历史「字号不一」根因；正文字号独立经 iframe zoom 注入 |
 
 ## 数据表（nmail.db）
 

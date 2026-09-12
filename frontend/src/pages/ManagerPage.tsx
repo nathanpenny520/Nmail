@@ -161,9 +161,9 @@ export default function ManagerPage() {
       {/* 会话历史栏 */}
       <aside className="flex w-56 shrink-0 flex-col border-r border-gray-100 bg-gray-50/60">
         <div className="flex items-center justify-between px-3 py-3">
-          <span className="text-xs font-medium text-gray-500">对话历史</span>
+          <span className="t-sm font-medium text-gray-500">对话历史</span>
           <button
-            className="flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2 py-1 text-[11px] text-violet-700 hover:bg-violet-50"
+            className="flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2 py-1 t-xs text-violet-700 hover:bg-violet-50"
             onClick={startNewChat}
             disabled={pending}
           >
@@ -172,7 +172,7 @@ export default function ManagerPage() {
         </div>
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-3">
           {sessions.length === 0 && (
-            <p className="px-2 py-4 text-[11px] leading-relaxed text-gray-400">
+            <p className="px-2 py-4 t-xs leading-relaxed text-gray-400">
               还没有历史对话。发第一条消息后自动保存，仅供本机查看。
             </p>
           )}
@@ -186,9 +186,9 @@ export default function ManagerPage() {
             >
               <div className="flex items-center gap-1 pr-10">
                 {s.pinned && <Pin className="h-3 w-3 shrink-0 text-violet-500" />}
-                <span className="truncate text-xs text-gray-700">{s.title}</span>
+                <span className="truncate t-sm text-gray-700">{s.title}</span>
               </div>
-              <div className="mt-0.5 text-[10px] text-gray-400">
+              <div className="mt-0.5 t-xs text-gray-400">
                 {relativeTime(s.updated_at)}
                 {s.message_count ? ` · ${s.message_count} 条` : ''}
               </div>
@@ -223,13 +223,13 @@ export default function ManagerPage() {
       {/* 对话区 */}
       <div className="mx-auto flex h-full min-w-0 max-w-3xl flex-1 flex-col px-6">
         <div className="flex items-center justify-between py-4">
-          <h1 className="flex items-center gap-2 text-base font-semibold text-violet-700">
+          <h1 className="flex items-center gap-2 t-md font-semibold text-violet-700">
             <Sparkles className="h-4 w-4" /> AI 总管家
           </h1>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2 t-sm text-gray-500">
             {profiles.length > 1 && (
               <select
-                className="rounded-lg border border-gray-300 px-2 py-1 text-xs outline-none focus:border-violet-500"
+                className="rounded-lg border border-gray-300 px-2 py-1 t-sm outline-none focus:border-violet-500"
                 value={profileId}
                 onChange={(e) => setProfileId(e.target.value)}
                 title="本次对话使用的 AI 配置"
@@ -243,7 +243,7 @@ export default function ManagerPage() {
               </select>
             )}
             <select
-              className="rounded-lg border border-gray-300 px-2 py-1 text-xs outline-none focus:border-violet-500"
+              className="rounded-lg border border-gray-300 px-2 py-1 t-sm outline-none focus:border-violet-500"
               value={accountId ?? ''}
               onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : null)}
             >
@@ -255,7 +255,7 @@ export default function ManagerPage() {
               ))}
             </select>
             <select
-              className="rounded-lg border border-gray-300 px-2 py-1 text-xs outline-none focus:border-violet-500"
+              className="rounded-lg border border-gray-300 px-2 py-1 t-sm outline-none focus:border-violet-500"
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
             >
@@ -269,7 +269,7 @@ export default function ManagerPage() {
         <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-4">
           {messages.length === 0 && !pending && (
             <div className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/40 p-6">
-              <p className="text-xs leading-relaxed text-gray-500">
+              <p className="t-sm leading-relaxed text-gray-500">
                 我是你的邮件总管家，基于你选择的范围（{accountId ? '指定账号' : '全部账号'} · 最近 {days} 天）
                 的邮件回答问题。
               </p>
@@ -277,7 +277,7 @@ export default function ManagerPage() {
                 {QUICK_PROMPTS.map((q) => (
                   <button
                     key={q}
-                    className="block w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-left text-xs text-violet-700 hover:bg-violet-50"
+                    className="block w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-left t-sm text-violet-700 hover:bg-violet-50"
                     onClick={() => ask(q)}
                   >
                     {q}
@@ -291,7 +291,7 @@ export default function ManagerPage() {
             if (m.role === 'user') {
               return (
                 <div key={i} className="flex justify-end">
-                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-violet-600 px-3.5 py-2.5 text-[13px] leading-relaxed text-white">
+                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-violet-600 px-3.5 py-2.5 t-md leading-relaxed text-white">
                     {m.content}
                   </div>
                 </div>
@@ -301,7 +301,7 @@ export default function ManagerPage() {
             if (isLast && pending && m.content === '') {
               return (
                 <div key={i} className="flex justify-start">
-                  <div className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3.5 py-2.5 text-xs text-gray-500">
+                  <div className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3.5 py-2.5 t-sm text-gray-500">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" /> 正在翻你的邮件…
                   </div>
                 </div>
@@ -309,14 +309,14 @@ export default function ManagerPage() {
             }
             return (
               <div key={i} className="flex justify-start">
-                <div className="max-w-[90%] rounded-2xl bg-gray-100 px-3.5 py-2.5 text-[13px] text-gray-800">
+                <div className="max-w-[90%] rounded-2xl bg-gray-100 px-3.5 py-2.5 t-md text-gray-800">
                   <Markdown text={m.content} />
                 </div>
               </div>
             )
           })}
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 t-sm text-red-600">
               {error}
             </div>
           )}
@@ -325,7 +325,7 @@ export default function ManagerPage() {
         <div className="border-t border-gray-100 py-3">
           <div className="flex items-center gap-2">
             <input
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-[13px] outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 t-md outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
               placeholder="问问你的邮箱…"
               value={input}
               onChange={(e) => setInput(e.target.value)}

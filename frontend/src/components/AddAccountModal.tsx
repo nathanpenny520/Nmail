@@ -11,7 +11,7 @@ interface AddAccountModalProps {
 }
 
 const inputClass =
-  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
+  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 t-md outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
 
 export default function AddAccountModal({ onClose, onAdded }: AddAccountModalProps) {
   const [email, setEmail] = useState('')
@@ -87,7 +87,7 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-6">
       <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-          <h2 className="text-sm font-semibold">添加邮箱账号</h2>
+          <h2 className="t-md font-semibold">添加邮箱账号</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
             <X className="h-5 w-5" />
           </button>
@@ -95,7 +95,7 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
 
         <div className="space-y-4 p-5">
           <label className="block">
-            <span className="mb-1 block text-sm text-gray-600">邮箱地址</span>
+            <span className="mb-1 block t-md text-gray-600">邮箱地址</span>
             <input
               className={inputClass}
               value={email}
@@ -105,7 +105,7 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm text-gray-600">密码 / 授权码</span>
+            <span className="mb-1 block t-md text-gray-600">密码 / 授权码</span>
             <input
               className={inputClass}
               type="password"
@@ -121,7 +121,7 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
               {oauthProvider.configured ? (
                 <>
                   <button
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 t-md font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
                     disabled={!emailValid || oauthFlow.pending}
                     onClick={() => oauthFlow.start({ email: email.trim(), provider: oauthProvider.key })}
                   >
@@ -132,19 +132,19 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
                       ? '等待授权完成（在弹出的窗口中登录）…'
                       : `使用 ${oauthProvider.name} 账号授权登录（推荐）`}
                   </button>
-                  <p className="mt-1.5 text-[11px] leading-relaxed text-indigo-500/90">
+                  <p className="mt-1.5 t-xs leading-relaxed text-indigo-500/90">
                     免授权码：Google/微软已停用密码直连。授权成功后自动建号并开始后台同步。
                   </p>
                 </>
               ) : (
-                <p className="text-[11px] leading-relaxed text-indigo-800/90">
+                <p className="t-xs leading-relaxed text-indigo-800/90">
                   {oauthProvider.name} 已停用密码直连。推荐使用 OAuth2 授权登录：
                   先到 <b>设置 → 邮箱账号 → OAuth2 授权登录</b> 完成一次性配置
                   （填入你的 OAuth 客户端 client_id），回到这里即可一键授权。
                 </p>
               )}
               {oauthFlow.error && (
-                <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+                <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 t-xs text-red-700">
                   {oauthFlow.error}
                 </p>
               )}
@@ -153,7 +153,7 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
 
           {email.includes('@') && (
             <div
-              className={`rounded-xl border p-3 text-xs leading-relaxed ${
+              className={`rounded-xl border p-3 t-sm leading-relaxed ${
                 detected || probed
                   ? 'border-indigo-200 bg-indigo-50 text-indigo-800'
                   : 'border-amber-200 bg-amber-50 text-amber-800'
@@ -191,7 +191,7 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
 
           <div>
             <button
-              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800"
+              className="flex items-center gap-1 t-sm text-gray-500 hover:text-gray-800"
               onClick={() => setShowAdvanced((v) => !v)}
             >
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
@@ -231,7 +231,7 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
 
           {testMutation.data && (
             <div
-              className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${
+              className={`flex items-start gap-2 rounded-lg border p-3 t-sm ${
                 testMutation.data.ok
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                   : 'border-red-200 bg-red-50 text-red-700'
@@ -244,7 +244,7 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
             </div>
           )}
           {saveMutation.isError && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 t-sm text-red-700">
               <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
               {(saveMutation.error as Error).message}
             </div>
@@ -253,14 +253,14 @@ export default function AddAccountModal({ onClose, onAdded }: AddAccountModalPro
 
         <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-5 py-3">
           <button
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-lg border border-gray-300 px-4 py-2 t-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             onClick={() => testMutation.mutate()}
             disabled={!canSubmit}
           >
             {testMutation.isPending ? '测试中…' : '测试连接'}
           </button>
           <button
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 t-md font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             onClick={() => saveMutation.mutate()}
             disabled={!canSubmit}
           >

@@ -378,7 +378,7 @@ export default function SettingsPage() {
                           <span className="ml-2 text-gray-400">
                             {account.provider_name}
                             {account.auth_type === 'oauth2' && (
-                              <span className="ml-1.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-600">OAuth2</span>
+                              <span className="ml-1.5 rounded-full bg-emerald-50 px-1.5 py-0.5 t-xs text-emerald-600">OAuth2</span>
                             )}
                             {account.last_sync_at
                               ? ` · 上次同步 ${new Date(account.last_sync_at).toLocaleString('zh-CN', { hour12: false })}`

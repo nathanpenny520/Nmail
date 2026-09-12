@@ -40,10 +40,17 @@ function JobProgressBar({ job, label }: { job: JobInfo | null; label: string }) 
 }
 
 /**
- * 邮件浏览主界面（聚合收件箱 / 已归档 共用）。
+ * 邮件浏览主界面（聚合收件箱 / 已归档 / 按账号收件箱共用）。
  * archived=true 时列出本地归档邮件，操作栏提供"恢复到收件箱"。
+ * initialAccountId：由 MailPage 的文件夹树下发（含 null=全部账号）；未传时沿用本地记忆。
  */
-export default function MailBrowser({ archived }: { archived: boolean }) {
+export default function MailBrowser({
+  archived,
+  initialAccountId,
+}: {
+  archived: boolean
+  initialAccountId?: number | null
+}) {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const compose = useCompose()
@@ -52,6 +59,7 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
 
   // 账号/文件夹选择持久化：刷新或切标签页回来不重置（对齐分屏宽度等本地记忆）
   const [accountId, setAccountId] = useState<number | null>(() => {
+    if (initialAccountId !== undefined) return initialAccountId
     const v = Number(localStorage.getItem('nmail_sel_account'))
     return Number.isFinite(v) && v > 0 ? v : null
   })
@@ -379,13 +387,13 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
       <div className="flex h-full items-center justify-center">
         <div className="max-w-md rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
           <Inbox className="mx-auto h-10 w-10 text-indigo-200" />
-          <h2 className="mt-3 text-lg font-semibold">添加你的第一个邮箱</h2>
-          <p className="mt-2 text-sm text-gray-500">
+          <h2 className="mt-3 t-lg font-semibold">添加你的第一个邮箱</h2>
+          <p className="mt-2 t-md text-gray-500">
             Nmail 支持 QQ、163、Gmail、Outlook 等 19+ 服务商，填入邮箱和授权码即可。
           </p>
           <Link
             to="/settings"
-            className="mt-4 inline-block rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            className="mt-4 inline-block rounded-lg bg-indigo-600 px-4 py-2 t-md font-medium text-white hover:bg-indigo-700"
           >
             前往设置添加账号
           </Link>
@@ -673,17 +681,17 @@ export default function MailBrowser({ archived }: { archived: boolean }) {
           {items.length < total && (
             <div className="flex items-center justify-center gap-3 p-3">
               <button
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 t-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40"
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 disabled={page === 0 || listQuery.isFetching}
               >
                 <ChevronLeft className="h-3 w-3" /> 上一页
               </button>
-              <span className="text-xs text-gray-400">
+              <span className="t-sm text-gray-400">
                 {page + 1} / {Math.ceil(total / PAGE_SIZE)}
               </span>
               <button
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 t-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40"
                 onClick={() => setPage((p) => p + 1)}
                 disabled={(page + 1) * PAGE_SIZE >= total || listQuery.isFetching}
               >
