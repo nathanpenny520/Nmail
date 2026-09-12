@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from app.core import imap_client, oauth, sync as sync_engine
 from app.core.providers import MANUAL_NOTE, PRESETS, match_provider, probe_server
 from app.db.database import get_conn
-from app.security import set_secret
+from app.security import get_secret, set_secret
 
 router = APIRouter(prefix="/api", tags=["accounts"])
 
@@ -34,6 +34,10 @@ class AccountIn(BaseModel):
 
 class AccountPatchIn(BaseModel):
     password: str | None = None
+    imap_server: str | None = None  # 仅授权码账号可改；服务器变更会清空本地邮件重同步
+    imap_port: int | None = None
+    smtp_server: str | None = None
+    smtp_port: int | None = None
     ai_permission: str | None = None  # readonly | draft_review
     style_prompt: str | None = Field(default=None, max_length=2000)  # None=不改；空串=清除
     use_proxy: bool | None = None  # 该账号 IMAP/SMTP 是否经全局代理地址连接
@@ -260,6 +264,48 @@ def update_account(account_id: int, payload: AccountPatchIn) -> dict:
             raise HTTPException(400, detail)
         set_secret(f"account_pwd:{account_id}", payload.password)
         sync_engine._set_account_status(account_id, "ok")  # noqa: SLF001 — 模块内复用
+
+    # 服务器配置编辑（仅授权码账号）：先试连再落库；服务器变更清空本地邮件重同步
+    server_fields = {
+        "imap_server": payload.imap_server, "imap_port": payload.imap_port,
+        "smtp_server": payload.smtp_server, "smtp_port": payload.smtp_port,
+    }
+    if any(v is not None for v in server_fields.values()):
+        if row["auth_type"] == "oauth2":
+            raise HTTPException(400, "OAuth2 账号服务器随服务商预设，无需手动修改")
+        new_vals = {
+            "imap_server": (payload.imap_server or row["imap_server"]).strip(),
+            "imap_port": payload.imap_port or int(row["imap_port"]),
+            "smtp_server": (payload.smtp_server or row["smtp_server"]).strip(),
+            "smtp_port": payload.smtp_port or int(row["smtp_port"]),
+        }
+        if not new_vals["imap_server"]:
+            raise HTTPException(400, "IMAP 服务器不能为空")
+        pwd = payload.password or get_secret(f"account_pwd:{account_id}")
+        cfg = imap_client.MailConfig(email=row["email"], password=pwd or "", **new_vals)
+        ok, detail = imap_client.test_connection(cfg)
+        if not ok:
+            raise HTTPException(400, detail)
+        server_changed = (
+            new_vals["imap_server"] != row["imap_server"] or new_vals["imap_port"] != int(row["imap_port"])
+        )
+        conn.execute(
+            "UPDATE accounts SET imap_server = ?, imap_port = ?, smtp_server = ?, smtp_port = ?"
+            " WHERE id = ?",
+            (new_vals["imap_server"], new_vals["imap_port"],
+             new_vals["smtp_server"], new_vals["smtp_port"], account_id),
+        )
+        conn.commit()
+        sync_engine._set_account_status(account_id, "ok")  # noqa: SLF001 — 模块内复用
+        if server_changed:
+            # 新服务器 UID 与本地断点不具可比性：清空本地邮件与同步断点，按新服务器全量重拉
+            conn.execute("DELETE FROM emails WHERE account_id = ?", (account_id,))
+            conn.execute("DELETE FROM sync_state WHERE account_id = ?", (account_id,))
+            conn.commit()
+            sync_engine.delete_account_files(account_id)
+            sync_engine.start_sync({"id": account_id, "email": row["email"],
+                                    "imap_server": new_vals["imap_server"],
+                                    "imap_port": new_vals["imap_port"]})
 
     updated = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
     return {"ok": True, "account": _account_dict(updated)}

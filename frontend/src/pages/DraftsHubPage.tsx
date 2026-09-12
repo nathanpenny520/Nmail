@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { parseBackendTime } from '../utils/format'
 import { useFlash } from '../hooks/useFlash'
 import type { UserDraft } from '../types'
 import HtmlMail from '../components/HtmlMail'
@@ -19,9 +20,11 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'discarded', label: '已丢弃' },
 ]
 
-function fmtTime(iso: string | null): string {
+function fmtTime(iso: string | null, utcNaive = false): string {
   if (!iso) return ''
-  return new Date(iso.replace(' ', 'T')).toLocaleString('zh-CN', {
+  // send_at 是特意的本地 naive（datetime-local）；updated_at 等 datetime('now') 是 UTC naive，需补 Z
+  const d = utcNaive ? parseBackendTime(iso) : new Date(iso.replace(' ', 'T'))
+  return d.toLocaleString('zh-CN', {
     month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
   })
 }
@@ -136,7 +139,7 @@ function DraftRow({
     >
       <div className="flex items-baseline gap-2">
         <span className="min-w-0 flex-1 truncate t-md font-medium text-gray-900">{title}</span>
-        <span className="shrink-0 t-xs text-gray-400">{fmtTime(draft.updated_at)}</span>
+        <span className="shrink-0 t-xs text-gray-400">{fmtTime(draft.updated_at, true)}</span>
       </div>
       <div className="mt-0.5 flex items-center gap-1.5">
         {draft.origin === 'ai' ? (

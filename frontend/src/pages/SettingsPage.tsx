@@ -5,7 +5,8 @@ import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
 import ExtApiSection from '../components/ExtApiSection'
 import { OauthConfigCard, ReauthorizeButton } from '../components/OauthSettings'
-import type { Account, AITestResult, AIProfile, Settings } from '../types'
+import { backendLocalDate } from '../utils/format'
+import type { Account, AITestResult, AIProfile, ContactItem, Settings } from '../types'
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 t-md outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
@@ -63,6 +64,7 @@ export default function SettingsPage() {
   const [showNewProfile, setShowNewProfile] = useState(false)
   const [styleOpenId, setStyleOpenId] = useState<number | null>(null)
   const [aiGrantsOpenId, setAiGrantsOpenId] = useState<number | null>(null)
+  const [configOpenId, setConfigOpenId] = useState<number | null>(null)
   const [settingsError, setSettingsError] = useState('')
 
   useEffect(() => {
@@ -421,6 +423,15 @@ export default function SettingsPage() {
                       >
                         {account.style_prompt ? '文风 ✓' : '文风'}
                       </button>
+                      {account.auth_type !== 'oauth2' && (
+                        <button
+                          className="shrink-0 rounded-lg border border-gray-200 px-2 py-1.5 t-sm text-gray-600 hover:bg-white hover:text-indigo-600"
+                          title="修改 IMAP/SMTP 服务器与端口、更新授权码"
+                          onClick={() => setConfigOpenId(configOpenId === account.id ? null : account.id)}
+                        >
+                          配置
+                        </button>
+                      )}
                       {account.auth_type === 'oauth2' && (
                         <ReauthorizeButton
                           account={account}
@@ -451,6 +462,9 @@ export default function SettingsPage() {
                     {styleOpenId === account.id && (
                       <StylePromptEditor account={account} onClose={() => setStyleOpenId(null)} />
                     )}
+                    {configOpenId === account.id && (
+                      <AccountConfigEditor account={account} onClose={() => setConfigOpenId(null)} />
+                    )}
                     {aiGrantsOpenId === account.id && (
                       <AccountAiPanel account={account} onClose={() => setAiGrantsOpenId(null)} />
                     )}
@@ -464,7 +478,7 @@ export default function SettingsPage() {
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 t-sm leading-relaxed text-red-700">
                   有账号登录凭据失效：OAuth2 账号点「重新授权」完成登录即可；
                   授权码账号请登录对应邮箱网页版 → 设置 → 开启 IMAP/SMTP 并重新生成授权码，
-                  然后删除账号重新添加（或更新授权码）。
+                  然后在账号卡片点「配置」粘贴新授权码保存即可（服务器地址有误也可在此修改）。
                 </div>
               )}
             </div>
@@ -646,7 +660,7 @@ export default function SettingsPage() {
               ) : checkUpdateMutation.data ? (
                 <p className="mt-2 t-sm text-emerald-600">已是最新版本 v{updateState?.current_version}</p>
               ) : updateState?.checked_at ? (
-                <p className="mt-2 t-sm text-gray-400">上次检查：{updateState.checked_at.slice(0, 10)}</p>
+                <p className="mt-2 t-sm text-gray-400">上次检查：{backendLocalDate(updateState.checked_at)}</p>
               ) : null}
               {updateToggleMutation.isPending && <span className="t-sm text-gray-400">保存中…</span>}
             </div>
@@ -678,6 +692,89 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** 每账号「服务器配置」编辑器（仅授权码账号）：改 IMAP/SMTP 地址端口、更新授权码；
+ *  保存即后端试连，失败原样回显不落库；服务器变更会清空本地邮件重同步。 */
+function AccountConfigEditor({ account, onClose }: { account: Account; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [imapServer, setImapServer] = useState(account.imap_server)
+  const [imapPort, setImapPort] = useState(String(account.imap_port))
+  const [smtpServer, setSmtpServer] = useState(account.smtp_server)
+  const [smtpPort, setSmtpPort] = useState(String(account.smtp_port))
+  const [password, setPassword] = useState('')
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      api.updateAccount(account.id, {
+        imap_server: imapServer.trim(),
+        imap_port: Number(imapPort) || undefined,
+        smtp_server: smtpServer.trim(),
+        smtp_port: Number(smtpPort) || undefined,
+        ...(password.trim() ? { password: password.trim() } : {}),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      onClose()
+    },
+  })
+  const field = 'min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 t-sm outline-none focus:border-indigo-500'
+  return (
+    <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
+      <p className="t-sm leading-relaxed text-gray-600">
+        修改服务器或授权码后保存，会先试连再生效；服务器有变更会清空该账号本地已下载邮件并重新同步
+        （服务器邮件不受影响）。
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <label className="min-w-0 flex-[2]">
+          <span className="mb-1 block t-xs text-gray-500">IMAP 服务器（收信）</span>
+          <input className={field} value={imapServer} spellCheck={false}
+            onChange={(e) => setImapServer(e.target.value)} placeholder="imap.example.com" />
+        </label>
+        <label className="w-24 shrink-0">
+          <span className="mb-1 block t-xs text-gray-500">端口</span>
+          <input className={field} value={imapPort} inputMode="numeric"
+            onChange={(e) => setImapPort(e.target.value)} placeholder="993" />
+        </label>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <label className="min-w-0 flex-[2]">
+          <span className="mb-1 block t-xs text-gray-500">SMTP 服务器（发信）</span>
+          <input className={field} value={smtpServer} spellCheck={false}
+            onChange={(e) => setSmtpServer(e.target.value)} placeholder="smtp.example.com" />
+        </label>
+        <label className="w-24 shrink-0">
+          <span className="mb-1 block t-xs text-gray-500">端口</span>
+          <input className={field} value={smtpPort} inputMode="numeric"
+            onChange={(e) => setSmtpPort(e.target.value)} placeholder="465" />
+        </label>
+      </div>
+      <label className="mt-2 block">
+        <span className="mb-1 block t-xs text-gray-500">新授权码（留空=不修改）</span>
+        <input className={field} type="password" value={password} autoComplete="new-password"
+          onChange={(e) => setPassword(e.target.value)} placeholder="仅想更新授权码时填写" />
+      </label>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          className="rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending || !imapServer.trim()}
+        >
+          {saveMutation.isPending ? '试连并保存中…' : '保存'}
+        </button>
+        <button
+          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 t-sm text-gray-600 hover:bg-gray-50"
+          onClick={onClose}
+        >
+          收起
+        </button>
+        {saveMutation.isError && (
+          <span className="min-w-0 flex-1 truncate t-sm text-red-600" title={(saveMutation.error as Error).message}>
+            保存失败：{(saveMutation.error as Error).message}
+          </span>
         )}
       </div>
     </div>
@@ -1093,6 +1190,7 @@ function ContactsSection() {
   const [form, setForm] = useState({ email: '', name: '' })
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
   const [message, setMessage] = useState('')
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['contacts'] })
@@ -1106,23 +1204,32 @@ function ContactsSection() {
     },
     onError: (err: Error) => setMessage(`新增失败：${err.message}`),
   })
-  const renameMutation = useMutation({
-    mutationFn: ({ id, name }: { id: number; name: string }) => api.updateContact(id, { name }),
+  const updateMutation = useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: { name?: string; email?: string } }) =>
+      api.updateContact(id, patch),
     onSuccess: () => {
       setEditingId(null)
+      setMessage('')
       invalidate()
     },
+    onError: (err: Error) => setMessage(`修改失败：${err.message}`),
   })
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.deleteContact(id),
     onSuccess: invalidate,
   })
+  const startEdit = (c: ContactItem, field: 'name' | 'email') => {
+    setEditingId(field === 'name' ? c.id : -c.id)  // 负数 id 表示正在改邮箱
+    if (field === 'name') setEditName(c.name)
+    else setEditEmail(c.email)
+  }
 
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="t-lg font-semibold">通讯录</h2>
       <p className="mt-1 t-sm text-gray-400">
-        收信与发信的往来地址自动入册（手动编辑过的姓名不会被覆盖）；写信时收件人输入框会自动联想。
+        收信与发信的往来地址自动入册；点击姓名或邮箱可直接修改（改过姓名的联系人不会被自动采集覆盖）；
+        写信时收件人输入框会自动联想。
       </p>
 
       <div className="mt-4 flex items-center gap-2">
@@ -1207,25 +1314,43 @@ function ContactsSection() {
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') renameMutation.mutate({ id: c.id, name: editName })
+                        if (e.key === 'Enter') updateMutation.mutate({ id: c.id, patch: { name: editName.trim() } })
                         if (e.key === 'Escape') setEditingId(null)
                       }}
                       autoFocus
                     />
                   ) : (
                     <button
-                      className="cursor-text rounded px-1 py-0.5 hover:bg-gray-100"
+                      className="cursor-text rounded px-1 py-0.5 underline-offset-2 hover:bg-gray-100 hover:underline"
                       title="点击修改姓名（修改后不被自动采集覆盖）"
-                      onClick={() => {
-                        setEditingId(c.id)
-                        setEditName(c.name)
-                      }}
+                      onClick={() => startEdit(c, 'name')}
                     >
                       {c.name || <span className="text-gray-300">（未命名）</span>}
                     </button>
                   )}
                 </td>
-                <td className="px-3 py-2 t-md text-gray-600">{c.email}</td>
+                <td className="px-3 py-2 t-md text-gray-600">
+                  {editingId === -c.id ? (
+                    <input
+                      className="w-56 rounded-lg border border-indigo-300 px-2 py-0.5 t-sm outline-none focus:border-indigo-500"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') updateMutation.mutate({ id: c.id, patch: { email: editEmail.trim() } })
+                        if (e.key === 'Escape') setEditingId(null)
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <button
+                      className="cursor-text rounded px-1 py-0.5 underline-offset-2 hover:bg-gray-100 hover:underline"
+                      title="点击修改邮箱地址"
+                      onClick={() => startEdit(c, 'email')}
+                    >
+                      {c.email}
+                    </button>
+                  )}
+                </td>
                 <td className="px-3 py-2">
                   {c.source === 'manual' ? (
                     <span className="rounded bg-gray-100 px-1.5 py-0.5 t-xs text-gray-500">手动</span>
@@ -1235,7 +1360,7 @@ function ContactsSection() {
                 </td>
                 <td className="px-3 py-2 text-right t-md text-gray-500">{c.use_count}</td>
                 <td className="px-3 py-2 t-sm text-gray-400">
-                  {c.last_seen_at ? c.last_seen_at.slice(0, 10) : '—'}
+                  {c.last_seen_at ? backendLocalDate(c.last_seen_at) : '—'}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <button

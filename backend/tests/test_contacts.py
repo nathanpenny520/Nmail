@@ -96,6 +96,14 @@ def test_contacts_api_crud():
     assert client.patch(f"/api/contacts/{cid}", json={"name": "新名字"}).status_code == 200
     assert client.patch(f"/api/contacts/{cid}", json={"notes": "n2"}).json()["contact"]["notes"] == "n2"
 
+    # 直改邮箱：规范化 + 查重 + 非法拒绝
+    patched = client.patch(f"/api/contacts/{cid}", json={"email": "Fixed@X.com "})
+    assert patched.status_code == 200 and patched.json()["contact"]["email"] == "fixed@x.com"
+    assert client.patch(f"/api/contacts/{cid}", json={"email": "bad"}).status_code == 400
+    other = client.post("/api/contacts", json={"email": "other@x.com"}).json()["contact"]["id"]
+    assert client.patch(f"/api/contacts/{cid}", json={"email": "other@x.com"}).status_code == 400
+    client.delete(f"/api/contacts/{other}")
+
     # 列表搜索与删除
     assert any(c["id"] == cid for c in client.get("/api/contacts", params={"q": "新名字"}).json()["contacts"])
     assert client.delete(f"/api/contacts/{cid}").json() == {"ok": True}

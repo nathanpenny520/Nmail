@@ -270,7 +270,7 @@ export const api = {
     ),
   createContact: (payload: { email: string; name?: string; notes?: string }) =>
     request<{ contact: ContactItem }>('/api/contacts', { method: 'POST', body: JSON.stringify(payload) }),
-  updateContact: (id: number, payload: { name?: string; notes?: string }) =>
+  updateContact: (id: number, payload: { name?: string; email?: string; notes?: string }) =>
     request<{ contact: ContactItem }>(`/api/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteContact: (id: number) =>
     request<{ ok: boolean }>(`/api/contacts/${id}`, { method: 'DELETE' }),
@@ -370,6 +370,10 @@ export const api = {
     request<{ ok: boolean }>(`/api/sender-lists/${id}`, { method: 'DELETE' }),
   updateAccount: (id: number, payload: {
     password?: string
+    imap_server?: string
+    imap_port?: number
+    smtp_server?: string
+    smtp_port?: number
     ai_permission?: string
     style_prompt?: string | null
     use_proxy?: boolean

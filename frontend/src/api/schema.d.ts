@@ -1794,6 +1794,14 @@ export interface components {
         AccountPatchIn: {
             /** Password */
             password?: string | null;
+            /** Imap Server */
+            imap_server?: string | null;
+            /** Imap Port */
+            imap_port?: number | null;
+            /** Smtp Server */
+            smtp_server?: string | null;
+            /** Smtp Port */
+            smtp_port?: number | null;
             /** Ai Permission */
             ai_permission?: string | null;
             /** Style Prompt */
@@ -1935,6 +1943,8 @@ export interface components {
         ContactUpdateIn: {
             /** Name */
             name?: string | null;
+            /** Email */
+            email?: string | null;
             /** Notes */
             notes?: string | null;
         };

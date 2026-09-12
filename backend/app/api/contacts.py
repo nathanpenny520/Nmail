@@ -18,6 +18,7 @@ class ContactIn(BaseModel):
 
 class ContactUpdateIn(BaseModel):
     name: str | None = None
+    email: str | None = None  # 改邮箱＝修正错别字；按同一 account_id 作用域查重
     notes: str | None = None
 
 
@@ -86,6 +87,17 @@ def update_contact(contact_id: int, payload: ContactUpdateIn) -> dict:
     if row is None:
         raise HTTPException(404, "联系人不存在")
     conn = get_conn()
+    if payload.email is not None:
+        new_email = contacts_core.norm_email(payload.email)
+        if not contacts_core.EMAIL_RE.match(new_email):
+            raise HTTPException(400, "邮箱地址不合法")
+        dup = conn.execute(
+            "SELECT id FROM contacts WHERE email = ? AND account_id IS ? AND id != ?",
+            (new_email, row["account_id"], contact_id),
+        ).fetchone()
+        if dup:
+            raise HTTPException(400, "该地址已在通讯录中")
+        conn.execute("UPDATE contacts SET email = ? WHERE id = ?", (new_email, contact_id))
     if payload.name is not None:
         # 手动改过姓名即转 manual：此后自动采集不再覆盖
         conn.execute(

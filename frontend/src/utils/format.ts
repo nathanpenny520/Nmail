@@ -29,9 +29,24 @@ export function fmtSize(n: number): string {
   return `${n}B`
 }
 
+/** 解析后端时间：datetime('now') 为无时区标记的 UTC，补 Z 后按本地展示；
+ *  已带时区标记（如邮件 Date 头原时区、last_sync_at 的 +00:00）的原样解析。
+ *  注意：user_drafts.send_at 是特意的「本地 naive」（datetime-local），勿用此函数。 */
+export function parseBackendTime(value: string): Date {
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)
+  return new Date(hasZone ? value : value.replace(' ', 'T') + 'Z')
+}
+
+/** 本地日期（用于「最近联系」这类只显日期的列）。 */
+export function backendLocalDate(value: string): string {
+  const d = parseBackendTime(value)
+  return Number.isNaN(d.getTime()) ? value.slice(0, 10) : d.toLocaleDateString('zh-CN')
+}
+
 /** 通知/会话相对时间。后端 datetime('now') 为无时区标记的 UTC，补 Z 后按本地展示。 */
 export function relativeTime(value: string): string {
-  const ts = new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z').getTime()
+  const d = parseBackendTime(value)
+  const ts = d.getTime()
   if (Number.isNaN(ts)) return value
   const min = Math.floor((Date.now() - ts) / 60000)
   if (min < 1) return '刚刚'
@@ -40,5 +55,5 @@ export function relativeTime(value: string): string {
   if (hour < 24) return `${hour} 小时前`
   const day = Math.floor(hour / 24)
   if (day < 7) return `${day} 天前`
-  return value.slice(0, 10)
+  return d.toLocaleDateString('zh-CN')
 }
