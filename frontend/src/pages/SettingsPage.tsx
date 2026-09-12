@@ -731,30 +731,30 @@ function AccountConfigEditor({ account, onClose }: { account: Account; onClose: 
         （服务器邮件不受影响）。
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <label className="min-w-0 flex-[2]">
+        <label className="flex min-w-0 flex-[2] flex-col">
           <span className="mb-1 block t-xs text-gray-500">IMAP 服务器（收信）</span>
           <input className={field} value={imapServer} spellCheck={false}
             onChange={(e) => setImapServer(e.target.value)} placeholder="imap.example.com" />
         </label>
-        <label className="w-24 shrink-0">
+        <label className="flex w-24 shrink-0 flex-col">
           <span className="mb-1 block t-xs text-gray-500">端口</span>
           <input className={field} value={imapPort} inputMode="numeric"
             onChange={(e) => setImapPort(e.target.value)} placeholder="993" />
         </label>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <label className="min-w-0 flex-[2]">
+        <label className="flex min-w-0 flex-[2] flex-col">
           <span className="mb-1 block t-xs text-gray-500">SMTP 服务器（发信）</span>
           <input className={field} value={smtpServer} spellCheck={false}
             onChange={(e) => setSmtpServer(e.target.value)} placeholder="smtp.example.com" />
         </label>
-        <label className="w-24 shrink-0">
+        <label className="flex w-24 shrink-0 flex-col">
           <span className="mb-1 block t-xs text-gray-500">端口</span>
           <input className={field} value={smtpPort} inputMode="numeric"
             onChange={(e) => setSmtpPort(e.target.value)} placeholder="465" />
         </label>
       </div>
-      <label className="mt-2 block">
+      <label className="mt-2 flex flex-col">
         <span className="mb-1 block t-xs text-gray-500">新授权码（留空=不修改）</span>
         <input className={field} type="password" value={password} autoComplete="new-password"
           onChange={(e) => setPassword(e.target.value)} placeholder="仅想更新授权码时填写" />
