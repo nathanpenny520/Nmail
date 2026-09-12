@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — v0.4 P2: 资源管理器（文件夹树完整版 · 归档=服务器移动）
+## c56fd5c — v0.4 P2: 资源管理器（文件夹树完整版 · 归档=服务器移动）
 - 依据 docs/REDESIGN_PLAN.md §4/§13 P2
 - **归档语义改造（§4.6）**：archive=真实移动到每账号服务器端 Archived 文件夹（accounts.archive_folder，缺省 Archived，首归档惰性创建）；unarchive=移回收件箱；archived_local 降级为「待服务器归档」暂存标记（移动失败保留、下次管线自动重试）。单封走端点同步移动，批量/迁移走 imap_batch job；营销/黑名单自动归档经 pipeline `_sweep_server_archive` 落服务器
 - **存量迁移流**：迁移 v15 对有 archived_local 存量的库落 KV `archive_migrate_done=0`（暂停自动清扫，防止未确认就搬历史邮件）；前端基座弹一次性提示「迁移 N 封 / 保留原地」；`GET /emails/archived_pending`+`POST archived_migrate/dismiss` 三端点；v15 同时建 folders 缓存表 + accounts.archive_folder 列

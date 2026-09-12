@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-1000-P2资源管理器 ✅
+- 目标: 落地 REDESIGN_PLAN §13 P2——文件夹树完整版（服务器文件夹节点/右键 CRUD/拖拽移动/按需同步）+ §4.6 归档改造（每账号服务器 Archived 文件夹，本地归档视图退役+存量迁移提示）+ All Mail 守卫
+- 范围: backend（迁移 v15、core/folders.py/api/folders.py 新增、api/emails 归档语义+迁移端点、core/batch_ops archive/unarchive、core/pipeline 服务器归档清扫、core/sync 管线仅 INBOX、accounts.py 端点迁出）、frontend（FolderTree v2 重写、ContextMenu 新增、MailBrowser 去下拉/拖拽源/快捷键、MailPage 迁移弹窗、client/types、openapi schema 再生成）、docs
+- 产出: 提交 c56fd5c（见 CHANGELOG「v0.4 P2: 资源管理器」条目）；pytest 98 全绿（+test_folders 3 例）；ruff app 门禁通过；npm build 通过；隔离实例（8798+种假账号/存量数据）冒烟截图——迁移弹窗/保留原地/文件夹层级/Archived 选中/All Mail 置灰全部符合预期
+- 关键决策: 存量迁移用 KV `archive_migrate_done` 门控自动清扫（v15 只对有存量的库落 0），迁移/跳过置 1——防未确认就搬历史邮件；PATCH/DELETE 文件夹名走查询参数（IMAP 名含分隔符，路径参数编码不可靠）；RENAME 本地跟随（UID/UIDVALIDITY 服务器保持）
+- 遗留: **真实账号端到端验收待用户**（Gmail+Outlook+QQ 各一：建夹/改名/删除/跨夹拖 50 封/归档后网页端可见/All Mail 不误同步）；树未读徽章、订阅文件夹低频轮询、归档夹改名 UI 顺延；tests/ 既有 3 处 ruff 提示仍在（门禁只查 app/）
+- 时间: 2026-09-12 10:45 完成
+
 ### S-0912-0915-P1导航骨架 ✅
 - 目标: 落地 REDESIGN_PLAN §13 P1——UI 骨架改版：砍左侧竖栏（邮件基座+小按钮开页签+右侧图标区）、FolderTree 只读骨架（智能视图+账号 INBOX）、字号令牌统一+lint 门禁、旧路由重定向
 - 范围: frontend（Layout 重写、新增 FolderTree/MailPage、App 路由、index.css 令牌、全量字号类迁移、package.json/scripts lint:font）、docs（SESSIONS/CHANGELOG/ARCHITECTURE）
