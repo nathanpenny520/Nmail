@@ -101,3 +101,18 @@ def test_patch_server_rejected_for_oauth2(monkeypatch):
     assert database.get_conn().execute(
         "SELECT imap_server FROM accounts WHERE id = ?", (oid,)
     ).fetchone()["imap_server"] == "imap.gmail.com"
+
+
+def test_list_accounts_echoes_password_plaintext():
+    """授权码明文回显（所见即所存，用户 2026-09-12 要求，同 AI key 口径）：有码回码，无码空串。"""
+    from app.security import get_secret, set_secret
+
+    aid = _pwd_account()
+    set_secret(f"account_pwd:{aid}", "smtp-auth-code-123")
+    row = next(a for a in client.get("/api/accounts").json()["accounts"] if a["id"] == aid)
+    assert row["password"] == "smtp-auth-code-123"
+    assert get_secret(f"account_pwd:{aid}") == "smtp-auth-code-123"
+
+    oauth_aid = _oauth_account()
+    o_row = next(a for a in client.get("/api/accounts").json()["accounts"] if a["id"] == oauth_aid)
+    assert o_row["password"] == ""  # OAuth2 账号无授权码，不误显

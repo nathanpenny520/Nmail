@@ -74,6 +74,7 @@ def _account_dict(row) -> dict[str, Any]:  # noqa: ANN001
     return {
         "id": row["id"],
         "email": row["email"],
+        "password": get_secret(f"account_pwd:{row['id']}") or "",  # 明文回显（所见即所存，同 AI key；仅本机 API，对外 ext 有独立窄 DTO）
         "provider_name": row["provider_name"],
         "imap_server": row["imap_server"],
         "imap_port": row["imap_port"],

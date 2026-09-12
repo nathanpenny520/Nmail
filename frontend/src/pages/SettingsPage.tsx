@@ -708,7 +708,8 @@ function AccountConfigEditor({ account, onClose }: { account: Account; onClose: 
   const [imapPort, setImapPort] = useState(String(account.imap_port))
   const [smtpServer, setSmtpServer] = useState(account.smtp_server)
   const [smtpPort, setSmtpPort] = useState(String(account.smtp_port))
-  const [password, setPassword] = useState('')
+  const [password, setPassword] = useState(account.password ?? '')
+  const [pwdVisible, setPwdVisible] = useState(false)
   const saveMutation = useMutation({
     mutationFn: () =>
       api.updateAccount(account.id, {
@@ -755,18 +756,29 @@ function AccountConfigEditor({ account, onClose }: { account: Account; onClose: 
         </label>
       </div>
       <label className="mt-2 flex flex-col">
-        <span className="mb-1 block t-xs text-gray-500">新授权码（留空=不修改）</span>
-        <input className={field} type="password" value={password} autoComplete="new-password"
-          onChange={(e) => setPassword(e.target.value)} placeholder="仅想更新授权码时填写" />
+        <span className="mb-1 block t-xs text-gray-500">授权码（所见即所存；换新码直接改这里）</span>
+        <div className="relative flex">
+          <input className={`${field} pr-9`} type={pwdVisible ? 'text' : 'password'} value={password}
+            autoComplete="new-password" spellCheck={false}
+            onChange={(e) => setPassword(e.target.value)} placeholder="服务商邮箱授权码" />
+          <button
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            onClick={(e) => { e.preventDefault(); setPwdVisible(!pwdVisible) }}
+            title={pwdVisible ? '隐藏' : '显示'}
+          >
+            {pwdVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
+        </div>
       </label>
       <div className="mt-2 flex items-center gap-2">
         <button
           className="rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending || !imapServer.trim()}
+          disabled={saveMutation.isPending || !imapServer.trim() || !password.trim()}
         >
           {saveMutation.isPending ? '试连并保存中…' : '保存'}
         </button>
+        {!password.trim() && <span className="t-xs text-gray-400">授权码不能为空</span>}
         <button
           className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 t-sm text-gray-600 hover:bg-gray-50"
           onClick={onClose}

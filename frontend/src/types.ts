@@ -65,6 +65,8 @@ export interface AITestResult {
 export interface Account {
   id: number
   email: string
+  /** 授权码明文回显（所见即所存，同 AI key；OAuth2 账号为空串） */
+  password: string
   provider_name: string
   imap_server: string
   imap_port: number
