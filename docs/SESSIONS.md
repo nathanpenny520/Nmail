@@ -21,7 +21,7 @@
 ### S-0912-2350-uvx启动说明补齐 ✅
 - 目标: 用户问「uvx 安装后怎么用、文档说清了吗」——排查确认 INSTALL.md 仅「① 单文件」有运行后说明，③ Homebrew / ④ uvx 缺失；顺带解答 uvx 目录无关性与缓存残留问题（回答同步沉淀至 promo/微信/README.md）
 - 范围: docs/INSTALL.md + docs/CHANGELOG.md + docs/SESSIONS.md；另仓外 promo/微信/ 长图步骤 1 补「以后每次启动都是这条命令」
-- 产出: 本提交；brew 命令名经 tap formula 核实（bin.install => "nmail"）；官网/PyPI/winget 状态一并复核（winget PR #433678 仍在审，404 符合预期）
+- 产出: 提交 32175e8；brew 命令名经 tap formula 核实（bin.install => "nmail"）；官网/PyPI/winget 状态一并复核（winget PR #433678 仍在审，404 符合预期）
 - 遗留: 无
 - 时间: 2026-09-12 23:50 完成
 
