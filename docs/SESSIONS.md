@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-1505-文档站 ✅
+- 目标: 用户要求完善各类文档并部署到官网——主仓补齐用户文档（使用指南/FAQ/隐私与安全）；nmail-site 新增 /docs 区（构建期白名单同步主仓 docs，本地路径优先、GitHub raw 兜底，含凭据的 gitignored 文档绝不入白名单）
+- 范围: Nmail/docs（使用指南.md、FAQ.md、隐私与安全.md 新增）+ CHANGELOG/SESSIONS；nmail-site（scripts/sync-docs.mjs、content docs 集合、Docs 布局/docs 首页/[slug] 页、导航加「文档」、README、prebuild）
+- 产出: 主仓本提交（见 CHANGELOG「文档补齐 + 文档上站」条目）；nmail-site 提交 aecf3f0 已推送；sync 9/9 篇（相对链接改写站内路由 + H1 剥路径注记抽查）；astro build 17 页通过；线上 /docs/、/docs/guide/、/docs/faq/、/docs/api/ 全部 200（截图确认侧栏/正文排版）；REDESIGN_PLAN §10.1「文档不双维护」按用户拍板改为同步上站（仓库仍唯一维护处）
+- 关键决策: 同步白名单显式列举（主仓 docs/ 有含凭据 gitignored 文档，严禁整目录拷贝）；生成文件不入库（.gitignore）——文档单一来源永远是主仓；CI 无本地路径时自动回退 GitHub raw main
+- 遗留: 新增三篇文档内容待用户过目（尤其使用指南的描述口径）；CSV/vCard 导入导出等 v0.5 功能出现后再补对应章节
+- 时间: 2026-09-12 15:20 完成
+
 ### S-0912-1410-P7对外API ✅
 - 目标: 落地 REDESIGN_PLAN §13 P7——对外 API `/api/ext/v1/*`（§7 全部）：API Key 认证（X-Api-Key）+ scope 分级（read/write/send/agent）+ 限流 60/min + 调用日志；设置页新增「API」分类（密钥生成/重置/吊销、明文回显、调用日志）；main.py 对 /api/ext/* 豁免 Host/Origin 校验（改持 Key）；迁移 v20（api_keys + api_calls）
 - 范围: backend（db v20、api/ext.py 新增、api/extkeys.py 新增、main.py、api/__init__、ai.py _AgentSSE origin、cleanup_retention）、frontend（ExtApiSection 新增、SettingsPage API 区、client/types、openapi/schema 再生成）、docs（对外API使用指南/ARCHITECTURE/CHANGELOG/SESSIONS）、tests（test_ext_api.py）

@@ -3,6 +3,16 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 文档补齐 + 文档上站（nmail-site /docs）
+- **主仓新增三篇用户文档**（官网与仓库共用）：
+  - `docs/使用指南.md`——完整操作手册：界面导览（基座+页签+三栏）、收信与文件夹管理（拖拽/右键/快捷键表/真实归档）、AI 总管家（双模式/权限矩阵/自动边界/审计撤销/防注入）、写信草稿通讯录（富文本/自动保存/chips 联想/定时/AI 写作/统一草稿）、每日摘要、通知、设置速览、网络代理
+  - `docs/FAQ.md`——按主题分类的高频问题（安装启动/Gmail 被墙代理/授权码/AI 401 与本地推理/同步与归档/数据迁移/API 限流），沉淀自真实踩坑（SmartScreen、Gatekeeper、org_internal 403、POP/IMAP 未开、uvx 单横线笔误等）
+  - `docs/隐私与安全.md`——数据位置表、仅有的两类外呼（AI 端点+匿名更新检查）、127.0.0.1 网络边界、内容安全（消毒/沙箱/防注入）、密钥管理约定
+- **官网文档中心（nmail-site，提交 aecf3f0 已部署）**：`/docs/` + `/docs/<slug>` 9 篇——`scripts/sync-docs.mjs` 构建期（prebuild）把主仓 docs/**白名单**文档同步渲染；来源优先级 环境变量 NMAIL_DOCS_DIR → 本地同级仓库 → GitHub raw main（CI 兜底）；自动改写相对 md 链接为站内路由（白名单外指 GitHub）+ 剥 H1 路径注记；**安全约束：主仓 docs/ 有含凭据被 gitignore 的内部文档，同步绝不整目录拷贝（白名单显式列举）**；Docs 布局（分组侧栏 导航元数据 src/config/docs.ts）+ 文档首页；顶导航加「文档」；生成文件不入库（单一来源=主仓）
+- 决策变更：REDESIGN_PLAN §10.1「文档链接 GitHub 不双维护」→ 用户 2026-09-12 拍板改为构建期同步上站（仓库仍是唯一维护处）
+- 验证：sync 9/9 篇（链接改写与 H1 清理抽查）；astro build 17 页通过；线上 https://nmail.whizzzest.com/docs/ 与 guide/faq/api 全部 200
+- 备注：官网同期由 Pages 迁 Workers 静态资产（nmail.whizzzest.com 自定义域名入 wrangler.toml 自动建，见 nmail-site 仓库提交）
+
 ## 0ede5e2 — v0.4 P7: 对外 API（/api/ext/v1 · API Key 认证 · scope 分级）
 - 依据 docs/REDESIGN_PLAN.md §7/§13 P7（D3=A：仅 127.0.0.1，外部设备走用户自建隧道）
 - **`/api/ext/v1/*`**（`api/ext.py` 新增）：health（免认证）·accounts·emails（列表/搜索/详情/附件）·emails/actions（批量动作，移动类异步返回 job_id 经 /jobs/{id} 轮询）·drafts（列表/创建/approve 发送，统一草稿体系）·folders（+/sync 按需同步，名走查询参数）·contacts·digest·jobs/{id}·agent（chat 非流式+chat/stream SSE+actions/{id}/decide 审批）——端点全部薄壳转调既有实现（emails/user_drafts/folders/contacts/digest/agent），零新邮件操作
