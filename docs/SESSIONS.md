@@ -18,6 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-2350-uvx启动说明补齐 ✅
+- 目标: 用户问「uvx 安装后怎么用、文档说清了吗」——排查确认 INSTALL.md 仅「① 单文件」有运行后说明，③ Homebrew / ④ uvx 缺失；顺带解答 uvx 目录无关性与缓存残留问题（回答同步沉淀至 promo/微信/README.md）
+- 范围: docs/INSTALL.md + docs/CHANGELOG.md + docs/SESSIONS.md；另仓外 promo/微信/ 长图步骤 1 补「以后每次启动都是这条命令」
+- 产出: 本提交；brew 命令名经 tap formula 核实（bin.install => "nmail"）；官网/PyPI/winget 状态一并复核（winget PR #433678 仍在审，404 符合预期）
+- 遗留: 无
+- 时间: 2026-09-12 23:50 完成
+
 ### S-0912-1840-v0.3.0发版 ✅
 - 目标: 用户指示发布第三版全平台——v0.3.0（自 v0.2.0 起：通讯录 Thunderbird 式双栏改版/联系组/手机号/自动采集开关、授权码明文回显、账号服务器配置可编辑、时间显示统一、设置页加宽、横向滚动修复）
 - 范围: scripts/release.sh（Mac 兼容修复）+ docs(CHANGELOG, SESSIONS) + 官网动态（nmail-site 仓库）

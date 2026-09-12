@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — docs: 补齐 uvx/brew 安装后的启动与再次使用说明
+- 用户反馈：uvx 跑完之后怎么用、下次怎么再打开？——排查确认 INSTALL.md 只有「① 单文件」一节写了「运行后会发生什么」，③ Homebrew 与 ④ uvx 两节只讲安装不讲启动，新用户装完没有下一步
+- 修：安装方式表后新增「启动与再次使用（③④ 通用）」说明——启动命令（brew→终端 `nmail`；uvx→原命令即启动命令，任意目录可运行、不落文件）、控制台窗口 + 浏览器自动打开 127.0.0.1:8720（端口占用自动顺延）、退出方式、下次使用重跑同一条命令、`uv cache clean` 清缓存
+- 事实核实：brew 装完自带 `nmail` 命令（tap formula `bin.install … => "nmail"`）；uvx 缓存与残留行为经本机 uv 实测口径确认
+- 关联物料：微信长图「三步上手」步骤 1 同步补「以后每次启动都是这条命令」（promo/，仓外）
+
 ## b805906 — 发版: v0.3.0 全平台——PyPI/Release/tap 即时生效，winget PR 已提，tap token 缺陷暴露
 - `release: v0.3.0`（cb2f047）+ tag 推送，release CI run 34688316397：PyPI `nmail-app` 0.3.0 ✅、GitHub Release 三平台资产（windows-x64.exe / macos-arm64 / linux-x64）✅、homebrew-tap ❌（403，重跑复现）
 - **homebrew-tap 的 secret `HOMEBREW_TAP_TOKEN` 从未在 Actions 成功工作**：v0.1.0 时该 job 尚未存在（formula 0.1.0/0.2.0 均手动提交 b31fa77/54ec4c4）；v0.3.0 首次真正跑到即 403——判定 fine-grained PAT 失效或权限不足（有效期/资源授权/Contents RW 待用户核对）
