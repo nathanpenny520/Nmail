@@ -18,6 +18,15 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-1600-审查修复 ✅
+- 目标: 落地 v0.4 审查问题地图修复——P0（digest 查退役 drafts 表致「需要回复」失效；AI 工具 account_id 越权/digest_stats 无账号过滤）+ P1（_manager_context 时区边界、naive 日期两处假设相反、llm stream_options 无回退、recipient_allowed 不解析「Name <邮箱>」、execute_action args_override 无校验、回复后 SEEN 不回写）+ P2（拖拽反馈、审批过期扫描、右键移动/未读徽章、已读节流、IMAP ID 版本号、重要邮件倒序、归档显示名、refresh_cache 空 LIST 防御）
+- 范围: backend(ai/digest.py, ai/tools.py, ai/agent.py, ai/llm.py, api/ai.py, core/outbox.py, core/contacts.py, core/folders.py, core/imap_client.py, scheduler.py) + frontend(MailPage, MailBrowser, FolderTree, ContextMenu, types) + tests(test_agent/test_digest/test_api_emails) + docs(CHANGELOG/SESSIONS)
+- 产出: 提交 756fe37（P0+P1）+ 107947d（P2）；pytest 135 全绿（净增 8：digest 回归 2、越权 3、参数校验/收件人解析 3）；ruff 门禁 + npm build 通过；隔离实例 /api/health 冒烟 ok；审查 22 项核实为 15 属实/3 部分属实/C3 不成立（核实过程与口径见 CHANGELOG 两条目）
+- 顺带修: test_api_emails 搜索断言收进账号范围（全局 LIKE 断言被任何新夹具邮件污染，新增用例即触发）；多账号会话读副账号邮件被 _scope_guard 误拒的反向问题（改按会话范围集合校验）
+- 核实后不修: S3（读类计入日限额是 §6.6 规范本身，且持久化审计只记写类、跨会话读不占额度）；C3（拦截计数为详情现算、口径一致）
+- 遗留: **后端改动需重启 python run.py**；C1（回复回写 SEEN）与 F4（stream_options 回退）需用户真实账号验证；拖拽进度/徽章/移动到二级菜单待真机走查；FolderCacheItem.unread 为 types.ts 手动同步（后端响应无 schema，openapi 快照无变化）
+- 时间: 2026-09-12 16:00 开工，16:40 完成
+
 ### S-0912-1505-文档站 ✅
 - 目标: 用户要求完善各类文档并部署到官网——主仓补齐用户文档（使用指南/FAQ/隐私与安全）；nmail-site 新增 /docs 区（构建期白名单同步主仓 docs，本地路径优先、GitHub raw 兜底，含凭据的 gitignored 文档绝不入白名单）
 - 范围: Nmail/docs（使用指南.md、FAQ.md、隐私与安全.md 新增）+ CHANGELOG/SESSIONS；nmail-site（scripts/sync-docs.mjs、content docs 集合、Docs 布局/docs 首页/[slug] 页、导航加「文档」、README、prebuild）

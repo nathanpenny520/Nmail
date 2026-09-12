@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — 审查修复 P2 体验打磨：拖拽反馈 / 审批过期 / 未读徽章 / 已读节流等
+## 107947d — 审查修复 P2 体验打磨：拖拽反馈 / 审批过期 / 未读徽章 / 已读节流等
 - 接上条（P0+P1，756fe37），落审查地图 P2 项：
 - **U1 拖拽移动反馈**（原 `.catch(() => undefined)` 吞错，最伤感知）：`MailPage.onDropEmails` 重写——乐观更新（被拖邮件先从本地列表摘除）+ 后台 job 进度浮条（复用 useJob 1s 轮询）+ 成功/失败提示；失败回滚快照并提示「列表已还原」；REDESIGN_PLAN §4.3 承诺按原设计落地
 - **U2 审批动作 24h 过期**：`expired` 原先只有 schema 注释、pending 永久挂起——scheduler.tick 新增 `expire_stale_actions`（pending 且 created_at 超 24h → expired + 原因落 error）
