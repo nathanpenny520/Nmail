@@ -143,6 +143,16 @@ export interface FolderInfo {
   flags: string[]
 }
 
+/** 文件夹树缓存行（v0.4 P2，folders 表派生；is_archive=该账号归档目标文件夹） */
+export interface FolderCacheItem {
+  name: string
+  delim: string
+  special_use: string | null
+  subscribed: boolean
+  is_system: boolean
+  is_archive: boolean
+}
+
 export interface AccountAddPayload {
   email: string
   password: string

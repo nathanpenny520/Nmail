@@ -12,7 +12,7 @@ import type {
   Draft,
   EmailDetail,
   EmailListResp,
-  FolderInfo,
+  FolderCacheItem,
   JobInfo,
   NotificationsResp,
   OauthAuthorizeResp,
@@ -156,12 +156,35 @@ export const api = {
       { method: 'POST' },
     ),
   getFolders: (id: number) =>
-    request<{ folders: FolderInfo[] }>(`/api/accounts/${id}/folders`),
+    request<{ folders: FolderCacheItem[] }>(`/api/accounts/${id}/folders`),
+  /** 强制连服务器 LIST 刷新缓存（树右键「刷新文件夹列表」） */
+  refreshFolders: (id: number) =>
+    request<{ folders: FolderCacheItem[] }>(`/api/accounts/${id}/folders?refresh=true`),
   createFolder: (id: number, name: string) =>
     request<{ ok: boolean; name: string }>(`/api/accounts/${id}/folders`, {
       method: 'POST',
       body: JSON.stringify({ name }),
     }),
+  /** 重命名（服务器 RENAME，本地缓存/邮件/断点跟随）；名字走查询参数（名内含分隔符） */
+  renameFolder: (id: number, name: string, newName: string) =>
+    request<{ ok: boolean; name: string }>(
+      `/api/accounts/${id}/folders?name=${encodeURIComponent(name)}`,
+      { method: 'PATCH', body: JSON.stringify({ new_name: newName }) },
+    ),
+  /** 删除文件夹（服务器 DELETE + 本地邮件行/断点/缓存清理） */
+  deleteFolder: (id: number, name: string) =>
+    request<{ ok: boolean }>(
+      `/api/accounts/${id}/folders?name=${encodeURIComponent(name)}`,
+      { method: 'DELETE' },
+    ),
+
+  // ── 归档迁移（v0.4 §4.6：本地归档视图退役 → 服务器 Archived 文件夹）──
+  archivedPending: () =>
+    request<{ count: number; done: boolean }>('/api/emails/archived_pending'),
+  migrateArchived: () =>
+    request<{ ok: boolean; job_id: number | null; migrating: number }>('/api/emails/archived_migrate', { method: 'POST' }),
+  dismissArchivedMigrate: () =>
+    request<{ ok: boolean }>('/api/emails/archived_dismiss', { method: 'POST' }),
 
   // ── 邮件 ──
   getEmails: (query: EmailQuery) =>

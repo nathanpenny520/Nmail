@@ -14,9 +14,9 @@ from bs4 import BeautifulSoup
 
 from app.ai import tasks
 from app.ai.categories import AUTO_ARCHIVE_CATEGORIES
-from app.core import jobs
+from app.core import folders, imap_client, jobs, mailbox
 from app.core.sync import add_notification
-from app.db.database import get_conn
+from app.db.database import get_conn, get_setting
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,45 @@ def _apply_classification(results: list[dict]) -> tuple[int, int]:
     return archived, need_reply
 
 
+def _sweep_server_archive(account_id: int) -> int:
+    """把本账号 archived_local=1（待归档暂存标记）的邮件移到服务器端归档文件夹。
+
+    v0.4 归档语义（REDESIGN_PLAN §4.6）：归档=真实服务器移动，标记只是移动前的
+    暂存态——移动失败标记保留，下次管线自动重试。存量迁移决策未做（v15 落的
+    KV=0）时跳过，避免未经用户确认就搬历史邮件。
+    """
+    if get_setting("archive_migrate_done") in (0, "0"):  # v15 裸 SQL 存 int 0，set_setting 存 "0"
+        return 0
+    conn = get_conn()
+    target = folders.archive_folder_name(account_id)
+    rows = conn.execute(
+        "SELECT id, folder, uid FROM emails"
+        " WHERE account_id = ? AND archived_local = 1 AND folder != ?",
+        (account_id, target),
+    ).fetchall()
+    if not rows:
+        return 0
+    moved = 0
+    try:
+        handle = mailbox.load_account(account_id)
+        with mailbox.open_imap(handle) as mb:
+            folders.ensure_archive_with_mb(mb, account_id, target)
+            for r in rows:
+                new_uid = imap_client.move_email(mb, r["folder"], r["uid"], target)
+                if new_uid is None:
+                    conn.execute("DELETE FROM emails WHERE id = ?", (r["id"],))
+                else:
+                    conn.execute(
+                        "UPDATE emails SET folder = ?, uid = ?, archived_local = 0 WHERE id = ?",
+                        (target, new_uid, r["id"]),
+                    )
+                moved += 1
+        conn.commit()
+    except Exception:  # noqa: BLE001 — 移动失败不影响管线其余部分（标记保留待重试）
+        logger.exception("server archive sweep failed for account %s", account_id)
+    return moved
+
+
 def process_new_emails(account: dict, email_ids: list[int]) -> None:
     """同步完成后对新邮件执行智能处理；任何 AI 失败都不影响同步本身。"""
     if not email_ids:
@@ -114,6 +153,7 @@ def process_new_emails(account: dict, email_ids: list[int]) -> None:
         })
 
     if blacklisted > 0:
+        _sweep_server_archive(account_id)
         add_notification("ai_archive", f"黑名单过滤：{blacklisted} 封邮件已自动归档", "", str(account_id))
 
     if not to_classify:
@@ -140,10 +180,11 @@ def process_new_emails(account: dict, email_ids: list[int]) -> None:
                     draft_emails.append(item)
 
         if archived_by_ai > 0:
+            _sweep_server_archive(account_id)
             add_notification(
                 "ai_archive",
                 f"AI 已归档 {archived_by_ai} 封营销邮件",
-                "可在「已归档」页查看与恢复",
+                "已移入该账号的 Archived 文件夹（网页端同步可见）",
                 str(account_id),
             )
 
@@ -246,6 +287,8 @@ def classify_missing(account_id: int, folder: str = "INBOX", limit: int = 200) -
         arch, _ = _apply_classification(results)
         classified += len(results)
         archived += arch
+    # v0.4：补跑出的营销归档同样走服务器移动
+    archived += _sweep_server_archive(account_id)
     return {"classified": classified, "archived": archived, "drafts": 0, "skipped_no_ai": False}
 
 

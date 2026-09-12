@@ -334,6 +334,30 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE accounts ADD COLUMN use_proxy INTEGER NOT NULL DEFAULT 0;
         """,
     ),
+    (
+        15,
+        """
+        -- v0.4 P2 资源管理器（REDESIGN_PLAN §4/§4.6）：服务器文件夹本地缓存 +
+        -- 每账号服务器端归档文件夹；archived_local 语义变为「待服务器归档」暂存标记
+        CREATE TABLE IF NOT EXISTS folders (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id  INTEGER NOT NULL,
+            name        TEXT NOT NULL,
+            delim       TEXT NOT NULL DEFAULT '/',
+            special_use TEXT,                -- sent|drafts|junk|trash|all|flagged|NULL
+            subscribed  INTEGER NOT NULL DEFAULT 1,
+            synced_at   TEXT,
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(account_id, name)
+        );
+        ALTER TABLE accounts ADD COLUMN archive_folder TEXT NOT NULL DEFAULT 'Archived';
+        -- 存量本地归档需用户决定是否迁移到服务器 Archived（REDESIGN_PLAN §4.6）；
+        -- 全新安装无存量则不落此标记（默认即可自动归档）
+        INSERT INTO settings (key, value)
+        SELECT 'archive_migrate_done', '0'
+        WHERE EXISTS (SELECT 1 FROM emails WHERE archived_local = 1);
+        """,
+    ),
 ]
 
 

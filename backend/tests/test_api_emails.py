@@ -76,28 +76,32 @@ def test_list_filter_matrix():
     assert _list(**base, q="不存在的词xyz")["total"] == 0
 
 
-def test_batch_archive_roundtrip():
+def test_batch_archive_async_and_pending():
+    """v0.4 归档语义（REDESIGN_PLAN §4.6）：批量 archive=后台 job 移服务器；
+    存量本地归档走 archived_pending/migrate 迁移流。"""
     aid = _seed_account()
     ids = [_seed_email(aid, 1, "a"), _seed_email(aid, 2, "b")]
-    e_keep = _seed_email(aid, 3, "c")
+    _seed_email(aid, 3, "c")
 
+    # 批量归档=提交后台 job（job 体需真实 IMAP，此处只验证 API 契约）
     resp = client.post(
         "/api/emails/batch-action",
         json={"ids": ids, "action": "archive"},
     )
     assert resp.status_code == 200
-    assert resp.json() == {"ok": True, "updated": 2, "failed": 0}
-    assert _list(account_id=aid, archived="true")["total"] == 2
-    assert _list(account_id=aid)["total"] == 1  # 收件箱里只剩未归档那封
+    assert resp.json()["ok"] is True and resp.json()["job_id"] is not None
 
-    resp = client.post(
-        "/api/emails/batch-action",
-        json={"ids": ids, "action": "unarchive"},
-    )
-    assert resp.json()["updated"] == 2
-    assert _list(account_id=aid, archived="true")["total"] == 0
-    assert _list(account_id=aid)["total"] == 3
-    assert ids + [e_keep] == sorted(i["id"] for i in _list(account_id=aid)["items"])
+    # 存量迁移流：archived_local=1 的行进入 pending 计数；决策标记端点可用
+    conn = database.get_conn()
+    conn.execute("UPDATE emails SET archived_local = 1 WHERE id IN (?, ?)", (ids[0], ids[1]))
+    conn.commit()
+    database.set_setting("archive_migrate_done", "0")  # 模拟 v15 落的「未决策」标记
+    pending = client.get("/api/emails/archived_pending").json()
+    assert pending["count"] >= 2 and pending["done"] is False
+    migrate = client.post("/api/emails/archived_migrate").json()
+    assert migrate["ok"] is True and migrate["migrating"] >= 2
+    assert client.get("/api/emails/archived_pending").json()["done"] is True
+    assert client.post("/api/emails/archived_dismiss").json() == {"ok": True}
 
 
 def test_batch_validation_errors():

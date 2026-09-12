@@ -31,7 +31,8 @@ export default function App() {
             {/* v0.4 旧路由重定向（REDESIGN_PLAN §3.4）：待审草稿/草稿箱/已归档并入邮件基座的树视图 */}
             <Route path="/drafts" element={<Navigate to="/?view=review" replace />} />
             <Route path="/mydrafts" element={<Navigate to="/?view=mydrafts" replace />} />
-            <Route path="/archived" element={<Navigate to="/?view=archived" replace />} />
+            {/* v0.4 §4.6：本地归档视图退役，Archived 在各账号文件夹树中 */}
+            <Route path="/archived" element={<Navigate to="/" replace />} />
             <Route path="/digest" element={<DigestPage />} />
             <Route path="/assistant" element={<ManagerPage />} />
             <Route path="/settings" element={<SettingsPage />} />

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ChevronLeft, ChevronRight, Inbox, Loader2, Paperclip, Pencil, Plus, RefreshCw, Search, Sparkles, Star,
+  ChevronLeft, ChevronRight, Inbox, Loader2, Paperclip, Pencil, RefreshCw, Search, Sparkles, Star,
 } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -11,7 +11,7 @@ import { useJob } from '../api/useJob'
 import { categoryBadgeMap, useCategories } from '../api/useMeta'
 import { shortDate } from '../utils/format'
 import {
-  type EmailDetail, type EmailSummary, type FolderInfo, type JobInfo, type OrganizeResult,
+  type EmailDetail, type EmailSummary, type FolderCacheItem, type JobInfo, type OrganizeResult,
 } from '../types'
 import { useCompose } from './compose/ComposeContext'
 import EmailReader from './EmailReader'
@@ -40,16 +40,16 @@ function JobProgressBar({ job, label }: { job: JobInfo | null; label: string }) 
 }
 
 /**
- * 邮件浏览主界面（聚合收件箱 / 已归档 / 按账号收件箱共用）。
- * archived=true 时列出本地归档邮件，操作栏提供"恢复到收件箱"。
- * initialAccountId：由 MailPage 的文件夹树下发（含 null=全部账号）；未传时沿用本地记忆。
+ * 邮件浏览主界面（聚合收件箱 / 按账号收件箱 / 任意服务器文件夹共用）。
+ * 账号与文件夹由 MailPage 的文件夹树下发（initialAccountId/initialFolder），
+ * 树换 key 重挂即切换视图；行可拖拽（多选集合一起拖），支持键盘导航。
  */
 export default function MailBrowser({
-  archived,
   initialAccountId,
+  initialFolder = 'INBOX',
 }: {
-  archived: boolean
   initialAccountId?: number | null
+  initialFolder?: string
 }) {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -57,13 +57,13 @@ export default function MailBrowser({
   const aiEnabled = useAIEnabled()
   const categoryMeta = categoryBadgeMap(useCategories())
 
-  // 账号/文件夹选择持久化：刷新或切标签页回来不重置（对齐分屏宽度等本地记忆）
   const [accountId, setAccountId] = useState<number | null>(() => {
     if (initialAccountId !== undefined) return initialAccountId
     const v = Number(localStorage.getItem('nmail_sel_account'))
     return Number.isFinite(v) && v > 0 ? v : null
   })
-  const [folder, setFolder] = useState(() => localStorage.getItem('nmail_sel_folder') || 'INBOX')
+  // 文件夹由树决定（重挂换视图），组件内不自行切换
+  const [folder] = useState(initialFolder)
   const [q, setQ] = useState('')
   const [qInput, setQInput] = useState('')
   const [starredOnly, setStarredOnly] = useState(false)
@@ -153,55 +153,20 @@ export default function MailBrowser({
     if (finished) invalidateMail()
   })
 
-  const foldersQuery = useQuery({
-    queryKey: ['folders', accountId],
+  // 批量栏「移动到…」下拉的文件夹清单（与树共用缓存；仅选了账号时有意义）
+  const foldersCacheQuery = useQuery({
+    queryKey: ['folder-cache', accountId],
     queryFn: () => api.getFolders(accountId!),
-    enabled: accountId != null && !archived && !q,
+    enabled: accountId != null,
     staleTime: 5 * 60 * 1000,
   })
-  const folders: FolderInfo[] = foldersQuery.data?.folders ?? []
+  const folders: FolderCacheItem[] = foldersCacheQuery.data?.folders ?? []
 
-  // 切换文件夹 = 按需同步该文件夹（后台轮询只拉 INBOX），同步完成列表自动刷新
-  const [folderSyncing, setFolderSyncing] = useState(false)
-  const syncFolderThenList = async (target: string) => {
-    if (accountId == null) return
-    setFolderSyncing(true)
-    setSyncMessage(`正在同步文件夹 ${target}…`)
-    try {
-      await api.syncAccount(accountId, target)
-    } catch (err) {
-      setSyncMessage(`同步失败：${(err as Error).message}`)
-    } finally {
-      setFolderSyncing(false)
-      invalidateMail()
-    }
-  }
-
-  // 自建文件夹（VSCode 资源管理器式）
-  const [creatingFolder, setCreatingFolder] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
-  const createFolderMutation = useMutation({
-    mutationFn: () => api.createFolder(accountId!, newFolderName.trim()),
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ['folders', accountId] })
-      setFolder(result.name)
-      setPage(0)
-      setSelectedId(null)
-      setCreatingFolder(false)
-      setNewFolderName('')
-      void syncFolderThenList(result.name)
-    },
-    onError: (error: Error) => {
-      setSyncMessage(`创建失败：${error.message}`)
-    },
-  })
-
-  const listQueryKey = ['emails', { archived, accountId, folder, q, starredOnly, category, page }]
+  const listQueryKey = ['emails', { accountId, folder, q, starredOnly, category, page }]
   const listQuery = useQuery({
     queryKey: listQueryKey,
     queryFn: () =>
       api.getEmails({
-        archived,
         account_id: accountId,
         folder: q ? undefined : folder,
         q: q || undefined,
@@ -224,15 +189,21 @@ export default function MailBrowser({
   })
   const detail: EmailDetail | null = detailQuery.data ?? null
 
-  // 摘要页「查看」跳转：/?focus=<email_id> 直接打开对应邮件
+  // 摘要页「查看」跳转：/?focus=<email_id> 直接打开对应邮件（保留其余参数）
   const focusId = searchParams.get('focus')
   useEffect(() => {
-    if (focusId && !archived) {
+    if (focusId) {
       setSelectedId(Number(focusId))
       setShowImages(false)
-      setSearchParams({}, { replace: true })
+      setSearchParams(
+        (prev) => {
+          prev.delete('focus')
+          return prev
+        },
+        { replace: true },
+      )
     }
-  }, [focusId, archived, setSearchParams])
+  }, [focusId, setSearchParams])
 
   const invalidateMail = () => {
     void queryClient.invalidateQueries({ queryKey: ['emails'] })
@@ -243,7 +214,7 @@ export default function MailBrowser({
   // 筛选/翻页变化时清空批量选择
   useEffect(() => {
     setSelectedIds([])
-  }, [archived, accountId, folder, q, starredOnly, category, page])
+  }, [accountId, folder, q, starredOnly, category, page])
 
   // 全文模式下 Esc 返回列表
   useEffect(() => {
@@ -255,6 +226,66 @@ export default function MailBrowser({
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedId])
 
+  // ── 键盘导航（VSCode/Gmail 风，REDESIGN_PLAN §4.3）──
+  const [cursorId, setCursorId] = useState<number | null>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    // 列表变化时光标跟随选中，无选中则落在第一封
+    if (selectedId != null && items.some((i) => i.id === selectedId)) {
+      setCursorId(selectedId)
+    } else if (cursorId == null || !items.some((i) => i.id === cursorId)) {
+      setCursorId(items[0]?.id ?? null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, selectedId])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (items.length === 0) return
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+        || target.tagName === 'SELECT' || target.isContentEditable)) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const idx = items.findIndex((i) => i.id === cursorId)
+      const move = (delta: number) => {
+        const next = items[Math.min(items.length - 1, Math.max(0, (idx === -1 ? 0 : idx) + delta))]
+        if (next) {
+          setCursorId(next.id)
+          document.querySelector(`[data-email-id="${next.id}"]`)?.scrollIntoView({ block: 'nearest' })
+        }
+      }
+      switch (e.key) {
+        case 'j': case 'ArrowDown': e.preventDefault(); move(1); break
+        case 'k': case 'ArrowUp': e.preventDefault(); move(-1); break
+        case 'x': {
+          e.preventDefault()
+          if (cursorId != null) toggleRow(cursorId)
+          break
+        }
+        case 'o': case 'Enter': {
+          e.preventDefault()
+          const mail = items.find((i) => i.id === cursorId)
+          if (mail) selectEmail(mail)
+          break
+        }
+        case 'e': {
+          e.preventDefault()
+          if (cursorId != null) actionMutation.mutate({ id: cursorId, action: 'archive' })
+          break
+        }
+        case '#': {
+          e.preventDefault()
+          if (cursorId != null) actionMutation.mutate({ id: cursorId, action: 'trash' })
+          break
+        }
+        case 'c': e.preventDefault(); compose.openNew(); break
+        case '/': e.preventDefault(); searchRef.current?.focus(); break
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, cursorId, selectedIds])
+
   const actionMutation = useMutation({
     mutationFn: ({ id, action, folder: dest }: { id: number; action: string; folder?: string }) =>
       api.emailAction(id, action, dest),
@@ -262,9 +293,7 @@ export default function MailBrowser({
       invalidateMail()
       // 归档/删除/移动后当前邮件会离开当前视图，清除选中
       if (['archive', 'unarchive', 'trash', 'move'].includes(variables.action)) {
-        if (archived ? variables.action === 'unarchive' : true) {
-          setSelectedId(null)
-        }
+        setSelectedId(null)
       }
     },
   })
@@ -412,6 +441,7 @@ export default function MailBrowser({
           <div className="relative min-w-0 max-w-2xl flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
+              ref={searchRef}
               className="w-full rounded-lg border border-gray-300 py-1.5 pl-8 pr-2 t-md outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
               placeholder="搜索邮件，回车确认（覆盖所有文件夹）"
               value={qInput}
@@ -429,7 +459,7 @@ export default function MailBrowser({
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
             收信
           </button>
-          {!archived && aiEnabled && (
+          {aiEnabled && (
             <button
               className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 t-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
               onClick={() => organizeMutation.mutate()}
@@ -455,49 +485,17 @@ export default function MailBrowser({
       <section ref={listRef} style={{ width: listWidth }} className="flex shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white">
         <div className="space-y-1.5 border-b border-gray-100 p-2">
           <div className="flex items-center gap-1.5">
-            <select
-              className="min-w-0 flex-1 rounded-lg border border-gray-300 px-1.5 py-1 t-sm outline-none focus:border-indigo-500"
-              value={accountId ?? ''}
-              onChange={(e) => {
-                setAccountId(e.target.value ? Number(e.target.value) : null)
-                setPage(0)
-                setSelectedId(null)
-              }}
+            {/* 账号/文件夹切换在左侧文件夹树（v0.4）；此处只留筛选与星标 */}
+            <span
+              className="min-w-0 flex-1 truncate rounded-lg bg-gray-50 px-2 py-1 t-sm font-medium text-gray-500"
+              title={accountId == null ? '全部账号' : accounts.find((a) => a.id === accountId)?.email}
             >
-              <option value="">全部账号</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.email}
-                </option>
-              ))}
-            </select>
-            {!archived && !q && accountId != null && (
-              <>
-                <select
-                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-1.5 py-1 t-sm outline-none focus:border-indigo-500"
-                  value={folder}
-                  onChange={(e) => {
-                    setFolder(e.target.value)
-                    setPage(0)
-                    setSelectedId(null)
-                    void syncFolderThenList(e.target.value)
-                  }}
-                >
-                  {folders.map((f) => (
-                    <option key={f.name} value={f.name}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="inline-flex shrink-0 items-center rounded-md border border-gray-300 p-1 t-sm text-gray-500 hover:border-indigo-400 hover:text-indigo-600"
-                  title="在服务器上新建文件夹"
-                  onClick={() => setCreatingFolder((v) => !v)}
-                >
-                  <Plus className="h-3 w-3" />
-                </button>
-              </>
-            )}
+              {accountId == null
+                ? '全部账号'
+                : accounts.find((a) => a.id === accountId)?.email ?? '已删除账号'}
+              <span className="mx-1 text-gray-300">/</span>
+              {q ? `搜索「${q}」` : folder === 'INBOX' ? '收件箱' : folder}
+            </span>
             <button
               className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border px-1.5 py-1 t-sm ${
                 starredOnly ? 'border-amber-300 bg-amber-50 text-amber-600' : 'border-gray-300 text-gray-500'
@@ -530,35 +528,6 @@ export default function MailBrowser({
               ))}
             </select>
           </div>
-          {/* 新建文件夹输入行 */}
-          {creatingFolder && accountId != null && (
-            <div className="flex items-center gap-1.5">
-              <input
-                className="min-w-0 flex-1 rounded-lg border border-indigo-300 px-2 py-1 t-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                placeholder="新文件夹名称，回车创建"
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newFolderName.trim()) createFolderMutation.mutate()
-                  if (e.key === 'Escape') setCreatingFolder(false)
-                }}
-                autoFocus
-              />
-              <button
-                className="shrink-0 rounded-lg bg-indigo-600 px-2 py-1 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                onClick={() => createFolderMutation.mutate()}
-                disabled={!newFolderName.trim() || createFolderMutation.isPending}
-              >
-                {createFolderMutation.isPending ? '创建中…' : '创建'}
-              </button>
-              <button
-                className="shrink-0 rounded-lg border border-gray-300 px-2 py-1 t-sm text-gray-500 hover:bg-gray-50"
-                onClick={() => setCreatingFolder(false)}
-              >
-                取消
-              </button>
-            </div>
-          )}
 
           {/* 批量操作栏：勾选后浮现 */}
           {selectedIds.length > 0 && (
@@ -568,12 +537,7 @@ export default function MailBrowser({
               <button className={batchBtn} onClick={() => runBatch('read')} disabled={batchBusy}>已读</button>
               <button className={batchBtn} onClick={() => runBatch('unread')} disabled={batchBusy}>未读</button>
               <button className={batchBtn} onClick={() => runBatch('star')} disabled={batchBusy}>星标</button>
-              {!archived && (
-                <button className={batchBtn} onClick={() => runBatch('archive')} disabled={batchBusy}>归档</button>
-              )}
-              {archived && (
-                <button className={batchBtn} onClick={() => runBatch('unarchive')} disabled={batchBusy}>恢复</button>
-              )}
+              <button className={batchBtn} onClick={() => runBatch('archive')} disabled={batchBusy}>归档</button>
               {accountId != null && (
                 <select
                   className="rounded-md border border-gray-300 bg-white px-1.5 py-1 t-sm text-gray-600 outline-none focus:border-indigo-400 disabled:opacity-50"
@@ -615,8 +579,7 @@ export default function MailBrowser({
               全选本页
             </label>
             <span>
-              {archived ? '已归档' : q ? `搜索「${q}」` : folder !== 'INBOX' ? folder : '收件箱'} · 共 {total} 封
-              {folderSyncing && ' · 同步中…'}
+              {q ? `搜索「${q}」` : folder !== 'INBOX' ? folder : '收件箱'} · 共 {total} 封
             </span>
             {syncMessage && <span className="text-indigo-500">{syncMessage}</span>}
             <JobProgressBar job={organizeJob} label="AI 整理" />
@@ -627,13 +590,21 @@ export default function MailBrowser({
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {listQuery.isLoading && <div className="p-6 t-sm text-gray-400">加载中…</div>}
           {!listQuery.isLoading && items.length === 0 && (
-            <div className="p-8 text-center t-sm text-gray-400">
-              {archived ? '还没有已归档的邮件' : '此视图暂无邮件'}
-            </div>
+            <div className="p-8 text-center t-sm text-gray-400">此视图暂无邮件</div>
           )}
           {items.map((item) => (
             <div
               key={item.id}
+              data-email-id={item.id}
+              draggable
+              onDragStart={(e) => {
+                const ids = selectedIds.includes(item.id) ? selectedIds : [item.id]
+                e.dataTransfer.setData(
+                  'application/x-nmail-ids',
+                  JSON.stringify({ accountId, ids }),
+                )
+                e.dataTransfer.effectAllowed = 'move'
+              }}
               onClick={() => selectEmail(item)}
               className={`block w-full cursor-pointer border-b border-l-2 border-gray-50 px-3 py-1 text-left transition-colors hover:bg-gray-50 ${
                 selectedId === item.id
@@ -722,7 +693,7 @@ export default function MailBrowser({
           detail ? (
             <EmailReader
               detail={detail}
-              archived={archived}
+              archived={false}
               actionBusy={actionBusy}
               onAction={(action, dest) =>
                 actionMutation.mutate({ id: detail.id, action, folder: dest })

@@ -246,18 +246,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Account Folders */
-        get: operations["list_account_folders_api_accounts__account_id__folders_get"];
+        /**
+         * List Folders
+         * @description 树数据源：folders 缓存；缓存为空或 refresh=1 时连服务器 LIST 刷新。
+         */
+        get: operations["list_folders_api_accounts__account_id__folders_get"];
         put?: never;
         /**
          * Create Folder
-         * @description 在服务器上创建自定义文件夹（VSCode 资源管理器式）。
+         * @description 在服务器上创建文件夹（VSCode 资源管理器式；含层级，名内带分隔符）。
          */
         post: operations["create_folder_api_accounts__account_id__folders_post"];
-        delete?: never;
+        /**
+         * Delete Folder
+         * @description 删除文件夹：服务器 DELETE，本地该文件夹邮件行/断点/缓存一并清理。
+         */
+        delete: operations["delete_folder_api_accounts__account_id__folders_delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Rename Folder
+         * @description 重命名文件夹：服务器 RENAME，本地缓存/邮件/同步断点跟随（UID 不变）。
+         *
+         *     名字走查询参数——IMAP 文件夹名自带分隔符（如 Gmail 的「/」），放路径里
+         *     需逐段转义，易错；查询参数天然整段编码。
+         */
+        patch: operations["rename_folder_api_accounts__account_id__folders_patch"];
         trace?: never;
     };
     "/api/oauth/status": {
@@ -392,8 +406,8 @@ export interface paths {
         put?: never;
         /**
          * Batch Action
-         * @description 批量操作：归档类纯本地、打标类按账号同步执行；trash/move（较慢）提交
-         *     后台任务立即返回 job_id（进度/结果经 /api/jobs/* 轮询）。
+         * @description 批量操作：archive/unarchive/trash/move（IMAP 移动，较慢）提交后台任务
+         *     立即返回 job_id（进度/结果经 /api/jobs/* 轮询）；打标类按账号同步执行。
          */
         post: operations["batch_action_api_emails_batch_action_post"];
         delete?: never;
@@ -413,6 +427,67 @@ export interface paths {
         get: operations["list_emails_api_emails_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/emails/archived_pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Archived Pending
+         * @description 存量本地归档迁移状态：待迁移数 + 用户是否已做过去留决策（REDESIGN_PLAN §4.6）。
+         */
+        get: operations["archived_pending_api_emails_archived_pending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/emails/archived_migrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archived Migrate
+         * @description 存量本地归档一次性迁移：待迁移邮件提交后台 job 移到各账号 Archived，
+         *     并标记决策已做（此后管线自动归档生效）。
+         */
+        post: operations["archived_migrate_api_emails_archived_migrate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/emails/archived_dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archived Dismiss
+         * @description 跳过存量迁移：历史邮件保持本地标记（不进收件箱、不上服务器），此后新归档照常走服务器。
+         */
+        post: operations["archived_dismiss_api_emails_archived_dismiss_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1269,6 +1344,11 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** FolderRenameIn */
+        FolderRenameIn: {
+            /** New Name */
+            new_name: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1970,9 +2050,11 @@ export interface operations {
             };
         };
     };
-    list_account_folders_api_accounts__account_id__folders_get: {
+    list_folders_api_accounts__account_id__folders_get: {
         parameters: {
-            query?: never;
+            query?: {
+                refresh?: boolean;
+            };
             header?: never;
             path: {
                 account_id: number;
@@ -2015,6 +2097,80 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["FolderCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_folder_api_accounts__account_id__folders_delete: {
+        parameters: {
+            query: {
+                name: string;
+            };
+            header?: never;
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_folder_api_accounts__account_id__folders_patch: {
+        parameters: {
+            query: {
+                name: string;
+            };
+            header?: never;
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderRenameIn"];
             };
         };
         responses: {
@@ -2303,6 +2459,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archived_pending_api_emails_archived_pending_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    archived_migrate_api_emails_archived_migrate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    archived_dismiss_api_emails_archived_dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

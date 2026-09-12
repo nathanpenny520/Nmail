@@ -7,8 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.deps import mail_error_to_http
-from app.core import imap_client, mailbox, oauth, sync as sync_engine
+from app.core import imap_client, oauth, sync as sync_engine
 from app.core.providers import MANUAL_NOTE, PRESETS, match_provider, probe_server
 from app.db.database import get_conn
 from app.security import set_secret
@@ -232,6 +231,7 @@ def delete_account(account_id: int) -> dict:
         raise HTTPException(404, "账号不存在")
     conn.execute("DELETE FROM emails WHERE account_id = ?", (account_id,))
     conn.execute("DELETE FROM sync_state WHERE account_id = ?", (account_id,))
+    conn.execute("DELETE FROM folders WHERE account_id = ?", (account_id,))
     conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
     conn.commit()
     set_secret(f"account_pwd:{account_id}", None)
@@ -252,43 +252,4 @@ def sync_account_now(account_id: int, folder: str = "INBOX") -> dict:
         folders=(folder,),
     )
 
-
-@router.get("/accounts/{account_id}/folders")
-def list_account_folders(account_id: int) -> dict:
-    try:
-        handle = mailbox.load_account(account_id)
-    except mailbox.MailError as exc:
-        raise mail_error_to_http(exc) from exc
-    try:
-        with mailbox.open_imap(handle) as mb:
-            return {"folders": imap_client.list_folders(mb)}
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"获取文件夹失败：{exc}") from exc
-
-
-class FolderCreateIn(BaseModel):
-    name: str
-
-
-@router.post("/accounts/{account_id}/folders")
-def create_folder(account_id: int, payload: FolderCreateIn) -> dict:
-    """在服务器上创建自定义文件夹（VSCode 资源管理器式）。"""
-    name = payload.name.strip()
-    if not name:
-        raise HTTPException(400, "文件夹名不能为空")
-    try:
-        handle = mailbox.load_account(account_id)
-    except mailbox.MailError as exc:
-        raise mail_error_to_http(exc) from exc
-    try:
-        with mailbox.open_imap(handle) as mb:
-            existing = {f.name for f in mb.folder.list()}
-            if name in existing or name.upper() == "INBOX":
-                raise HTTPException(400, f"文件夹「{name}」已存在")
-            if not mb.folder.create(name):
-                raise HTTPException(502, "服务器拒绝创建文件夹")
-            return {"ok": True, "name": name}
-    except HTTPException:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"创建文件夹失败：{exc}") from exc
+# 文件夹端点（列表/创建/重命名/删除）已迁至 api/folders.py（v0.4 P2，路径不变）

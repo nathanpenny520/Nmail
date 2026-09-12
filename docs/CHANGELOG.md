@@ -3,6 +3,17 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — v0.4 P2: 资源管理器（文件夹树完整版 · 归档=服务器移动）
+- 依据 docs/REDESIGN_PLAN.md §4/§13 P2
+- **归档语义改造（§4.6）**：archive=真实移动到每账号服务器端 Archived 文件夹（accounts.archive_folder，缺省 Archived，首归档惰性创建）；unarchive=移回收件箱；archived_local 降级为「待服务器归档」暂存标记（移动失败保留、下次管线自动重试）。单封走端点同步移动，批量/迁移走 imap_batch job；营销/黑名单自动归档经 pipeline `_sweep_server_archive` 落服务器
+- **存量迁移流**：迁移 v15 对有 archived_local 存量的库落 KV `archive_migrate_done=0`（暂停自动清扫，防止未确认就搬历史邮件）；前端基座弹一次性提示「迁移 N 封 / 保留原地」；`GET /emails/archived_pending`+`POST archived_migrate/dismiss` 三端点；v15 同时建 folders 缓存表 + accounts.archive_folder 列
+- **文件夹体系（§4.4）**：新增 core/folders.py（folders 表缓存、SPECIAL-USE 识别+中文启发式、folder_guard 系统文件夹守卫、RENAME 本地缓存/邮件/断点跟随、DELETE 清邮件行/断点/附件）+ api/folders.py（列表/刷新/创建/重命名/删除；改名删除的名字走查询参数——IMAP 名含分隔符）；旧 accounts.py 两端点迁入路径不变；账号删除连带清 folders 缓存
+- **前端树完整版**：FolderTree 渲染服务器文件夹层级（INBOX→Archived→系统→自定义，分隔符组树、图标区分）；右键菜单=新建（子）文件夹/重命名/删除/刷新列表（确认弹窗，系统文件夹无改删项）；拖拽移动（列表行多选集合拖到树节点/账号行=INBOX，跨账号拖拽忽略=D4 决策）；All Mail 置灰守卫；MailBrowser 去账号/文件夹下拉与建夹 UI（树为唯一入口，留星标/分类/面包屑），新增键盘 j/k/x/o/Enter/e/#/c/// 与行拖拽源；MailBrowser 保留批量栏「移动到…」下拉（复用树缓存）
+- **sync**：AI 管线只吃 INBOX 新邮件（按需同步的其他文件夹不分类/不生成草稿/不归档）
+- **接口变更**：openapi.json 快照与 schema.d.ts 已再生成；`GET /accounts/{id}/folders` 返回 folders 表缓存行（name/delim/special_use/subscribed/is_system/is_archive）
+- 验证：pytest 98 例全绿（新增 test_folders.py 3 例：识别矩阵/系统守卫/缓存与默认归档夹；batch 归档改为 job 契约测试）；ruff（app 门禁）通过；npm build 通过；隔离实例（8798，种假账号+存量归档数据）浏览器冒烟——迁移弹窗出现/保留原地关闭/账号展开文件夹层级渲染/Archived 选中切换（面包屑 demo@qq.com/Archived）/All Mail 置灰逐项截图确认
+- 遗留：真实账号端到端验收待用户（Gmail+Outlook+QQ 各一：建夹/改名/删除/跨文件夹拖 50 封/归档后网页端可见/All Mail 不可误同步——REDESIGN_PLAN §13 P2 验收单）；树未读计数徽章与订阅文件夹低频轮询（§4.4 订阅同步）顺延；归档文件夹改名 UI（账号设置）顺延
+
 ## 651b070 — v0.4 P1: UI 骨架改版（砍侧栏 · 邮件基座 · 字号统一门禁）
 - 依据 docs/REDESIGN_PLAN.md §3/§9/§13 P1（2026-09-12 定稿），本阶段纯前端
 - **导航重设计**：删除应用左侧竖栏；「邮件」成为唯一常驻基座页签，AI 总管家/每日摘要/设置改为标签条右侧小图标按钮（点击才产生/激活页签，沿用 PAGE_TABS 记忆机制），通知铃与新邮件按钮同区；应用标识移至标签条最左

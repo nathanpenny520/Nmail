@@ -1,4 +1,9 @@
-"""邮件 API：列表/搜索、详情（安全 HTML）、状态操作、附件下载。"""
+"""邮件 API：列表/搜索、详情（安全 HTML）、状态操作、附件下载、归档迁移。
+
+v0.4 归档语义（REDESIGN_PLAN §4.6）：archive = 移动到本账号服务器端归档文件夹
+（accounts.archive_folder，缺省 Archived，惰性创建）；archived_local 仅作移动
+前暂存标记。unarchive = 从归档文件夹移回收件箱。
+"""
 from __future__ import annotations
 
 import json
@@ -9,9 +14,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.api.deps import mail_error_to_http
+from app.core import folders as folders_core
 from app.core import imap_client, jobs, mailbox
 from app.core.mail_html import sanitize_email_html
-from app.db.database import get_conn
+from app.db.database import get_conn, get_setting, set_setting
 
 router = APIRouter(prefix="/api", tags=["emails"])
 
@@ -31,8 +37,8 @@ class BatchActionIn(BaseModel):
 
 @router.post("/emails/batch-action")
 def batch_action(payload: BatchActionIn) -> dict:
-    """批量操作：归档类纯本地、打标类按账号同步执行；trash/move（较慢）提交
-    后台任务立即返回 job_id（进度/结果经 /api/jobs/* 轮询）。"""
+    """批量操作：archive/unarchive/trash/move（IMAP 移动，较慢）提交后台任务
+    立即返回 job_id（进度/结果经 /api/jobs/* 轮询）；打标类按账号同步执行。"""
     if not payload.ids:
         raise HTTPException(400, "ids 为空")
     ids = list(dict.fromkeys(payload.ids))
@@ -42,8 +48,8 @@ def batch_action(payload: BatchActionIn) -> dict:
     if action == "move" and not payload.folder:
         raise HTTPException(400, "move 需要目标文件夹")
 
-    # trash/move：逐账号 IMAP 操作，耗时随批量线性增长——异步化（§3.4）
-    if action in ("trash", "move"):
+    # 归档=服务器移动 / trash/move：逐账号 IMAP 操作，耗时随批量线性增长——异步化
+    if action in ("trash", "move", "archive", "unarchive"):
         job_id = jobs.submit("imap_batch", ids=ids, action=action, folder=payload.folder)
         return {"ok": True, "job_id": job_id}
 
@@ -54,16 +60,6 @@ def batch_action(payload: BatchActionIn) -> dict:
         f" WHERE e.id IN ({placeholders})",
         ids,
     ).fetchall()
-
-    # 归档类：仅本地标记
-    if action in ("archive", "unarchive"):
-        value = 1 if action == "archive" else 0
-        conn.execute(
-            f"UPDATE emails SET archived_local = ? WHERE id IN ({placeholders})",
-            (value, *ids),
-        )
-        conn.commit()
-        return {"ok": True, "updated": len(rows), "failed": 0}
 
     # 打标类：按账号分组，每账号一条连接，文件夹内合并打标
     by_account: dict[int, list] = {}
@@ -233,6 +229,40 @@ def _sender_image_trusted(sender_email: str) -> bool:
     return False
 
 
+@router.get("/emails/archived_pending")
+def archived_pending() -> dict:
+    """存量本地归档迁移状态：待迁移数 + 用户是否已做过去留决策（REDESIGN_PLAN §4.6）。"""
+    n = get_conn().execute(
+        "SELECT COUNT(*) AS n FROM emails e JOIN accounts a ON a.id = e.account_id"
+        " WHERE e.archived_local = 1 AND e.folder != COALESCE(a.archive_folder, 'Archived')"
+    ).fetchone()["n"]
+    # v15 迁移裸 SQL 存 int 0，set_setting 存字符串 "0"——两种都要识别为「未决策」
+    return {"count": n, "done": get_setting("archive_migrate_done") not in (0, "0")}
+
+
+@router.post("/emails/archived_migrate")
+def archived_migrate() -> dict:
+    """存量本地归档一次性迁移：待迁移邮件提交后台 job 移到各账号 Archived，
+    并标记决策已做（此后管线自动归档生效）。"""
+    ids = [
+        int(r["id"])
+        for r in get_conn().execute(
+            "SELECT e.id FROM emails e JOIN accounts a ON a.id = e.account_id"
+            " WHERE e.archived_local = 1 AND e.folder != COALESCE(a.archive_folder, 'Archived')"
+        ).fetchall()
+    ]
+    set_setting("archive_migrate_done", True)
+    job_id = jobs.submit("imap_batch", ids=ids, action="archive") if ids else None
+    return {"ok": True, "job_id": job_id, "migrating": len(ids)}
+
+
+@router.post("/emails/archived_dismiss")
+def archived_dismiss() -> dict:
+    """跳过存量迁移：历史邮件保持本地标记（不进收件箱、不上服务器），此后新归档照常走服务器。"""
+    set_setting("archive_migrate_done", True)
+    return {"ok": True}
+
+
 @router.get("/emails/{email_id}")
 def get_email(email_id: int, images: bool = False) -> dict:
     row = _get_email_row(email_id)
@@ -291,12 +321,36 @@ def email_action(email_id: int, payload: EmailActionIn) -> dict:
     action = payload.action
 
     if action in ("archive", "unarchive"):
-        # 本地归档视图：仅改本地标记，服务器邮件不动
-        value = 1 if action == "archive" else 0
+        # v0.4：archive=移到服务器端归档文件夹；unarchive=从归档夹移回收件箱
         conn = get_conn()
-        conn.execute("UPDATE emails SET archived_local = ? WHERE id = ?", (value, email_id))
-        conn.commit()
-        return {"ok": True}
+        account_id = int(row["account_id"])
+        target = folders_core.archive_folder_name(account_id)
+        dest = "INBOX" if action == "unarchive" else target
+        try:
+            handle = mailbox.load_account(account_id)
+            with mailbox.open_imap(handle) as mb:
+                if action == "archive":
+                    folders_core.ensure_archive_with_mb(mb, account_id, target)
+                if row["folder"] != dest:
+                    new_uid = imap_client.move_email(mb, row["folder"], row["uid"], dest)
+                    if new_uid is None:
+                        # 拿不到新 UID：删行交增量重建（R2 语义）
+                        conn.execute("DELETE FROM emails WHERE id = ?", (email_id,))
+                    else:
+                        conn.execute(
+                            "UPDATE emails SET folder = ?, uid = ?, archived_local = 0 WHERE id = ?",
+                            (dest, new_uid, email_id),
+                        )
+                else:
+                    conn.execute("UPDATE emails SET archived_local = 0 WHERE id = ?", (email_id,))
+            conn.commit()
+            return {"ok": True}
+        except folders_core.FolderError as exc:
+            raise HTTPException(exc.status, exc.message) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001 — 服务器端失败时不做本地变更
+            raise HTTPException(502, f"归档操作失败：{exc}") from exc
 
     try:
         handle = mailbox.load_account(row["account_id"])

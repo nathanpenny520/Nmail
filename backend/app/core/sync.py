@@ -212,8 +212,9 @@ def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dic
             str(account_id),
         )
 
-    # AI 流水线（白/黑名单 → 分类 → 自动归档 → 草稿）；失败不影响同步结果
-    new_ids = [eid for r in results for eid in r.get("new_email_ids", [])]
+    # AI 流水线（白/黑名单 → 分类 → 自动归档 → 草稿）；失败不影响同步结果。
+    # v0.4：只对 INBOX 新邮件跑管线——按需同步的其他文件夹不做分类/草稿/归档
+    new_ids = [eid for r in results if r["folder"] == "INBOX" for eid in r.get("new_email_ids", [])]
     if new_ids:
         try:
             from app.core.pipeline import process_new_emails
