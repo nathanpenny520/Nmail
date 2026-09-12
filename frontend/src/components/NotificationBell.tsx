@@ -119,7 +119,8 @@ export default function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-0 left-10 z-40 mb-1 w-80 rounded-xl border border-gray-200 bg-white shadow-xl">
+          {/* v0.4 铃铛移到顶部图标区：面板向下展开、右缘对齐（旧 bottom-0 向上开会出视口） */}
+          <div className="absolute right-0 top-full z-40 mt-1.5 w-80 rounded-xl border border-gray-200 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
               <span className="t-sm font-semibold text-gray-700">通知中心</span>
               <div className="flex items-center gap-2">
