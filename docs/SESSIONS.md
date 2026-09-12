@@ -21,7 +21,7 @@
 ### S-0912-1830-设置页加宽 ✅
 - 目标: 用户反馈设置页左右留白过多——主容器与粘性保存栏 `max-w-4xl`(896px) 放宽至 `max-w-6xl`(1152px)，其余内边距不动
 - 范围: frontend(SettingsPage.tsx 两处 className) + docs(CHANGELOG, SESSIONS)
-- 产出: 提交待回填；npm build 通过（纯 className 改动，无逻辑变化）
+- 产出: 提交 d262f61；npm build 通过（纯 className 改动，无逻辑变化）
 - 时间: 2026-09-12 18:30 开工，即日完成
 
 ### S-0912-1720-通讯录改版 ✅
