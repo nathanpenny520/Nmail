@@ -209,7 +209,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl gap-8 p-8">
+    <div className="mx-auto flex max-w-6xl gap-8 p-8">
       {/* 侧边栏分类 */}
       <div className="w-36 shrink-0">
         <h1 className="t-lg font-semibold">设置</h1>
@@ -672,7 +672,7 @@ export default function SettingsPage() {
         {/* 粘性保存栏：通用设置有改动时浮出 */}
         {dirty && (
           <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 backdrop-blur">
-            <div className="mx-auto flex max-w-4xl items-center gap-3 px-8 py-3">
+            <div className="mx-auto flex max-w-6xl items-center gap-3 px-8 py-3">
               <span className="t-sm text-gray-600">通用设置有未保存更改</span>
               <span className="flex-1" />
               {saveMutation.isError && (
