@@ -75,6 +75,10 @@ export interface Account {
   /** 该账号 IMAP/SMTP 是否经全局代理地址连接（被墙服务商用） */
   use_proxy: boolean
   ai_permission: 'readonly' | 'draft_review'
+  /** AI 细粒度授权（v0.4 P6）；null = 按旧 ai_permission 枚举映射 */
+  ai_grants: { read: boolean; draft: boolean; organize: boolean; send: boolean; delete: boolean } | null
+  /** AI 专属邮箱：默认自动模式、管线草稿低危直发 */
+  is_ai_mailbox: boolean
   /** 文风提示词：AI 起草该账号回复时遵循，用户手写可编辑；null=未设置 */
   style_prompt: string | null
   status: 'ok' | 'auth_error' | 'connection_error' | 'never_synced' | 'syncing'
@@ -292,6 +296,40 @@ export interface UserDraft {
     date: string
     snippet: string
   } | null
+}
+
+/** AI Agent 动作审计行（v0.4 P6，ai_actions 表） */
+export interface AgentAction {
+  id: number
+  session_id: number | null
+  account_id: number | null
+  account_email: string | null
+  tool: string
+  params: Record<string, unknown>
+  mode: 'approval' | 'auto' | string
+  origin: 'ui' | 'api' | string
+  status: 'pending' | 'approved' | 'rejected' | 'executed' | 'failed' | 'expired' | 'undone' | string
+  result: Record<string, unknown> | null
+  undoable: boolean
+  error: string | null
+  created_at: string
+  decided_at: string | null
+}
+
+/** Agent SSE 事件（text/tool_call/tool_result/approval_required/error/done） */
+export interface AgentEvent {
+  type: 'text' | 'tool_call' | 'tool_result' | 'approval_required' | 'error' | 'done' | string
+  text?: string
+  tool?: string
+  args?: Record<string, unknown>
+  grant?: string
+  ok?: boolean
+  summary?: string
+  action_id?: number
+  reason?: string
+  error?: string
+  /** 前端卡片状态（审批处理后/撤销后本地更新用，非后端字段） */
+  status?: string
 }
 
 /** 通讯录联系人（v0.4 P4）：account_id null=全局手动；source manual=手动编辑过（采集不覆盖） */

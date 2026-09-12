@@ -1,6 +1,7 @@
 """账号管理 API：添加（带连接测试）、列表、删除、手动同步、文件夹、服务商预设。"""
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -79,11 +80,23 @@ def _account_dict(row) -> dict[str, Any]:  # noqa: ANN001
         "oauth_provider": row["oauth_provider"] if "oauth_provider" in row.keys() else "",  # noqa: SIM118 — 同上
         "use_proxy": bool(row["use_proxy"]) if "use_proxy" in row.keys() else False,  # noqa: SIM118 — 同上
         "ai_permission": row["ai_permission"] if "ai_permission" in row.keys() else "draft_review",  # noqa: SIM118 — 同上
+        "ai_grants": _safe_grants(row["ai_grants"]) if "ai_grants" in row.keys() else None,  # noqa: SIM118 — 同上
+        "is_ai_mailbox": bool(row["is_ai_mailbox"]) if "is_ai_mailbox" in row.keys() else False,  # noqa: SIM118 — 同上
         "style_prompt": row["style_prompt"] if "style_prompt" in row.keys() else None,  # noqa: SIM118 — 同上
         "status": row["status"],
         "status_detail": row["status_detail"],
         "last_sync_at": row["last_sync_at"],
     }
+
+
+def _safe_grants(raw: str | None) -> dict | None:
+    """ai_grants JSON 容错解析（坏值回退 None=按旧枚举映射，不让账号列表 500）。"""
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return None
 
 
 @router.get("/providers")
@@ -172,6 +185,35 @@ def add_account(payload: AccountIn) -> dict:
 def list_accounts() -> dict:
     rows = get_conn().execute("SELECT * FROM accounts ORDER BY id").fetchall()
     return {"accounts": [_account_dict(r) for r in rows]}
+
+
+GRANT_KEYS = ("read", "draft", "organize", "send", "delete")
+
+
+class AiGrantsIn(BaseModel):
+    read: bool = True
+    draft: bool = False
+    organize: bool = False
+    send: bool = False
+    delete: bool = False
+    is_ai_mailbox: bool | None = None  # 顺带切换 AI 专属邮箱标记（二次确认在前端）
+
+
+@router.patch("/accounts/{account_id}/ai-grants")
+def update_ai_grants(account_id: int, payload: AiGrantsIn) -> dict:
+    """账号级 AI 细粒度授权（v0.4 P6，REDESIGN_PLAN §6.4）：5 授权位 + AI 专属邮箱。"""
+    row = get_conn().execute("SELECT id FROM accounts WHERE id = ?", (account_id,)).fetchone()
+    if row is None:
+        raise HTTPException(404, "账号不存在")
+    grants = {k: bool(getattr(payload, k)) for k in GRANT_KEYS}
+    conn = get_conn()
+    conn.execute("UPDATE accounts SET ai_grants = ? WHERE id = ?",
+                 (json.dumps(grants), account_id))
+    if payload.is_ai_mailbox is not None:
+        conn.execute("UPDATE accounts SET is_ai_mailbox = ? WHERE id = ?",
+                     (1 if payload.is_ai_mailbox else 0, account_id))
+    conn.commit()
+    return {"ok": True, "ai_grants": grants}
 
 
 @router.patch("/accounts/{account_id}")

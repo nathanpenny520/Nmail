@@ -2,6 +2,7 @@ import type {
   AITestPayload,
   AITestResult,
   Account,
+  AgentAction,
   AccountAddPayload,
   AIProfile,
   AIProfilesResp,
@@ -235,6 +236,26 @@ export const api = {
     request<{ draft: UserDraft }>(`/api/user-drafts/${id}/attachments/${attId}`, { method: 'DELETE' }),
   deleteUserDraft: (id: number) =>
     request<{ ok: boolean }>(`/api/user-drafts/${id}`, { method: 'DELETE' }),
+
+  // ── AI 总管家 Agent（v0.4 P6）──
+  agentDecide: (id: number, decision: 'approve' | 'reject', args?: Record<string, unknown>) =>
+    request<{ status?: string; summary?: string; result?: Record<string, unknown>; error?: string }>(
+      `/api/ai/agent/action/${id}/decide`,
+      { method: 'POST', body: JSON.stringify({ decision, ...(args ? { args } : {}) }) },
+    ),
+  agentUndo: (id: number) =>
+    request<{ undone?: number; error?: string }>(`/api/ai/agent/action/${id}/undo`, { method: 'POST' }),
+  getAgentActions: (status?: string) =>
+    request<{ actions: AgentAction[] }>(
+      `/api/ai/agent/actions${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+    ),
+  updateAiGrants: (id: number, payload: {
+    read: boolean; draft: boolean; organize: boolean; send: boolean; delete: boolean
+    is_ai_mailbox?: boolean
+  }) =>
+    request<{ ok: boolean; ai_grants: Record<string, boolean> }>(
+      `/api/accounts/${id}/ai-grants`, { method: 'PATCH', body: JSON.stringify(payload) },
+    ),
 
   // ── 通讯录（v0.4 P4）──
   getContacts: (q: string = '') =>

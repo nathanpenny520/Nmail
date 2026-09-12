@@ -201,6 +201,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{account_id}/ai-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Ai Grants
+         * @description 账号级 AI 细粒度授权（v0.4 P6，REDESIGN_PLAN §6.4）：5 授权位 + AI 专属邮箱。
+         */
+        patch: operations["update_ai_grants_api_accounts__account_id__ai_grants_patch"];
+        trace?: never;
+    };
     "/api/accounts/{account_id}": {
         parameters: {
             query?: never;
@@ -969,6 +989,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/agent/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Agent Stream
+         * @description 总管家 Agent 对话（SSE）：text / tool_call / tool_result / approval_required / error / done。
+         */
+        post: operations["agent_stream_api_ai_agent_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/agent/action/{action_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Agent Decide
+         * @description 审批动作：批准执行（可改参数）或拒绝。
+         */
+        post: operations["agent_decide_api_ai_agent_action__action_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/agent/action/{action_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Agent Undo
+         * @description 撤销已执行动作（标记/移动/归档类；发送不可撤销）。
+         */
+        post: operations["agent_undo_api_ai_agent_action__action_id__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/agent/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent Actions
+         * @description AI 操作记录（设置页审计查看器）。
+         */
+        get: operations["agent_actions_api_ai_agent_actions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/organize": {
         parameters: {
             query?: never;
@@ -1313,6 +1413,68 @@ export interface components {
             style_prompt?: string | null;
             /** Use Proxy */
             use_proxy?: boolean | null;
+        };
+        /** AgentDecisionIn */
+        AgentDecisionIn: {
+            /** Decision */
+            decision: string;
+            /** Args */
+            args?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** AgentStreamIn */
+        AgentStreamIn: {
+            /** Question */
+            question: string;
+            /** History */
+            history?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Account Ids
+             * @default []
+             */
+            account_ids: number[];
+            /**
+             * Mode
+             * @default approval
+             */
+            mode: string;
+            /** Session Id */
+            session_id?: number | null;
+            /** Profile Id */
+            profile_id?: string | null;
+        };
+        /** AiGrantsIn */
+        AiGrantsIn: {
+            /**
+             * Read
+             * @default true
+             */
+            read: boolean;
+            /**
+             * Draft
+             * @default false
+             */
+            draft: boolean;
+            /**
+             * Organize
+             * @default false
+             */
+            organize: boolean;
+            /**
+             * Send
+             * @default false
+             */
+            send: boolean;
+            /**
+             * Delete
+             * @default false
+             */
+            delete: boolean;
+            /** Is Ai Mailbox */
+            is_ai_mailbox?: boolean | null;
         };
         /** BatchActionIn */
         BatchActionIn: {
@@ -1987,6 +2149,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AccountIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_ai_grants_api_accounts__account_id__ai_grants_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiGrantsIn"];
             };
         };
         responses: {
@@ -3565,6 +3764,143 @@ export interface operations {
                 "application/json": components["schemas"]["WriteIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_stream_api_ai_agent_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentStreamIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_decide_api_ai_agent_action__action_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentDecisionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_undo_api_ai_agent_action__action_id__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_actions_api_ai_agent_actions_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

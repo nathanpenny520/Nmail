@@ -1,4 +1,4 @@
-"""AI 能力 API：上下文问答、总管家问答、写作辅助、用量统计、「AI 整理」补分类。"""
+"""AI 能力 API：上下文问答、总管家问答、Agent 对话（工具+审批）、写作辅助、用量统计、「AI 整理」补分类。"""
 from __future__ import annotations
 
 import json
@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.ai import profiles, tasks
+from app.ai import agent, profiles, tasks
 from app.api.chats import append_message, require_session
 from app.api.deps import ai_config_or_400, ai_result_or_http
 from app.core import jobs
@@ -65,6 +65,20 @@ class ManagerChatIn(BaseModel):
     days: int = 7
     session_id: int | None = None  # 提供时落库（会话持久化），否则保持旧的无痕行为
     profile_id: str | None = None  # 可选：本次对话使用指定 AI 配置档案
+
+
+class AgentStreamIn(BaseModel):
+    question: str
+    history: list[dict] | None = None
+    account_ids: list[int] = []     # 会话范围（空=全部账号）
+    mode: str = "approval"          # approval | auto
+    session_id: int | None = None
+    profile_id: str | None = None
+
+
+class AgentDecisionIn(BaseModel):
+    decision: str                   # approve | reject
+    args: dict | None = None        # 可选：改参数后批准
 
 
 def _record_model(profile_id: str | None) -> str:
@@ -236,6 +250,107 @@ def write(payload: WriteIn) -> dict:
         html = markdown_body_html(result)
         resp["html"] = sanitize_outgoing_html(html)
     return resp
+
+
+# ── AI 总管家 Agent（v0.4 P6，REDESIGN_PLAN §6）─────────────────
+
+class _AgentSSE:
+    """把 agent 事件生成器包装为 SSE；结束后把对话轨迹落库（会话持久化复用）。"""
+
+    def __init__(self, payload: AgentStreamIn):
+        self.payload = payload
+        self.trace: list[str] = []
+
+    def stream(self):
+        payload = self.payload
+        account_ids = payload.account_ids or [
+            int(r["id"]) for r in get_conn().execute("SELECT id FROM accounts").fetchall()
+        ]
+        if payload.mode not in ("approval", "auto"):
+            yield f"data: {json.dumps({'type': 'error', 'error': 'mode 需为 approval/auto'})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        try:
+            for event in agent.run_stream(
+                payload.question, payload.history, payload.session_id,
+                account_ids, payload.mode, payload.profile_id,
+            ):
+                etype = event.get("type")
+                if etype == "text" and event.get("text"):
+                    self.trace.append(event["text"])
+                elif etype == "tool_call":
+                    args = event.get("args") or {}
+                    brief = ", ".join(f"{k}={str(v)[:40]}" for k, v in list(args.items())[:3])
+                    self.trace.append(f"[调用 {event.get('tool')} {brief}]")
+                elif etype == "tool_result":
+                    mark = "✓" if event.get("ok") else "✗"
+                    self.trace.append(f"[{mark} {event.get('summary', '')}]")
+                elif etype == "approval_required":
+                    self.trace.append(f"[待批准 {event.get('tool')}]")
+                yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+        except tasks.AINotConfigured:
+            yield "data: " + json.dumps({"type": "error", "error": "AI 未配置或已停用，请到 设置-AI 配置 检查"}, ensure_ascii=False) + "\n\n"
+        except Exception as exc:  # noqa: BLE001
+            yield "data: " + json.dumps({"type": "error", "error": str(exc)[:300]}, ensure_ascii=False) + "\n\n"
+        yield "data: [DONE]\n\n"
+        if payload.session_id is not None:
+            append_message(payload.session_id, "assistant",
+                           "\n".join(t for t in self.trace if t.strip()),
+                           model=_record_model(payload.profile_id))
+
+    def response(self) -> StreamingResponse:
+        return StreamingResponse(
+            self.stream(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+
+@router.post("/agent/stream")
+def agent_stream(payload: AgentStreamIn):
+    """总管家 Agent 对话（SSE）：text / tool_call / tool_result / approval_required / error / done。"""
+    return _AgentSSE(payload).response()
+
+
+@router.post("/agent/action/{action_id}/decide")
+def agent_decide(action_id: int, payload: AgentDecisionIn) -> dict:
+    """审批动作：批准执行（可改参数）或拒绝。"""
+    if payload.decision not in ("approve", "reject"):
+        raise HTTPException(400, "decision 需为 approve/reject")
+    return agent.execute_action(action_id, payload.decision, payload.args)
+
+
+@router.post("/agent/action/{action_id}/undo")
+def agent_undo(action_id: int) -> dict:
+    """撤销已执行动作（标记/移动/归档类；发送不可撤销）。"""
+    return agent.undo_action(action_id)
+
+
+@router.get("/agent/actions")
+def agent_actions(status: str | None = None, limit: int = 100) -> dict:
+    """AI 操作记录（设置页审计查看器）。"""
+    limit = max(1, min(limit, 500))
+    where, params = "", []
+    if status:
+        where = " WHERE status = ?"
+        params = [status]
+    rows = get_conn().execute(
+        f"SELECT a.*, ac.email AS account_email FROM ai_actions a"
+        f" LEFT JOIN accounts ac ON ac.id = a.account_id{where}"
+        f" ORDER BY a.id DESC LIMIT {limit}",
+        params,
+    ).fetchall()
+    return {"actions": [
+        {
+            "id": r["id"], "session_id": r["session_id"], "account_id": r["account_id"],
+            "account_email": r["account_email"], "tool": r["tool"],
+            "params": json.loads(r["params_json"] or "{}"),
+            "mode": r["mode"], "origin": r["origin"], "status": r["status"],
+            "result": json.loads(r["result_json"]) if r["result_json"] else None,
+            "undoable": bool(r["undo_json"]), "error": r["error"],
+            "created_at": r["created_at"], "decided_at": r["decided_at"],
+        }
+        for r in rows
+    ]}
 
 
 @router.post("/organize")

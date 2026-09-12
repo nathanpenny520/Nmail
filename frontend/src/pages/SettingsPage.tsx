@@ -60,6 +60,7 @@ export default function SettingsPage() {
   const [accountMessage, setAccountMessage] = useState<string | null>(null)
   const [showNewProfile, setShowNewProfile] = useState(false)
   const [styleOpenId, setStyleOpenId] = useState<number | null>(null)
+  const [aiGrantsOpenId, setAiGrantsOpenId] = useState<number | null>(null)
   const [settingsError, setSettingsError] = useState('')
 
   useEffect(() => {
@@ -192,12 +193,6 @@ export default function SettingsPage() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: (id: number) => api.deleteAccount(id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['accounts'] }),
-  })
-
-  const permissionMutation = useMutation({
-    mutationFn: ({ id, ai_permission }: { id: number; ai_permission: string }) =>
-      api.updateAccount(id, { ai_permission }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['accounts'] }),
   })
 
@@ -392,17 +387,13 @@ export default function SettingsPage() {
                           )}
                         </div>
                       </div>
-                      <select
-                        className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 t-sm text-gray-600 outline-none focus:border-indigo-400"
-                        value={account.ai_permission || 'draft_review'}
-                        onChange={(e) =>
-                          permissionMutation.mutate({ id: account.id, ai_permission: e.target.value })
-                        }
-                        title="该账号的 AI 权限"
+                      <button
+                        className="shrink-0 rounded-lg border px-2 py-1.5 t-sm text-gray-600 hover:bg-white hover:text-indigo-600"
+                        title="该账号的 AI 细粒度授权（总管家可做什么）与 AI 专属邮箱"
+                        onClick={() => setAiGrantsOpenId(aiGrantsOpenId === account.id ? null : account.id)}
                       >
-                        <option value="draft_review">AI：草稿待审</option>
-                        <option value="readonly">AI：只读摘要</option>
-                      </select>
+                        AI 权限
+                      </button>
                       <button
                         className={`shrink-0 rounded-lg border px-2 py-1.5 t-sm ${
                           account.use_proxy
@@ -457,6 +448,9 @@ export default function SettingsPage() {
                     </div>
                     {styleOpenId === account.id && (
                       <StylePromptEditor account={account} onClose={() => setStyleOpenId(null)} />
+                    )}
+                    {aiGrantsOpenId === account.id && (
+                      <AccountAiPanel account={account} onClose={() => setAiGrantsOpenId(null)} />
                     )}
                   </div>
                 )
@@ -549,6 +543,7 @@ export default function SettingsPage() {
         {section === 'usage' && (
           <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="t-lg font-semibold">AI 用量</h2>
+            <AgentActionsList />
             {!aiEnabled && (
               <p className="mt-1 t-sm text-gray-400">AI 已停用，以下为历史用量。</p>
             )}
@@ -1252,5 +1247,154 @@ function ContactsSection() {
         </table>
       </div>
     </section>
+  )
+}
+
+// ── 账号 AI 细粒度授权面板（v0.4 P6，REDESIGN_PLAN §6.4）────────
+const GRANT_LABELS: { key: 'read' | 'draft' | 'organize' | 'send' | 'delete'; label: string; hint: string }[] = [
+  { key: 'read', label: '读取', hint: '搜索/查看邮件、通讯录与统计' },
+  { key: 'draft', label: '起草', hint: '生成待审草稿（不会直接发出）' },
+  { key: 'organize', label: '整理', hint: '标记、移动、归档、建文件夹' },
+  { key: 'send', label: '发送', hint: '发送草稿（仍受模式与安全约束）' },
+  { key: 'delete', label: '删除', hint: '移入废纸篓（高危）' },
+]
+
+function AccountAiPanel({ account, onClose }: { account: Account; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [grants, setGrants] = useState(account.ai_grants ?? {
+    read: true, draft: account.ai_permission !== 'readonly', organize: account.ai_permission !== 'readonly',
+    send: false, delete: false,
+  })
+  const [isAiMailbox, setIsAiMailbox] = useState(account.is_ai_mailbox)
+  const [message, setMessage] = useState('')
+  const saveMutation = useMutation({
+    mutationFn: () => api.updateAiGrants(account.id, { ...grants, is_ai_mailbox: isAiMailbox }),
+    onSuccess: () => {
+      setMessage('已保存')
+      setTimeout(onClose, 600)
+      void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+    },
+    onError: (err: Error) => setMessage(`保存失败：${err.message}`),
+  })
+
+  return (
+    <div className="mt-2 rounded-xl border border-indigo-100 bg-indigo-50/40 px-4 py-3">
+      <div className="flex items-center justify-between">
+        <span className="t-sm font-medium text-indigo-900">AI 权限（总管家在该账号上可做什么）</span>
+        <button className="t-xs text-gray-400 hover:text-gray-600" onClick={onClose}>收起</button>
+      </div>
+      <div className="mt-2 grid gap-1.5">
+        {GRANT_LABELS.map((g) => (
+          <label key={g.key} className="flex items-center gap-2 t-sm text-gray-700">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-indigo-600"
+              checked={!!grants[g.key]}
+              onChange={(e) => setGrants((prev) => ({ ...prev, [g.key]: e.target.checked }))}
+            />
+            <b className="font-medium">{g.label}</b>
+            <span className="t-xs text-gray-400">{g.hint}</span>
+          </label>
+        ))}
+        <label className="mt-1 flex items-center gap-2 border-t border-indigo-100 pt-2 t-sm text-gray-700">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-amber-500"
+            checked={isAiMailbox}
+            onChange={(e) => {
+              if (e.target.checked && !confirm(
+                '设为 AI 专属邮箱？该账号将默认以自动模式工作（低风险草稿可直接发送），适合专门注册一个纯 AI 用的邮箱。确认？',
+              )) {
+                e.target.checked = false
+                return
+              }
+              setIsAiMailbox(e.target.checked)
+            }}
+          />
+          <b className="font-medium text-amber-700">AI 专属邮箱</b>
+          <span className="t-xs text-gray-400">默认自动模式、低风险草稿直发（树中带徽章）</span>
+        </label>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          className="rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          disabled={saveMutation.isPending}
+          onClick={() => saveMutation.mutate()}
+        >
+          {saveMutation.isPending ? '保存中…' : '保存'}
+        </button>
+        {message && <span className="t-xs text-indigo-600">{message}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── AI 操作记录查看器（v0.4 P6，REDESIGN_PLAN §6.8）：Agent 写动作全量审计 ──
+function AgentActionsList() {
+  const queryClient = useQueryClient()
+  const [status, setStatus] = useState('')
+  const listQuery = useQuery({
+    queryKey: ['ai-actions', status],
+    queryFn: () => api.getAgentActions(status || undefined),
+  })
+  const actions = listQuery.data?.actions ?? []
+  const undoMutation = useMutation({
+    mutationFn: (id: number) => api.agentUndo(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['ai-actions'] }),
+  })
+
+  return (
+    <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+      <div className="flex items-center gap-2">
+        <span className="t-sm font-medium text-gray-700">操作记录</span>
+        <span className="t-xs text-gray-400">总管家写动作全量留痕，可撤销项一键回滚</span>
+        <span className="flex-1" />
+        <select
+          className="rounded-lg border border-gray-200 px-2 py-1 t-xs text-gray-600 outline-none"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          <option value="">全部状态</option>
+          <option value="executed">已执行</option>
+          <option value="pending">待批准</option>
+          <option value="rejected">已拒绝</option>
+          <option value="failed">失败</option>
+          <option value="undone">已撤销</option>
+        </select>
+      </div>
+      <div className="mt-2 max-h-72 space-y-1 overflow-y-auto">
+        {listQuery.isLoading && <div className="py-3 t-sm text-gray-400">加载中…</div>}
+        {!listQuery.isLoading && actions.length === 0 && (
+          <div className="py-3 t-sm text-gray-300">还没有记录</div>
+        )}
+        {actions.map((a) => (
+          <div key={a.id} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 t-xs">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+              a.status === 'executed' ? 'bg-emerald-500'
+                : a.status === 'pending' ? 'bg-amber-400'
+                  : a.status === 'failed' || a.status === 'rejected' ? 'bg-red-400' : 'bg-gray-300'
+            }`} />
+            <span className="w-24 shrink-0 truncate font-medium text-gray-700">{a.tool}</span>
+            <span className="w-36 shrink-0 truncate text-gray-400">{a.account_email ?? '—'}</span>
+            <span className="min-w-0 flex-1 truncate text-gray-500">
+              {a.error ?? JSON.stringify(a.result ?? a.params ?? {}).slice(0, 80)}
+            </span>
+            <span className="shrink-0 rounded bg-gray-100 px-1 py-px text-gray-400">
+              {a.mode === 'auto' ? '自动' : '审批'}
+            </span>
+            <span className="w-24 shrink-0 text-right text-gray-300">{a.created_at.slice(5, 16)}</span>
+            {a.status === 'executed' && a.undoable && (
+              <button
+                className="shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-gray-500 hover:text-indigo-600"
+                title="撤销该操作"
+                onClick={() => undoMutation.mutate(a.id)}
+              >
+                撤销
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

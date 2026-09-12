@@ -381,6 +381,36 @@ MIGRATIONS: list[tuple[int, str]] = [
         """,
     ),
     (
+        17,
+        """
+        -- v0.4 P6 AI 总管家 2.0（REDESIGN_PLAN §6）：账号级细粒度授权 + AI 专属邮箱
+        -- + Agent 动作审计。ai_grants JSON 缺省按旧 ai_permission 枚举映射：
+        -- readonly → {read}；draft_review（默认）→ {read,draft,organize}
+        ALTER TABLE accounts ADD COLUMN ai_grants TEXT;
+        ALTER TABLE accounts ADD COLUMN is_ai_mailbox INTEGER NOT NULL DEFAULT 0;
+        UPDATE accounts SET ai_grants = '{"read":true,"draft":true,"organize":true}'
+         WHERE ai_permission = 'draft_review';
+        UPDATE accounts SET ai_grants = '{"read":true}'
+         WHERE ai_permission = 'readonly';
+        CREATE TABLE IF NOT EXISTS ai_actions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id  INTEGER,
+            account_id  INTEGER,
+            tool        TEXT NOT NULL,
+            params_json TEXT NOT NULL DEFAULT '{}',
+            mode        TEXT NOT NULL DEFAULT 'approval',   -- approval | auto
+            origin      TEXT NOT NULL DEFAULT 'ui',         -- ui | api
+            status      TEXT NOT NULL DEFAULT 'pending',    -- pending|approved|rejected|executed|failed|expired|undone
+            result_json TEXT,
+            undo_json   TEXT,
+            error       TEXT,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            decided_at  TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_actions_status ON ai_actions(status, created_at DESC);
+        """,
+    ),
+    (
         19,
         """
         -- v0.4 P3 草稿体系合并（REDESIGN_PLAN §5.1）：user_drafts 成为唯一草稿存储。
