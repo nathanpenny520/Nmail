@@ -13,6 +13,7 @@ cd frontend && npm run build                    # 前端构建（含 tsc 类型�
 curl http://127.0.0.1:8720/openapi.json > frontend/openapi.json && cd frontend && npm run gen:api   # 后端 API 改动后：更新接口类型（openapi.json 快照 + schema.d.ts 同提交）
 cd backend && ../.venv/Scripts/python -m ruff check app --select F,E9,B,SIM,UP,TID251   # 后端静态检查（含 T4 分层规则：禁 core/scheduler/ai → app.api）
 bash scripts/release.sh 0.2.0                   # 一条命令发版（PyPI/Release/Homebrew/winget PR，详见 docs/RELEASE.md）
+cd ../nmail-site && npm run build               # 官网仓库（独立 git 仓，Astro；部署见其 README）——发版后补一篇动态即两站同步
 ```
 
 ## 工作流规范（必须遵守）
