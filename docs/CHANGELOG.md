@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: 发版脚本 Mac bash 3.2 兼容——变量名后紧跟全角字符被吞进变量名
+## 47c6d1c — fix: 发版脚本 Mac bash 3.2 兼容——变量名后紧跟全角字符被吞进变量名
 - macOS 自带 bash 3.2 + `C.UTF-8` locale 下，`$VERSION（` 这类**变量名后紧跟全角字符**的写法会把多字节首字节吞进变量名，`set -u` 下直接 `unbound variable` 崩溃（Windows git-bash 的 bash 5.x 不受影响，故此前未发现；v0.3.0 发版演练时暴露）
 - 修：5 行 6 处（`$VERSION（`/`$TAG，`/`$TAG）`/`$RUN_ID（`/`$BRANCH（`/`$PR_URL（`）全部加花括号 `${VAR}`——任何 bash 版本与 locale 下都安全
 - 验证：`bash scripts/release.sh 0.3.0 --dry-run` 通过（预检→版本号替换→还原全流程）
