@@ -174,5 +174,12 @@ Version update for the existing package nathanpenny520.Nmail.
   fi
 fi
 
+# ── 5. 官网联动：触发 nmail-site 重建部署（站点内容全是构建期拉取——Releases + 主仓 docs）──
+if gh workflow run deploy.yml -R nathanpenny520/nmail-site 2>/dev/null; then
+  info "官网联动：已触发 nmail-site 部署，1-2 分钟后 nmail.whizzzest.com 同步"
+else
+  info "官网联动触发失败（gh 未登录/网络）——可手动: gh workflow run deploy.yml -R nathanpenny520/nmail-site"
+fi
+
 info "✅ v$VERSION 发版流程完成"
 info "收尾提醒：docs/CHANGELOG.md 追加发版条目；docs/SESSIONS.md 看板登记（CLAUDE.md 规范 2/8）"

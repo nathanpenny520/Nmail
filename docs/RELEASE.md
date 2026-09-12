@@ -28,6 +28,7 @@ bash scripts/release.sh 0.2.0 --dry-run      # 演练：只验证预检与版本
 3. **提交 `release: vX.Y.Z` → 打 tag → 推送**
 4. **盯 CI**（release.yml）：前端构建 → wheel 发 PyPI；三平台 PyInstaller 单文件挂 GitHub Release；Homebrew tap 自动同步新版本与 SHA256
 5. **winget 版本 PR**：等 Release 资产 → 取 exe SHA256 → fork 建分支写三份 manifest → 提 PR 到 `microsoft/winget-pkgs`
+6. **官网联动**：`gh workflow run deploy.yml -R nathanpenny520/nmail-site` 触发官网重建（构建期拉 Releases + 主仓 docs），1–2 分钟后 nmail.whizzzest.com 同步新版；失败不阻塞发版，可手动补触发
 
 ## 脚本跑完后的 AI 收尾清单（CLAUDE.md 规范 2/8）
 

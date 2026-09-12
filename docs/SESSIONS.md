@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-1640-官网联动 ✅
+- 目标: 用户问官网能否随主仓 commit/CI 自动更新——落地三件套：CI 修通 + 每日定时构建 + 发版即时联动
+- 范围: scripts/release.sh + docs(RELEASE/CHANGELOG/SESSIONS)；跨仓 nmail-site（deploy.yml 触发器、wrangler devDependencies、.npmrc、package-lock 重建、docs/DEPLOY 与 README 更新）
+- 产出: 本提交（release.sh 第 5 步官网联动 + RELEASE.md 步骤 6）；nmail-site 提交 12b2f93 已推送——CI 实测 npm ci/build/wrangler 调用全通过，仅剩 CLOUDFLARE_API_TOKEN 与 CLOUDFLARE_ACCOUNT_ID 两个 Secrets 待用户配置
+- 关键决策: 联动触发用本机 gh 登录态（零新增凭据，符合凭据边界习惯）；不做运行时拉 API（破坏纯静态+零 JS 架构）；cron 每日兜底 + 发版即时触发双层覆盖
+- 遗留: ①用户配好两个 Secrets 后 `gh workflow run deploy.yml -R nathanpenny520/nmail-site` 验证 CI 全绿、官网自动更新闭环；②schedule 在仓库 60 天无活动后会被 GitHub 停用，需重新启用；③npmmirror 是全局配置——nmail-site 已用仓库级 .npmrc 覆盖为官方源（lock 健康的前提），其他仓库若复现 lock 损坏可同样处理
+- 时间: 2026-09-12 16:40 开工，16:55 完成
+
 ### S-0912-1600-审查修复 ✅
 - 目标: 落地 v0.4 审查问题地图修复——P0（digest 查退役 drafts 表致「需要回复」失效；AI 工具 account_id 越权/digest_stats 无账号过滤）+ P1（_manager_context 时区边界、naive 日期两处假设相反、llm stream_options 无回退、recipient_allowed 不解析「Name <邮箱>」、execute_action args_override 无校验、回复后 SEEN 不回写）+ P2（拖拽反馈、审批过期扫描、右键移动/未读徽章、已读节流、IMAP ID 版本号、重要邮件倒序、归档显示名、refresh_cache 空 LIST 防御）
 - 范围: backend(ai/digest.py, ai/tools.py, ai/agent.py, ai/llm.py, api/ai.py, core/outbox.py, core/contacts.py, core/folders.py, core/imap_client.py, scheduler.py) + frontend(MailPage, MailBrowser, FolderTree, ContextMenu, types) + tests(test_agent/test_digest/test_api_emails) + docs(CHANGELOG/SESSIONS)

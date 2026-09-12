@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 发版脚本联动官网自动部署
+- 背景：官网（nmail.whizzzest.com）内容全部构建期拉取（GitHub Releases + 主仓 docs），此前发版/改文档后站点不会自动跟上，需手动重建部署
+- `release.sh` 新增第 5 步「官网联动」：`gh workflow run deploy.yml -R nathanpenny520/nmail-site`（用本机 gh 登录态，零新增凭据），发版流程末尾自动触发官网重建，1–2 分钟内同步新版；触发失败仅提示、不阻塞发版
+- 配套在 nmail-site 仓库（提交 d8aafe7 + 12b2f93，已推送）：deploy.yml 加每日定时构建（兜底 docs/Releases 变更）与 workflow_dispatch；wrangler 入 devDependencies（修 CI 无 TTY 取消）；GITHUB_TOKEN 认证修构建期 GitHub API 限流；仓库 .npmrc 统一官方源——npmmirror 对平台可选包元数据缺失、持续产出无 version 的损坏 lock 条目，是 CI `npm ci` 全环境秒败真因（此前误判为 Secrets 未配）
+- RELEASE.md 自动步骤清单补第 6 步
+- 验证：`bash -n` 通过；nmail-site CI 实测 npm ci + build + wrangler 调用全部通过，仅剩 `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` 两个 Secrets 待配置后即全自动
+
 ## 107947d — 审查修复 P2 体验打磨：拖拽反馈 / 审批过期 / 未读徽章 / 已读节流等
 - 接上条（P0+P1，756fe37），落审查地图 P2 项：
 - **U1 拖拽移动反馈**（原 `.catch(() => undefined)` 吞错，最伤感知）：`MailPage.onDropEmails` 重写——乐观更新（被拖邮件先从本地列表摘除）+ 后台 job 进度浮条（复用 useJob 1s 轮询）+ 成功/失败提示；失败回滚快照并提示「列表已还原」；REDESIGN_PLAN §4.3 承诺按原设计落地
