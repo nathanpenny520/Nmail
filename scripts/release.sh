@@ -38,7 +38,7 @@ BEHIND=$(git rev-list --count main..origin/main)
 if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then die "本地 tag $TAG 已存在"; fi
 if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "refs/tags/$TAG"; then die "远端 tag $TAG 已存在"; fi
 gh auth status >/dev/null 2>&1 || die "gh 未登录：gh auth login"
-info "预检通过：版本 $VERSION（$TAG）"
+info "预检通过：版本 ${VERSION}（${TAG}）"
 
 # ── 1. 改版本号 ──
 # 版本唯一来源是 pyproject.toml；config.py 自 0.2.0 起 importlib.metadata 动态读取，无需改
@@ -60,14 +60,14 @@ git tag "$TAG"
 if ! git push origin main "$TAG"; then
   die "推送被拒（可能并行会话刚推了提交）。处理：git pull --rebase origin main && git tag -d $TAG 后重跑本脚本"
 fi
-info "已推送 $TAG，release CI 已触发"
+info "已推送 ${TAG}，release CI 已触发"
 
 # ── 3. 盯 CI（PyPI + 三平台二进制 + Homebrew tap 同步）──
 sleep 15
 RUN_ID=$(gh run list --repo nathanpenny520/Nmail --workflow=release.yml --limit 10 \
   --json databaseId,headBranch --jq ".[] | select(.headBranch == \"$TAG\") | .databaseId" | head -1)
 [ -n "$RUN_ID" ] || die "找不到 $TAG 的 release run，请到 https://github.com/nathanpenny520/Nmail/actions 手查"
-info "CI run: https://github.com/nathanpenny520/Nmail/actions/runs/$RUN_ID（约 5–15 分钟）"
+info "CI run: https://github.com/nathanpenny520/Nmail/actions/runs/${RUN_ID}（约 5–15 分钟）"
 if ! gh run watch "$RUN_ID" --repo nathanpenny520/Nmail --exit-status --interval 30 > /dev/null; then
   die "CI 失败。看日志: gh run view $RUN_ID --repo nathanpenny520/Nmail --log-failed"
 fi
@@ -156,7 +156,7 @@ EOF
       -f message="nathanpenny520.Nmail version $VERSION" \
       -f content="$C" -f branch="$BRANCH" --jq '.content.path' > /dev/null
   done
-  info "manifest 已推到 fork 分支 $BRANCH（本地复验: winget validate \"$(cygpath -w "$TMP_MANIFEST" 2>/dev/null || echo "$TMP_MANIFEST")\"）"
+  info "manifest 已推到 fork 分支 ${BRANCH}（本地复验: winget validate \"$(cygpath -w "$TMP_MANIFEST" 2>/dev/null || echo "$TMP_MANIFEST")\"）"
 
   PR_URL=$(gh api "repos/microsoft/winget-pkgs/pulls" \
     -f title="New version: nathanpenny520.Nmail version $VERSION" \
@@ -168,7 +168,7 @@ Version update for the existing package nathanpenny520.Nmail.
 - Source repo: https://github.com/nathanpenny520/Nmail (MIT)" \
     --jq '.html_url' 2>/dev/null || true)
   if [ -n "$PR_URL" ]; then
-    info "winget PR: $PR_URL（校验自动跑，全绿后等社区审核员批准）"
+    info "winget PR: ${PR_URL}（校验自动跑，全绿后等社区审核员批准）"
   else
     info "winget 同版本 PR 已存在或创建失败——分支 $BRANCH 已更新，旧 PR 会自动重跑校验"
   fi

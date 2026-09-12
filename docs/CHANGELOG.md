@@ -3,6 +3,11 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 发版脚本 Mac bash 3.2 兼容——变量名后紧跟全角字符被吞进变量名
+- macOS 自带 bash 3.2 + `C.UTF-8` locale 下，`$VERSION（` 这类**变量名后紧跟全角字符**的写法会把多字节首字节吞进变量名，`set -u` 下直接 `unbound variable` 崩溃（Windows git-bash 的 bash 5.x 不受影响，故此前未发现；v0.3.0 发版演练时暴露）
+- 修：5 行 6 处（`$VERSION（`/`$TAG，`/`$TAG）`/`$RUN_ID（`/`$BRANCH（`/`$PR_URL（`）全部加花括号 `${VAR}`——任何 bash 版本与 locale 下都安全
+- 验证：`bash scripts/release.sh 0.3.0 --dry-run` 通过（预检→版本号替换→还原全流程）
+
 ## 603a73f — fix: 通讯录列表横向溢出被裁切且无法滚动
 - 用户反馈通讯录表格右侧（最近联系列）看不全、无法左右滑动——表格滚动容器挂了 `overflow-y-auto overflow-hidden`，横向溢出被直接裁掉且无滚动条；窄窗口下列头/来源徽章还会被压成竖排
 - 修：容器改 `overflow-auto`（横向可滚）、表格加 `min-w-[640px]`（不再无限压缩）、全部列头与 SourceBadges 徽章加 `whitespace-nowrap`；已在 1120px 窗口实测滚动到底最后一列完整可见
