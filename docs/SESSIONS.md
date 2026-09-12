@@ -24,6 +24,7 @@
 - 产出: 主仓本提交（见 CHANGELOG「文档补齐 + 文档上站」条目）；nmail-site 提交 aecf3f0 已推送；sync 9/9 篇（相对链接改写站内路由 + H1 剥路径注记抽查）；astro build 17 页通过；线上 /docs/、/docs/guide/、/docs/faq/、/docs/api/ 全部 200（截图确认侧栏/正文排版）；REDESIGN_PLAN §10.1「文档不双维护」按用户拍板改为同步上站（仓库仍唯一维护处）
 - 关键决策: 同步白名单显式列举（主仓 docs/ 有含凭据 gitignored 文档，严禁整目录拷贝）；生成文件不入库（.gitignore）——文档单一来源永远是主仓；CI 无本地路径时自动回退 GitHub raw main
 - 遗留: 新增三篇文档内容待用户过目（尤其使用指南的描述口径）；CSV/vCard 导入导出等 v0.5 功能出现后再补对应章节
+- 追记（同日）: 经用户拍板官网仓库迁入工作区——目录布局改为 `Nmail/nmail-site`（官网）与 `Nmail/Nmail`（主仓）并列；sync-docs 本地路径候选已调整（site 仓提交 b06f91f），CLAUDE.md 的 `cd ../nmail-site` 自此正确
 - 时间: 2026-09-12 15:20 完成
 
 ### S-0912-1410-P7对外API ✅
