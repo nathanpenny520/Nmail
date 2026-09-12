@@ -1285,7 +1285,7 @@ export interface paths {
         };
         /**
          * List Contacts
-         * @description 通讯录列表/搜索（≥3 字走 email/name 子串；按使用频次与最近联系排序）。
+         * @description 聚合列表/搜索 + 左侧树四视图计数（按使用频次与最近联系排序）。
          */
         get: operations["list_contacts_api_contacts_get"];
         put?: never;
@@ -1320,7 +1320,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/contacts/{contact_id}": {
+    "/api/contacts/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Groups */
+        get: operations["list_groups_api_contacts_groups_get"];
+        put?: never;
+        /** Create Group */
+        post: operations["create_group_api_contacts_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contacts/groups/{group_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1330,7 +1348,69 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete Contact */
+        /** Delete Group */
+        delete: operations["delete_group_api_contacts_groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Group */
+        patch: operations["rename_group_api_contacts_groups__group_id__patch"];
+        trace?: never;
+    };
+    "/api/contacts/groups/{group_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Members */
+        post: operations["add_members_api_contacts_groups__group_id__members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contacts/groups/{group_id}/members/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Members
+         * @description 移除成员用 POST 子路径：DELETE+body 在部分客户端（如 TestClient）不可用。
+         */
+        post: operations["remove_members_api_contacts_groups__group_id__members_remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contacts/{contact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Contact
+         * @description 详情：聚合行 + 各账号明细行（归属展示用）。
+         */
+        get: operations["get_contact_api_contacts__contact_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Contact
+         * @description 删除＝移除该邮箱的全部行（聚合口径下一个邮箱即一个联系人）+ 组成员清理。
+         */
         delete: operations["delete_contact_api_contacts__contact_id__delete"];
         options?: never;
         head?: never;
@@ -1934,6 +2014,11 @@ export interface components {
              */
             name: string;
             /**
+             * Phone
+             * @default
+             */
+            phone: string;
+            /**
              * Notes
              * @default
              */
@@ -1945,6 +2030,8 @@ export interface components {
             name?: string | null;
             /** Email */
             email?: string | null;
+            /** Phone */
+            phone?: string | null;
             /** Notes */
             notes?: string | null;
         };
@@ -2024,6 +2111,11 @@ export interface components {
             /** New Name */
             new_name: string;
         };
+        /** GroupIn */
+        GroupIn: {
+            /** Name */
+            name: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2079,6 +2171,11 @@ export interface components {
         MarkdownIn: {
             /** Text */
             text: string;
+        };
+        /** MembersIn */
+        MembersIn: {
+            /** Emails */
+            emails: string[];
         };
         /** ModelsIn */
         ModelsIn: {
@@ -2204,6 +2301,8 @@ export interface components {
             update_check_enabled?: boolean | null;
             /** Network Proxy */
             network_proxy?: string | null;
+            /** Contacts Auto Collect */
+            contacts_auto_collect?: boolean | null;
         };
         /** SignatureItem */
         SignatureItem: {
@@ -4954,6 +5053,9 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string;
+                source?: string;
+                group_id?: number | null;
+                ungrouped?: boolean;
                 limit?: number;
             };
             header?: never;
@@ -5027,6 +5129,240 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_groups_api_contacts_groups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    create_group_api_contacts_groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_group_api_contacts_groups__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_group_api_contacts_groups__group_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_members_api_contacts_groups__group_id__members_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembersIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_members_api_contacts_groups__group_id__members_remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembersIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_contact_api_contacts__contact_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contact_id: number;
+            };
             cookie?: never;
         };
         requestBody?: never;

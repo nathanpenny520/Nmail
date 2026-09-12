@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, BarChart3, BookUser, Bot, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Plug, Plus, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { BadgeCheck, BarChart3, BookUser, Bot, ChevronLeft, Copy, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Pencil, Plug, Plus, RefreshCw, SlidersHorizontal, Trash2, UserPlus, UsersRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
+import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import ExtApiSection from '../components/ExtApiSection'
 import { OauthConfigCard, ReauthorizeButton } from '../components/OauthSettings'
+import { useCompose } from '../components/compose/ComposeContext'
 import { backendLocalDate } from '../utils/format'
-import type { Account, AITestResult, AIProfile, ContactItem, Settings } from '../types'
+import type { Account, AITestResult, AIProfile, ContactGroup, ContactItem, Settings } from '../types'
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 t-md outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
@@ -1180,203 +1182,660 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
   )
 }
 
-// ── 通讯录（v0.4 P4，REDESIGN_PLAN §5.4）：自动采集 + 手动增删改，即时生效无保存栏 ──
+// ── 通讯录（2026-09-12 改版，REDESIGN_PLAN §5.4）：左树（智能视图+联系组）+ 右列表/详情双态 ──
+
+type ContactView =
+  | { kind: 'all' }
+  | { kind: 'auto' }
+  | { kind: 'manual' }
+  | { kind: 'ungrouped' }
+  | { kind: 'group'; id: number; name: string }
+
+const CONTACT_VIEWS: { kind: 'all' | 'auto' | 'manual' | 'ungrouped'; label: string }[] = [
+  { kind: 'all', label: '所有联系人' },
+  { kind: 'auto', label: '自动采集' },
+  { kind: 'manual', label: '手动添加' },
+  { kind: 'ungrouped', label: '未分组' },
+]
+
+const viewKeyOf = (v: ContactView) => (v.kind === 'group' ? `group-${v.id}` : v.kind)
+
+const SourceBadges = ({ sources }: { sources: string[] }) => (
+  <span className="inline-flex gap-1">
+    {sources.includes('auto') && (
+      <span className="rounded bg-emerald-50 px-1.5 py-0.5 t-xs text-emerald-600">自动</span>
+    )}
+    {sources.includes('manual') && (
+      <span className="rounded bg-gray-100 px-1.5 py-0.5 t-xs text-gray-500">手动</span>
+    )}
+  </span>
+)
+
+/** 开关（自动采集等）：紧凑 iOS 式样 */
+const MiniSwitch = ({ on, onClick, title }: { on: boolean; onClick: () => void; title?: string }) => (
+  <button
+    className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${on ? 'bg-emerald-500' : 'bg-gray-300'}`}
+    onClick={onClick}
+    title={title}
+  >
+    <span
+      className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${on ? 'left-3.5' : 'left-0.5'}`}
+    />
+  </button>
+)
+
 function ContactsSection() {
   const queryClient = useQueryClient()
+  const { openNew } = useCompose()
+  const [view, setView] = useState<ContactView>({ kind: 'all' })
   const [q, setQ] = useState('')
-  const listQuery = useQuery({ queryKey: ['contacts', q], queryFn: () => api.getContacts(q) })
-  const contacts = listQuery.data?.contacts ?? []
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [detailId, setDetailId] = useState<number | null>(null)
   const [adding, setAdding] = useState(false)
-  const [form, setForm] = useState({ email: '', name: '' })
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editEmail, setEditEmail] = useState('')
+  const [form, setForm] = useState({ email: '', name: '', phone: '' })
+  const [newGroupName, setNewGroupName] = useState<string | null>(null) // null=收起；串=输入中
+  const [renaming, setRenaming] = useState<{ id: number; name: string } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; group: ContactGroup } | null>(null)
   const [message, setMessage] = useState('')
 
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['contacts'] })
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings })
+  const autoCollect = settings?.contacts_auto_collect ?? true
+  const listQuery = useQuery({
+    queryKey: ['contacts', viewKeyOf(view), q],
+    queryFn: () =>
+      api.getContacts({
+        q,
+        source: view.kind === 'auto' || view.kind === 'manual' ? view.kind : undefined,
+        ungrouped: view.kind === 'ungrouped' || undefined,
+        group_id: view.kind === 'group' ? view.id : undefined,
+      }),
+  })
+  const groupsQuery = useQuery({ queryKey: ['contact-groups'], queryFn: api.getContactGroups })
+  const contacts = listQuery.data?.contacts ?? []
+  const counts = listQuery.data?.counts
+  const groups = groupsQuery.data?.groups ?? []
 
-  const addMutation = useMutation({
-    mutationFn: () => api.createContact({ email: form.email.trim(), name: form.name.trim() }),
-    onSuccess: () => {
-      setForm({ email: '', name: '' })
-      setMessage('')
-      invalidate()
-    },
-    onError: (err: Error) => setMessage(`新增失败：${err.message}`),
-  })
-  const updateMutation = useMutation({
-    mutationFn: ({ id, patch }: { id: number; patch: { name?: string; email?: string } }) =>
-      api.updateContact(id, patch),
-    onSuccess: () => {
-      setEditingId(null)
-      setMessage('')
-      invalidate()
-    },
-    onError: (err: Error) => setMessage(`修改失败：${err.message}`),
-  })
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteContact(id),
-    onSuccess: invalidate,
-  })
-  const startEdit = (c: ContactItem, field: 'name' | 'email') => {
-    setEditingId(field === 'name' ? c.id : -c.id)  // 负数 id 表示正在改邮箱
-    if (field === 'name') setEditName(c.name)
-    else setEditEmail(c.email)
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['contacts'] })
+    void queryClient.invalidateQueries({ queryKey: ['contact-groups'] })
   }
+  const fail = (label: string) => (err: Error) => setMessage(`${label}：${err.message}`)
+
+  const toggleCollect = useMutation({
+    mutationFn: (v: boolean) => api.updateSettings({ contacts_auto_collect: v }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings'] }),
+  })
+  const addMutation = useMutation({
+    mutationFn: () =>
+      api.createContact({ email: form.email.trim(), name: form.name.trim(), phone: form.phone.trim() }),
+    onSuccess: () => {
+      setForm({ email: '', name: '', phone: '' })
+      setAdding(false)
+      setMessage('')
+      invalidate()
+    },
+    onError: fail('新增失败'),
+  })
+  const deleteContacts = useMutation({
+    mutationFn: async (ids: number[]) => {
+      for (const id of ids) await api.deleteContact(id)
+    },
+    onSuccess: (_d, ids) => {
+      setSelected(new Set())
+      if (detailId != null && ids.includes(detailId)) setDetailId(null)
+      setMessage('')
+      invalidate()
+    },
+    onError: fail('删除失败'),
+  })
+  const createGroupMutation = useMutation({
+    mutationFn: (name: string) => api.createContactGroup(name),
+    onSuccess: () => {
+      setNewGroupName(null)
+      setMessage('')
+      invalidate()
+    },
+    onError: fail('新建组失败'),
+  })
+  const renameGroupMutation = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => api.renameContactGroup(id, name),
+    onSuccess: () => {
+      setRenaming(null)
+      setMessage('')
+      invalidate()
+    },
+    onError: fail('重命名失败'),
+  })
+  const deleteGroupMutation = useMutation({
+    mutationFn: (id: number) => api.deleteContactGroup(id),
+    onSuccess: (_d, id) => {
+      if (view.kind === 'group' && view.id === id) setView({ kind: 'all' })
+      invalidate()
+    },
+    onError: fail('删除组失败'),
+  })
+
+  const toggleRow = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const viewItemCls = (active: boolean) =>
+    `flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 t-sm transition-colors ${
+      active ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-gray-600 hover:bg-gray-50'
+    }`
+
+  const groupMenuItems: ContextMenuItem[] = menu
+    ? [
+        { label: '重命名', icon: Pencil, onSelect: () => setRenaming({ id: menu.group.id, name: menu.group.name }) },
+        {
+          label: '删除组',
+          icon: Trash2,
+          danger: true,
+          onSelect: () => deleteGroupMutation.mutate(menu.group.id),
+        },
+      ]
+    : []
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="t-lg font-semibold">通讯录</h2>
-      <p className="mt-1 t-sm text-gray-400">
-        收信与发信的往来地址自动入册；点击姓名或邮箱可直接修改（改过姓名的联系人不会被自动采集覆盖）；
-        写信时收件人输入框会自动联想。
-      </p>
-
-      <div className="mt-4 flex items-center gap-2">
-        <input
-          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 t-md outline-none focus:border-indigo-500"
-          placeholder="搜索姓名或邮箱"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <button
-          className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700"
-          onClick={() => setAdding(!adding)}
-        >
-          <Plus className="h-3.5 w-3.5" /> 新增联系人
-        </button>
-        <button
-          className="shrink-0 cursor-not-allowed whitespace-nowrap rounded-lg border border-gray-200 px-3 py-1.5 t-sm text-gray-300"
-          title="v0.5 提供 CSV/vCard 导入导出"
-          disabled
-        >
-          导入/导出
-        </button>
+    <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex items-start justify-between px-6 pt-6">
+        <div>
+          <h2 className="t-lg font-semibold">通讯录</h2>
+          <p className="mt-1 t-sm text-gray-400">
+            收发往来地址自动入册；点击联系人进详情，可写信、编辑、备注与分组。
+          </p>
+        </div>
       </div>
 
-      {adding && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-2">
-          <input
-            className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2.5 py-1 t-sm outline-none focus:border-indigo-500"
-            placeholder="邮箱地址（必填）"
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            autoFocus
-          />
-          <input
-            className="w-40 shrink-0 rounded-lg border border-gray-300 px-2.5 py-1 t-sm outline-none focus:border-indigo-500"
-            placeholder="姓名（可选）"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
+      <div className="mt-4 flex border-t border-gray-100">
+        {/* 左树：智能视图 + 联系组 */}
+        <div className="flex w-52 shrink-0 flex-col border-r border-gray-100 py-3 pl-4 pr-2">
+          <div className="flex items-center gap-2 px-2.5">
+            <MiniSwitch
+              on={autoCollect}
+              onClick={() => toggleCollect.mutate(!autoCollect)}
+              title={autoCollect ? '自动采集已开：收发往来地址自动入册' : '自动采集已关：不再自动入册，已入册保留'}
+            />
+            <span className="t-xs text-gray-500">自动采集</span>
+            {!autoCollect && <span className="t-xs text-amber-600">已关</span>}
+          </div>
+
+          <div className="mt-3 space-y-0.5">
+            {CONTACT_VIEWS.map((v) => (
+              <button key={v.kind} className={viewItemCls(view.kind === v.kind)} onClick={() => { setView({ kind: v.kind }); setDetailId(null); setSelected(new Set()) }}>
+                <UsersRound className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                <span className="min-w-0 flex-1 truncate text-left">{v.label}</span>
+                <span className="t-xs text-gray-400">{counts?.[v.kind] ?? ''}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-4 flex items-center justify-between px-2.5">
+            <span className="t-xs font-medium uppercase tracking-wide text-gray-400">联系组</span>
+          </div>
+          <div className="mt-1 flex-1 space-y-0.5 overflow-y-auto">
+            {groups.map((g) =>
+              renaming?.id === g.id ? (
+                <div key={g.id} className="flex items-center gap-1 px-1.5 py-0.5">
+                  <input
+                    className="min-w-0 flex-1 rounded border border-indigo-300 px-1.5 py-0.5 t-xs outline-none focus:border-indigo-500"
+                    value={renaming.name}
+                    onChange={(e) => setRenaming({ id: g.id, name: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && renaming.name.trim())
+                        renameGroupMutation.mutate({ id: g.id, name: renaming.name.trim() })
+                      if (e.key === 'Escape') setRenaming(null)
+                    }}
+                    autoFocus
+                  />
+                </div>
+              ) : (
+                <button
+                  key={g.id}
+                  className={viewItemCls(view.kind === 'group' && view.id === g.id)}
+                  onClick={() => { setView({ kind: 'group', id: g.id, name: g.name }); setDetailId(null); setSelected(new Set()) }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setMenu({ x: e.clientX, y: e.clientY, group: g })
+                  }}
+                  title="右键重命名/删除"
+                >
+                  <BookUser className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  <span className="min-w-0 flex-1 truncate text-left">{g.name}</span>
+                  <span className="t-xs text-gray-400">{g.member_count}</span>
+                </button>
+              ),
+            )}
+            {newGroupName !== null && (
+              <div className="flex items-center gap-1 px-1.5 py-0.5">
+                <input
+                  className="min-w-0 flex-1 rounded border border-indigo-300 px-1.5 py-0.5 t-xs outline-none focus:border-indigo-500"
+                  placeholder="组名"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newGroupName.trim()) createGroupMutation.mutate(newGroupName.trim())
+                    if (e.key === 'Escape') setNewGroupName(null)
+                  }}
+                  autoFocus
+                />
+              </div>
+            )}
+          </div>
           <button
-            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-            disabled={!form.email.trim() || addMutation.isPending}
-            onClick={() => addMutation.mutate()}
+            className="mt-2 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 t-xs text-gray-500 hover:bg-gray-50"
+            onClick={() => setNewGroupName('')}
           >
-            保存
-          </button>
-          <button
-            className="shrink-0 rounded-lg border border-gray-300 px-3 py-1 t-sm text-gray-500 hover:bg-gray-50"
-            onClick={() => setAdding(false)}
-          >
-            取消
+            <Plus className="h-3.5 w-3.5" /> 新建联系组
           </button>
         </div>
-      )}
-      {message && <p className="mt-2 t-sm text-red-600">{message}</p>}
 
-      <div className="mt-4 overflow-hidden rounded-xl border border-gray-100">
-        <table className="w-full text-left">
-          <thead className="bg-gray-50 t-xs text-gray-400">
-            <tr>
-              <th className="px-3 py-2 font-medium">姓名</th>
-              <th className="px-3 py-2 font-medium">邮箱</th>
-              <th className="px-3 py-2 font-medium">来源</th>
-              <th className="px-3 py-2 text-right font-medium">往来次数</th>
-              <th className="px-3 py-2 font-medium">最近联系</th>
-              <th className="w-16 px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {listQuery.isLoading && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center t-sm text-gray-400">加载中…</td></tr>
-            )}
-            {!listQuery.isLoading && contacts.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center t-sm text-gray-300">还没有联系人——收发过邮件后会自动出现</td></tr>
-            )}
-            {contacts.map((c) => (
-              <tr key={c.id} className="border-t border-gray-50">
-                <td className="px-3 py-2 t-md">
-                  {editingId === c.id ? (
-                    <input
-                      className="w-40 rounded-lg border border-indigo-300 px-2 py-0.5 t-sm outline-none focus:border-indigo-500"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') updateMutation.mutate({ id: c.id, patch: { name: editName.trim() } })
-                        if (e.key === 'Escape') setEditingId(null)
-                      }}
-                      autoFocus
-                    />
-                  ) : (
-                    <button
-                      className="cursor-text rounded px-1 py-0.5 underline-offset-2 hover:bg-gray-100 hover:underline"
-                      title="点击修改姓名（修改后不被自动采集覆盖）"
-                      onClick={() => startEdit(c, 'name')}
-                    >
-                      {c.name || <span className="text-gray-300">（未命名）</span>}
-                    </button>
-                  )}
-                </td>
-                <td className="px-3 py-2 t-md text-gray-600">
-                  {editingId === -c.id ? (
-                    <input
-                      className="w-56 rounded-lg border border-indigo-300 px-2 py-0.5 t-sm outline-none focus:border-indigo-500"
-                      value={editEmail}
-                      onChange={(e) => setEditEmail(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') updateMutation.mutate({ id: c.id, patch: { email: editEmail.trim() } })
-                        if (e.key === 'Escape') setEditingId(null)
-                      }}
-                      autoFocus
-                    />
-                  ) : (
-                    <button
-                      className="cursor-text rounded px-1 py-0.5 underline-offset-2 hover:bg-gray-100 hover:underline"
-                      title="点击修改邮箱地址"
-                      onClick={() => startEdit(c, 'email')}
-                    >
-                      {c.email}
-                    </button>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {c.source === 'manual' ? (
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 t-xs text-gray-500">手动</span>
-                  ) : (
-                    <span className="rounded bg-emerald-50 px-1.5 py-0.5 t-xs text-emerald-600">自动采集</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right t-md text-gray-500">{c.use_count}</td>
-                <td className="px-3 py-2 t-sm text-gray-400">
-                  {c.last_seen_at ? backendLocalDate(c.last_seen_at) : '—'}
-                </td>
-                <td className="px-3 py-2 text-right">
+        {/* 右侧：列表 或 详情 */}
+        <div className="min-w-0 flex-1 p-4 pl-4 pr-6">
+          {detailId != null ? (
+            <ContactDetailView
+              id={detailId}
+              groups={groups}
+              onBack={() => setDetailId(null)}
+              onChanged={invalidate}
+              onDeleted={() => { setDetailId(null); invalidate() }}
+              onCompose={(c) => openNew({ to: c.name ? `${c.name} <${c.email}>` : c.email })}
+              onError={(label) => (err: Error) => setMessage(`${label}：${err.message}`)}
+            />
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <input
+                  className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 t-md outline-none focus:border-indigo-500"
+                  placeholder="搜索姓名或邮箱"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                />
+                <button
+                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700"
+                  onClick={() => setAdding(!adding)}
+                >
+                  <UserPlus className="h-3.5 w-3.5" /> 新增联系人
+                </button>
+                <button
+                  className="shrink-0 cursor-not-allowed whitespace-nowrap rounded-lg border border-gray-200 px-3 py-1.5 t-sm text-gray-300"
+                  title="v0.5 提供 CSV/vCard 导入导出"
+                  disabled
+                >
+                  导入/导出
+                </button>
+                {selected.size > 0 && (
                   <button
-                    className="rounded-md border border-gray-200 bg-white p-1 text-gray-400 hover:text-red-600"
-                    title="删除联系人"
-                    onClick={() => deleteMutation.mutate(c.id)}
+                    className="shrink-0 whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 t-sm font-medium text-red-600 hover:bg-red-100"
+                    onClick={() => deleteContacts.mutate([...selected])}
+                    disabled={deleteContacts.isPending}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    删除所选（{selected.size}）
                   </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                )}
+              </div>
+
+              {adding && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-2">
+                  <input
+                    className="min-w-44 flex-1 rounded-lg border border-gray-300 px-2.5 py-1 t-sm outline-none focus:border-indigo-500"
+                    placeholder="邮箱地址（必填）"
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    autoFocus
+                  />
+                  <input
+                    className="w-32 shrink-0 rounded-lg border border-gray-300 px-2.5 py-1 t-sm outline-none focus:border-indigo-500"
+                    placeholder="姓名（可选）"
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  />
+                  <input
+                    className="w-32 shrink-0 rounded-lg border border-gray-300 px-2.5 py-1 t-sm outline-none focus:border-indigo-500"
+                    placeholder="手机（可选）"
+                    value={form.phone}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  />
+                  <button
+                    className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                    disabled={!form.email.trim() || addMutation.isPending}
+                    onClick={() => addMutation.mutate()}
+                  >
+                    保存
+                  </button>
+                  <button
+                    className="shrink-0 rounded-lg border border-gray-300 px-3 py-1 t-sm text-gray-500 hover:bg-gray-50"
+                    onClick={() => setAdding(false)}
+                  >
+                    取消
+                  </button>
+                </div>
+              )}
+              {message && <p className="mt-2 t-sm text-red-600">{message}</p>}
+
+              <div className="mt-3 max-h-[520px] overflow-y-auto overflow-hidden rounded-xl border border-gray-100">
+                <table className="w-full text-left">
+                  <thead className="sticky top-0 bg-gray-50 t-xs text-gray-400">
+                    <tr>
+                      <th className="w-8 px-3 py-2" />
+                      <th className="px-3 py-2 font-medium">姓名</th>
+                      <th className="px-3 py-2 font-medium">邮件地址</th>
+                      <th className="px-3 py-2 font-medium">手机</th>
+                      <th className="px-3 py-2 font-medium">来源</th>
+                      <th className="px-3 py-2 text-right font-medium">往来次数</th>
+                      <th className="px-3 py-2 font-medium">最近联系</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {listQuery.isLoading && (
+                      <tr><td colSpan={7} className="px-3 py-6 text-center t-sm text-gray-400">加载中…</td></tr>
+                    )}
+                    {!listQuery.isLoading && contacts.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-6 text-center t-sm text-gray-300">
+                          {view.kind === 'group' ? '这个组还没有联系人——在详情页用「加入组」添加' : '还没有联系人——收发过邮件后会自动出现'}
+                        </td>
+                      </tr>
+                    )}
+                    {contacts.map((c) => (
+                      <tr
+                        key={c.id}
+                        className="cursor-pointer border-t border-gray-50 hover:bg-indigo-50/40"
+                        onClick={() => { setDetailId(c.id); setSelected(new Set()) }}
+                      >
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 accent-indigo-600"
+                            checked={selected.has(c.id)}
+                            onChange={() => toggleRow(c.id)}
+                          />
+                        </td>
+                        <td className="px-3 py-2 t-md">
+                          <span className="flex items-center gap-2">
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-100 t-xs font-medium text-indigo-600">
+                              {(c.name || c.email)[0]?.toUpperCase()}
+                            </span>
+                            <span className="min-w-0 truncate">{c.name || <span className="text-gray-300">（未命名）</span>}</span>
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 t-md text-gray-600">{c.email}</td>
+                        <td className="px-3 py-2 t-sm text-gray-500">{c.phone || '—'}</td>
+                        <td className="px-3 py-2"><SourceBadges sources={c.sources} /></td>
+                        <td className="px-3 py-2 text-right t-md text-gray-500">{c.use_count}</td>
+                        <td className="px-3 py-2 t-sm text-gray-400">
+                          {c.last_seen_at ? backendLocalDate(c.last_seen_at) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
       </div>
+
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={groupMenuItems} onClose={() => setMenu(null)} />}
     </section>
+  )
+}
+
+/** 联系人详情（点击行进入，替代列表；对应 REDESIGN_PLAN §5.4 详情视图） */
+function ContactDetailView({
+  id,
+  groups,
+  onBack,
+  onChanged,
+  onDeleted,
+  onCompose,
+  onError,
+}: {
+  id: number
+  groups: ContactGroup[]
+  onBack: () => void
+  onChanged: () => void
+  onDeleted: () => void
+  onCompose: (c: ContactItem) => void
+  onError: (label: string) => (err: Error) => void
+}) {
+  const queryClient = useQueryClient()
+  const detailQuery = useQuery({ queryKey: ['contact-detail', id], queryFn: () => api.getContactDetail(id) })
+  const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
+  const c = detailQuery.data?.contact
+  const rows = detailQuery.data?.rows ?? []
+  const accountEmail = (aid: number | null) =>
+    aid == null ? '全局（手动添加）' : accountsQuery.data?.accounts.find((a) => a.id === aid)?.email ?? `账号 #${aid}`
+
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '' })
+  const [memberOf, setMemberOf] = useState<ContactGroup[] | null>(null) // 「加入组」菜单展开时算
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    if (c) setForm({ name: c.name, email: c.email, phone: c.phone, notes: c.notes })
+  }, [c])
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      api.updateContact(id, {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        notes: form.notes,
+      }),
+    onSuccess: () => {
+      setEditing(false)
+      onChanged()
+      void queryClient.invalidateQueries({ queryKey: ['contact-detail', id] })
+    },
+    onError: onError('保存失败'),
+  })
+  const removeMember = useMutation({
+    mutationFn: ({ gid, email }: { gid: number; email: string }) => api.removeGroupMembers(gid, [email]),
+    onSuccess: onChanged,
+    onError: onError('移出组失败'),
+  })
+  const addMember = useMutation({
+    mutationFn: ({ gid, email }: { gid: number; email: string }) => api.addGroupMembers(gid, [email]),
+    onSuccess: onChanged,
+    onError: onError('加入组失败'),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteContact(id),
+    onSuccess: onDeleted,
+    onError: onError('删除失败'),
+  })
+
+  if (detailQuery.isLoading || !c) {
+    return <p className="px-3 py-6 text-center t-sm text-gray-400">加载中…</p>
+  }
+  const myGroups = groups.filter((g) => g.members.includes(c.email))
+  const joinable = groups.filter((g) => !g.members.includes(c.email))
+
+  const moreItems: ContextMenuItem[] = [
+    {
+      label: '加入组…',
+      icon: UsersRound,
+      disabled: joinable.length === 0,
+      children: joinable.map((g) => ({
+        label: g.name,
+        onSelect: () => addMember.mutate({ gid: g.id, email: c.email }),
+      })),
+    },
+    {
+      label: '复制邮箱地址',
+      icon: Copy,
+      onSelect: () => void navigator.clipboard.writeText(c.email),
+    },
+    { label: '删除联系人', icon: Trash2, danger: true, onSelect: () => deleteMutation.mutate() },
+  ]
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <button
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 t-sm text-gray-600 hover:bg-gray-50"
+          onClick={onBack}
+        >
+          <ChevronLeft className="h-3.5 w-3.5" /> 返回列表
+        </button>
+        <span className="flex-1" />
+        <button
+          className="rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700"
+          onClick={() => onCompose(c)}
+        >
+          写信
+        </button>
+        <button
+          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 t-sm font-medium text-gray-600 hover:bg-gray-50"
+          onClick={() => setEditing(!editing)}
+        >
+          {editing ? '取消编辑' : '编辑'}
+        </button>
+        <button
+          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 t-sm font-medium text-gray-600 hover:bg-gray-50"
+          onClick={(e) => { setMemberOf(myGroups); setMenu({ x: e.clientX, y: e.clientY }) }}
+        >
+          更多
+        </button>
+      </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={[
+            ...(memberOf && memberOf.length > 0
+              ? [{
+                  label: '移出组…',
+                  icon: UsersRound,
+                  children: memberOf.map((g) => ({
+                    label: g.name,
+                    onSelect: () => removeMember.mutate({ gid: g.id, email: c.email }),
+                  })),
+                } satisfies ContextMenuItem]
+              : []),
+            ...moreItems,
+          ]}
+          onClose={() => setMenu(null)}
+        />
+      )}
+
+      <div className="mt-5 flex items-start gap-5">
+        <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-sky-100 t-lg font-semibold text-sky-600">
+          {(c.name || c.email)[0]?.toUpperCase()}
+        </span>
+        {editing ? (
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="t-xs text-gray-400">姓名</span>
+                <input
+                  className="mt-0.5 w-full rounded-lg border border-gray-300 px-2.5 py-1.5 t-sm outline-none focus:border-indigo-500"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="t-xs text-gray-400">邮件地址</span>
+                <input
+                  className="mt-0.5 w-full rounded-lg border border-gray-300 px-2.5 py-1.5 t-sm outline-none focus:border-indigo-500"
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="t-xs text-gray-400">手机</span>
+                <input
+                  className="mt-0.5 w-full rounded-lg border border-gray-300 px-2.5 py-1.5 t-sm outline-none focus:border-indigo-500"
+                  value={form.phone}
+                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                />
+              </label>
+            </div>
+            <label className="block">
+              <span className="t-xs text-gray-400">备注</span>
+              <textarea
+                className="mt-0.5 w-full rounded-lg border border-gray-300 px-2.5 py-1.5 t-sm outline-none focus:border-indigo-500"
+                rows={2}
+                value={form.notes}
+                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              />
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                disabled={saveMutation.isPending || !form.email.trim()}
+                onClick={() => saveMutation.mutate()}
+              >
+                {saveMutation.isPending ? '保存中…' : '保存'}
+              </button>
+              <button
+                className="rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-500 hover:bg-gray-50"
+                onClick={() => setEditing(false)}
+              >
+                取消
+              </button>
+              <span className="t-xs text-gray-400">改过姓名的联系人不会被自动采集覆盖</span>
+            </div>
+            {saveMutation.isError && (
+              <p className="t-sm text-red-600">保存失败：{(saveMutation.error as Error).message}</p>
+            )}
+          </div>
+        ) : (
+          <div className="min-w-0 flex-1">
+            <p className="t-lg font-semibold">{c.name || '（未命名）'}</p>
+            <p className="mt-0.5 t-md text-gray-600">{c.email}</p>
+            {c.phone && <p className="mt-0.5 t-md text-gray-600">📱 {c.phone}</p>}
+            {c.notes && <p className="mt-2 whitespace-pre-wrap t-sm text-gray-500">{c.notes}</p>}
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 t-sm text-gray-400">
+              <span className="inline-flex items-center gap-1.5">
+                来源 <SourceBadges sources={c.sources} />
+              </span>
+              <span>往来 {c.use_count} 次</span>
+              <span>最近联系 {c.last_seen_at ? backendLocalDate(c.last_seen_at) : '—'}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {myGroups.length > 0 ? (
+                myGroups.map((g) => (
+                  <span key={g.id} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 t-xs text-indigo-600">
+                    {g.name}
+                    <button
+                      className="text-indigo-300 hover:text-indigo-600"
+                      title="移出组"
+                      onClick={() => removeMember.mutate({ gid: g.id, email: c.email })}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))
+              ) : (
+                <span className="t-xs text-gray-300">未分组</span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {rows.length > 1 && (
+        <div className="mt-5 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+          <p className="t-xs font-medium text-gray-400">该地址在 {rows.length} 个账号下有往来</p>
+          <ul className="mt-1.5 space-y-1">
+            {rows.map((r) => (
+              <li key={r.id} className="flex items-center gap-2 t-sm text-gray-500">
+                <span className="min-w-0 flex-1 truncate">{accountEmail(r.account_id)}</span>
+                <SourceBadges sources={[r.source]} />
+                <span className="text-gray-400">{r.use_count} 次</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -108,3 +108,121 @@ def test_contacts_api_crud():
     assert any(c["id"] == cid for c in client.get("/api/contacts", params={"q": "新名字"}).json()["contacts"])
     assert client.delete(f"/api/contacts/{cid}").json() == {"ok": True}
     assert client.delete(f"/api/contacts/{cid}").status_code == 404
+
+
+def test_auto_collect_toggle():
+    """采集开关（REDESIGN_PLAN §5.3）：关=收发两侧均不入册；开=恢复。"""
+    from app.db.database import set_setting
+
+    set_setting("contacts_auto_collect", False)
+    try:
+        aid = _aid()
+        contacts_core.collect_sender("off1@example.com", "甲", aid)
+        assert contacts_core.collect_addresses("off2@x.com", aid) == 0
+        assert database.get_conn().execute(
+            "SELECT COUNT(*) c FROM contacts WHERE account_id = ?", (aid,)
+        ).fetchone()["c"] == 0
+    finally:
+        set_setting("contacts_auto_collect", True)
+    aid = _aid()
+    contacts_core.collect_sender("on@example.com", "乙", aid)
+    assert database.get_conn().execute(
+        "SELECT 1 FROM contacts WHERE email = 'on@example.com'"
+    ).fetchone() is not None
+
+
+def test_agg_list_email_scoped_edit_delete():
+    """聚合口径：同邮箱多账号一行；改/删按 email 作用全部行；改邮箱连带组成员表。"""
+    tag = uuid.uuid4().hex[:8]
+    email = f"dup-{tag}@x.com"
+    aid1, aid2 = _aid(), _aid()
+    contacts_core.collect_sender(email, "老王", aid1)
+    contacts_core.collect_sender(email, None, aid2)
+
+    items = client.get("/api/contacts", params={"q": email}).json()["contacts"]
+    assert len(items) == 1
+    agg = items[0]
+    assert agg["account_rows"] == 2 and agg["use_count"] == 2 and agg["sources"] == ["auto"]
+
+    # 聚合行改姓名/手机 → 全行生效且转 manual；详情返回各账号明细
+    assert client.patch(
+        f"/api/contacts/{agg['id']}", json={"name": "王总", "phone": "13800000000"}
+    ).status_code == 200
+    rows = database.get_conn().execute(
+        "SELECT name, phone, source FROM contacts WHERE email = ?", (email,)
+    ).fetchall()
+    assert len(rows) == 2
+    assert all(r["name"] == "王总" and r["phone"] == "13800000000" and r["source"] == "manual" for r in rows)
+    detail = client.get(f"/api/contacts/{agg['id']}").json()
+    assert len(detail["rows"]) == 2 and detail["contact"]["sources"] == ["manual"]
+
+    # 组成员按 email 记；改邮箱连带更新成员表
+    g = client.post("/api/contacts/groups", json={"name": f"组{tag}"}).json()["group"]
+    assert client.post(
+        f"/api/contacts/groups/{g['id']}/members", json={"emails": [email]}
+    ).json()["added"] == 1
+    client.patch(f"/api/contacts/{agg['id']}", json={"email": f"wang-{tag}@x.com"})
+    assert database.get_conn().execute(
+        "SELECT email FROM contact_group_members WHERE group_id = ?", (g["id"],)
+    ).fetchone()["email"] == f"wang-{tag}@x.com"
+
+    new_email = f"wang-{tag}@x.com"
+    # 视图过滤：manual 视图命中、auto 视图排除；在组内 → 未分组视图排除
+    assert any(
+        c["email"] == new_email
+        for c in client.get("/api/contacts", params={"source": "manual"}).json()["contacts"]
+    )
+    assert not any(
+        c["email"] == new_email
+        for c in client.get("/api/contacts", params={"source": "auto"}).json()["contacts"]
+    )
+    assert not any(
+        c["email"] == new_email
+        for c in client.get("/api/contacts", params={"ungrouped": "true"}).json()["contacts"]
+    )
+    counts = client.get("/api/contacts").json()["counts"]
+    assert {"all", "auto", "manual", "ungrouped"} <= set(counts)
+
+    # 删除 = 该邮箱全部行消失 + 组成员孤儿清理
+    assert client.delete(f"/api/contacts/{agg['id']}").json() == {"ok": True}
+    assert database.get_conn().execute(
+        "SELECT COUNT(*) c FROM contacts WHERE email = ?", (new_email,)
+    ).fetchone()["c"] == 0
+    assert database.get_conn().execute(
+        "SELECT COUNT(*) c FROM contact_group_members WHERE group_id = ?", (g["id"],)
+    ).fetchone()["c"] == 0
+    client.delete(f"/api/contacts/groups/{g['id']}")
+
+
+def test_groups_crud_and_members():
+    tag = uuid.uuid4().hex[:8]
+    g = client.post("/api/contacts/groups", json={"name": f"同事{tag}"}).json()["group"]
+    # 同名 400；重命名冲突 400；空名 400
+    assert client.post("/api/contacts/groups", json={"name": f"同事{tag}"}).status_code == 400
+    other = client.post("/api/contacts/groups", json={"name": f"亲戚{tag}"}).json()["group"]
+    assert client.patch(f"/api/contacts/groups/{g['id']}", json={"name": f"亲戚{tag}"}).status_code == 400
+    assert client.patch(f"/api/contacts/groups/{g['id']}", json={"name": " "}).status_code == 400
+
+    # 成员：不存在地址跳过、重复添加只计一次、移除生效
+    manual = client.post(
+        "/api/contacts", json={"email": f"m-{tag}@x.com", "name": "组成员"}
+    ).json()["contact"]
+    assert client.post(
+        f"/api/contacts/groups/{g['id']}/members",
+        json={"emails": [f"m-{tag}@x.com", f"ghost-{tag}@x.com"]},
+    ).json()["added"] == 1
+    assert client.post(
+        f"/api/contacts/groups/{g['id']}/members", json={"emails": [f"m-{tag}@x.com"]}
+    ).json()["added"] == 0
+    groups = client.get("/api/contacts/groups").json()["groups"]
+    assert next(x for x in groups if x["id"] == g["id"])["member_count"] == 1
+    assert client.post(
+        f"/api/contacts/groups/{g['id']}/members/remove", json={"emails": [f"m-{tag}@x.com"]}
+    ).json()["removed"] == 1
+
+    # 不存在的组 404；删除组级联清成员
+    assert client.post("/api/contacts/groups/999999/members", json={"emails": []}).status_code == 404
+    client.delete(f"/api/contacts/{manual['id']}")
+    client.delete(f"/api/contacts/groups/{g['id']}")
+    client.delete(f"/api/contacts/groups/{other['id']}")
+    assert client.get("/api/contacts/groups").status_code == 200  # 端点仍可用

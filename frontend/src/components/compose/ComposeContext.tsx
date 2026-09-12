@@ -24,7 +24,8 @@ interface ComposeContextValue {
   /** 当前激活写信标签的 tabId；null = 显示底层页面（收件箱等） */
   activeTabId: string | null
   setActiveTab: (tabId: string | null) => void
-  openNew: () => void
+  /** opts.to = 初始收件人（通讯录详情「写信」用）；带 to 时总是新开页签 */
+  openNew: (opts?: { to?: string }) => void
   openReply: (mode: 'reply' | 'replyAll' | 'forward', base: EmailDetail) => Promise<void>
   /** 从草稿箱打开已存草稿：已在工作台则仅激活标签 */
   openDraft: (draft: UserDraft) => void
@@ -129,21 +130,23 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     setActiveTab(tabId)
   }, [])
 
-  const openNew = useCallback(() => {
+  const openNew = useCallback((opts?: { to?: string }) => {
     const account = accountsRef.current[0]
     if (!account) return
-    // 已有未落库的空白标签 → 直接复用，避免连点攒一排「新邮件」
-    const existing = tabsRef.current.find((t) => t.ephemeral)
-    if (existing) {
-      setActiveTab(existing.tabId)
-      return
+    // 已有未落库的空白标签 → 直接复用，避免连点攒一排「新邮件」；带初始收件人时不复用
+    if (!opts?.to) {
+      const existing = tabsRef.current.find((t) => t.ephemeral)
+      if (existing) {
+        setActiveTab(existing.tabId)
+        return
+      }
     }
     const temp: UserDraft = {
       id: -Date.now(),
       account_id: account.id,
       mode: 'new',
       in_reply_to: null,
-      to_addrs: '',
+      to_addrs: opts?.to ?? '',
       cc_addrs: '',
       bcc_addrs: '',
       subject: '',

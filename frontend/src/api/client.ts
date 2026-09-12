@@ -12,7 +12,10 @@ import type {
   ChatSession,
   ComposeExtras,
   CategoryMeta,
+  ContactDetail,
+  ContactGroup,
   ContactItem,
+  ContactViewCounts,
   EmailDetail,
   EmailListResp,
   ExtKeysResp,
@@ -261,19 +264,51 @@ export const api = {
       `/api/accounts/${id}/ai-grants`, { method: 'PATCH', body: JSON.stringify(payload) },
     ),
 
-  // ── 通讯录（v0.4 P4）──
-  getContacts: (q: string = '') =>
-    request<{ contacts: ContactItem[] }>(`/api/contacts${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  // ── 通讯录（2026-09-12 改版：聚合列表 + 联系组）──
+  getContacts: (query: {
+    q?: string
+    source?: string
+    group_id?: number
+    ungrouped?: boolean
+  } = {}) => {
+    const p = new URLSearchParams()
+    if (query.q) p.set('q', query.q)
+    if (query.source) p.set('source', query.source)
+    if (query.group_id != null) p.set('group_id', String(query.group_id))
+    if (query.ungrouped) p.set('ungrouped', 'true')
+    const qs = p.toString()
+    return request<{ contacts: ContactItem[]; counts: ContactViewCounts }>(
+      `/api/contacts${qs ? `?${qs}` : ''}`,
+    )
+  },
+  getContactDetail: (id: number) =>
+    request<ContactDetail>(`/api/contacts/${id}`),
   suggestContacts: (q: string = '', limit: number = 8) =>
     request<{ items: { email: string; name: string; use_count: number }[] }>(
       `/api/contacts/suggest?q=${encodeURIComponent(q)}&limit=${limit}`,
     ),
-  createContact: (payload: { email: string; name?: string; notes?: string }) =>
+  createContact: (payload: { email: string; name?: string; phone?: string; notes?: string }) =>
     request<{ contact: ContactItem }>('/api/contacts', { method: 'POST', body: JSON.stringify(payload) }),
-  updateContact: (id: number, payload: { name?: string; email?: string; notes?: string }) =>
+  updateContact: (id: number, payload: { name?: string; email?: string; phone?: string; notes?: string }) =>
     request<{ contact: ContactItem }>(`/api/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteContact: (id: number) =>
     request<{ ok: boolean }>(`/api/contacts/${id}`, { method: 'DELETE' }),
+  getContactGroups: () =>
+    request<{ groups: ContactGroup[] }>('/api/contacts/groups'),
+  createContactGroup: (name: string) =>
+    request<{ group: ContactGroup }>('/api/contacts/groups', { method: 'POST', body: JSON.stringify({ name }) }),
+  renameContactGroup: (id: number, name: string) =>
+    request<{ group: ContactGroup }>(`/api/contacts/groups/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  deleteContactGroup: (id: number) =>
+    request<{ ok: boolean }>(`/api/contacts/groups/${id}`, { method: 'DELETE' }),
+  addGroupMembers: (groupId: number, emails: string[]) =>
+    request<{ ok: boolean; added: number }>(`/api/contacts/groups/${groupId}/members`, {
+      method: 'POST', body: JSON.stringify({ emails }),
+    }),
+  removeGroupMembers: (groupId: number, emails: string[]) =>
+    request<{ ok: boolean; removed: number }>(`/api/contacts/groups/${groupId}/members/remove`, {
+      method: 'POST', body: JSON.stringify({ emails }),
+    }),
 
   // ── 写信台模板/签名/Markdown 转换 ──
   getComposeExtras: () => request<ComposeExtras>('/api/compose-extras'),

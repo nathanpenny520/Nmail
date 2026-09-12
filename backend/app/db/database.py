@@ -448,6 +448,25 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX IF NOT EXISTS idx_api_calls_time ON api_calls(created_at DESC);
         """,
     ),
+    (
+        21,
+        """
+        -- v0.4 通讯录改版（REDESIGN_PLAN §5.3，2026-09-12 用户拍板）：手机号字段 +
+        -- 自定义联系组。成员按 email 记（与「同邮箱多账号聚合一行」的管理口径一致，
+        -- 联系人删净后由 API 侧清理孤儿成员行）。
+        ALTER TABLE contacts ADD COLUMN phone TEXT NOT NULL DEFAULT '';
+        CREATE TABLE IF NOT EXISTS contact_groups (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS contact_group_members (
+            group_id INTEGER NOT NULL REFERENCES contact_groups(id) ON DELETE CASCADE,
+            email    TEXT NOT NULL,
+            UNIQUE(group_id, email)
+        );
+        """,
+    ),
 ]
 
 

@@ -22,6 +22,8 @@ export interface Settings {
   update_check_enabled: boolean
   /** 全局代理地址（socks5://127.0.0.1:7890 / http://...）；空=直连 */
   network_proxy: string
+  /** 通讯录自动采集（收发往来地址自动入册）；关=仅手动增改 */
+  contacts_auto_collect: boolean
 }
 
 export interface SettingsPayload {
@@ -32,6 +34,7 @@ export interface SettingsPayload {
   allow_remote_images?: boolean
   update_check_enabled?: boolean
   network_proxy?: string
+  contacts_auto_collect?: boolean
 }
 
 export interface UpdateCheckResp {
@@ -333,17 +336,53 @@ export interface AgentEvent {
   status?: string
 }
 
-/** 通讯录联系人（v0.4 P4）：account_id null=全局手动；source manual=手动编辑过（采集不覆盖） */
+/** 通讯录联系人（2026-09-12 改版：聚合行）——同邮箱多账号聚合为一行，sources 为来源集合 */
 export interface ContactItem {
   id: number
-  account_id: number | null
   email: string
   name: string
-  source: 'auto' | 'manual' | string
+  phone: string
   notes: string
+  /** 'auto' / 'manual' 的组合（聚合各账号行） */
+  sources: string[]
   use_count: number
   last_seen_at: string | null
   created_at: string
+  /** 该邮箱在通讯录中的账号行数（1=单一归属） */
+  account_rows: number
+}
+
+/** 自定义联系组（成员按 email 记） */
+export interface ContactGroup {
+  id: number
+  name: string
+  created_at: string
+  member_count: number
+  /** 仍存在于通讯录中的成员邮箱（详情页归属展示用） */
+  members: string[]
+}
+
+/** 左侧树四个智能视图计数 */
+export interface ContactViewCounts {
+  all: number
+  auto: number
+  manual: number
+  ungrouped: number
+}
+
+/** 联系人详情：聚合行 + 各账号明细行 */
+export interface ContactDetail {
+  contact: ContactItem
+  rows: {
+    id: number
+    account_id: number | null
+    email: string
+    name: string
+    phone: string
+    source: string
+    use_count: number
+    last_seen_at: string | null
+  }[]
 }
 
 /** 写信台模板/签名（Markdown 文本存储，插入时转 HTML） */

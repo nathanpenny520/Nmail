@@ -237,18 +237,27 @@
 ### 5.3 通讯录数据模型与自动采集
 
 ```
-contacts(id, account_id nullable, email, name, source auto|manual,
+contacts(id, account_id nullable, email, name, phone, source auto|manual,
          notes, use_count, last_seen_at, created_at,
-         UNIQUE(account_id, email))      -- account_id NULL = 全局手动联系人
+         UNIQUE(COALESCE(account_id,0), email))  -- account_id NULL = 全局手动联系人
+contact_groups(id, name UNIQUE, created_at)      -- 自定义联系组（全局，不挂账号）
+contact_group_members(group_id → contact_groups ON DELETE CASCADE,
+                      email, UNIQUE(group_id, email))  -- 按 email 记成员（与聚合口径一致）
 ```
 
-- **自动采集**（零操作）：同步管线入库新邮件时 upsert 发件人；`core/outbox.send_user_draft` 发送成功后 upsert 全部收件人。姓名策略：保留最新非空姓名，手动编辑过（source=manual）的行不被自动覆盖。
-- **API**（`api/contacts.py`）：`GET /api/contacts?q=&account_id=`（搜索，≥3 字走 FTS）、`POST/PATCH/DELETE /api/contacts`、`GET /api/contacts/compose?q=`（写信联想专用，含排序逻辑，限制 8 条）。
+- **自动采集**（零操作）：同步管线入库新邮件时 upsert 发件人；`core/outbox.send_user_draft` 发送成功后 upsert 全部收件人。姓名策略：保留最新非空姓名，手动编辑过（source=manual）的行不被自动覆盖。**开关**：设置 `contacts_auto_collect`（默认开）——关闭后收发两侧均不再自动入册，已入册联系人保留，手动增改与写信联想不受影响（2026-09-12 用户反馈新增）。
+- **聚合口径**（2026-09-12 拍板）：同一邮箱被多账号采集时管理界面**聚合为一行**（往来次数合并、来源多值），编辑/删除按 email 作用到全部行，与写信联想的去重口径一致。
+- **API**（`api/contacts.py`）：`GET /api/contacts?q=&source=&group_id=&ungrouped=`（聚合列表+过滤）、`POST/PATCH/DELETE /api/contacts`（PATCH/DELETE 按 email 作用于该联系人的全部行）、`GET /api/contacts/suggest?q=`（写信联想）、`GET/POST /api/contacts/groups`、`PATCH/DELETE /api/contacts/groups/{id}`、`POST /api/contacts/groups/{id}/members` 与 `POST .../members/remove`（按 email 增删成员）。
 - 隐私边界：通讯录只存本机；AI 工具读取通讯录走 §6.4 权限（读取默认允许，因为发信必须用到）。
 
-### 5.4 管理界面（D7=A：设置页新增「通讯录」分类）
+### 5.4 管理界面（D7=A：设置页「通讯录」分类，2026-09-12 修订为双栏管理形态）
 
-列表（姓名/邮箱/来源/最近联系/使用次数）+ 搜索 + 手动新增/编辑/删除 + 合并重复（同邮箱不同大小写）+ CSV/vCard 导入导出（v2，先留按钮置灰）。
+Thunderbird 式双栏（用户 2026-09-12 指定形态，仍留在设置页）：
+
+- **左侧树**：固定智能视图（所有联系人 / 自动采集 / 手动添加 / 未分组，带计数）+ 自定义联系组列表（右键重命名/删除）+ 底部「＋新建联系组」；树顶部放「自动采集」开关。
+- **右侧列表**：搜索框、新增联系人、导入/导出（v2 前置灰）、批量删除；列＝复选框/姓名/邮件地址/组/来源/往来次数/最近联系。
+- **详情视图**（点击行进入，替代列表，带返回按钮）：首字母头像、姓名/邮箱/手机/备注（可编辑）、来源与往来元信息、操作＝写信（带收件人打开写信台）/编辑/更多（删除、复制地址、加入/移出组）。
+- CSV/vCard 导入导出维持 v2 计划（按钮置灰）。
 
 ### 5.5 写信台其他打磨（顺带，量不大）
 
