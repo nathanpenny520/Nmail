@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-0915-P1导航骨架 ✅
+- 目标: 落地 REDESIGN_PLAN §13 P1——UI 骨架改版：砍左侧竖栏（邮件基座+小按钮开页签+右侧图标区）、FolderTree 只读骨架（智能视图+账号 INBOX）、字号令牌统一+lint 门禁、旧路由重定向
+- 范围: frontend（Layout 重写、新增 FolderTree/MailPage、App 路由、index.css 令牌、全量字号类迁移、package.json/scripts lint:font）、docs（SESSIONS/CHANGELOG/ARCHITECTURE）
+- 产出: 提交 651b070（见 CHANGELOG「v0.4 P1: UI 骨架改版」条目）；npm run build（lint:font+tsc+vite）通过；隔离实例（8799，NMAIL_DATA_DIR=/tmp/nmail-smoke-p1）浏览器冒烟逐项截图——新布局/树/重定向/三档字号/AI 停用隐藏与恢复/写信按钮空账号静默（既有行为非回归）
+- 细节: 107 处裸字号类 perl 批量迁移（t-* 唯一入口+行高）；t-* 档位 standard/large 微调 +0.5px；MailBrowser 加 initialAccountId（树 selection 经 key 换绑重挂）；ARCHITECTURE 前端节已同步 v0.4 结构
+- 遗留: 树账号节点状态点未在带真实账号数据下目检（冒烟实例无账号，逻辑简单+typecheck 过）；树宽度固定 192px（可拖拽随 P2）；用户真实账号视觉走查待用户下轮确认
+- 时间: 2026-09-12 09:55 完成
+
 ### S-0912-0859-v0.4改版方案 ✅
 - 目标: 汇总用户产品反馈（砍侧栏/文件管理器式邮件/通讯录/AI 总管家 2.0 双模式/对外 API/OAuth 配置分层/字号统一/官网 nmail.whizzzest.com）为完整方案供审核
 - 范围: docs/REDESIGN_PLAN.md（新增）、docs/PRODUCT_PLAN.md、CLAUDE.md、docs/SESSIONS.md；**不改任何代码**
