@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 发版: v0.3.0 全平台——PyPI/Release/tap 即时生效，winget PR 已提，tap token 缺陷暴露
+- `release: v0.3.0`（cb2f047）+ tag 推送，release CI run 34688316397：PyPI `nmail-app` 0.3.0 ✅、GitHub Release 三平台资产（windows-x64.exe / macos-arm64 / linux-x64）✅、homebrew-tap ❌（403，重跑复现）
+- **homebrew-tap 的 secret `HOMEBREW_TAP_TOKEN` 从未在 Actions 成功工作**：v0.1.0 时该 job 尚未存在（formula 0.1.0/0.2.0 均手动提交 b31fa77/54ec4c4）；v0.3.0 首次真正跑到即 403——判定 fine-grained PAT 失效或权限不足（有效期/资源授权/Contents RW 待用户核对）
+- 手动同步 tap formula → 0.3.0（homebrew-nmail 提交 4b3fcbe，url/SHA256 对齐 Release 资产，`brew upgrade nmail` 即生效）
+- winget：fork 分支 nmail-0.3.0 提交三 manifest（version/installer/locale，ManifestVersion 1.6.0），PR microsoft/winget-pkgs#433678；InstallerSha256 对齐资产 digest（233e763d…）
+- 本版内容（自 v0.2.0）：通讯录 Thunderbird 式双栏改版（联系组/手机号/自动采集开关/同邮箱聚合）、授权码明文回显、账号服务器配置可编辑（改服务器免删号）、时间显示统一、设置页加宽、通讯录横向滚动修复
+
 ## 47c6d1c — fix: 发版脚本 Mac bash 3.2 兼容——变量名后紧跟全角字符被吞进变量名
 - macOS 自带 bash 3.2 + `C.UTF-8` locale 下，`$VERSION（` 这类**变量名后紧跟全角字符**的写法会把多字节首字节吞进变量名，`set -u` 下直接 `unbound variable` 崩溃（Windows git-bash 的 bash 5.x 不受影响，故此前未发现；v0.3.0 发版演练时暴露）
 - 修：5 行 6 处（`$VERSION（`/`$TAG，`/`$TAG）`/`$RUN_ID（`/`$BRANCH（`/`$PR_URL（`）全部加花括号 `${VAR}`——任何 bash 版本与 locale 下都安全

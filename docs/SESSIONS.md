@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0912-1840-v0.3.0发版 ✅
+- 目标: 用户指示发布第三版全平台——v0.3.0（自 v0.2.0 起：通讯录 Thunderbird 式双栏改版/联系组/手机号/自动采集开关、授权码明文回显、账号服务器配置可编辑、时间显示统一、设置页加宽、横向滚动修复）
+- 范围: scripts/release.sh（Mac 兼容修复）+ docs(CHANGELOG, SESSIONS) + 官网动态（nmail-site 仓库）
+- 产出: 脚本修复 47c6d1c + 发版提交 cb2f047 + tag v0.3.0；release CI run 34688316397——PyPI nmail-app 0.3.0 ✅、GitHub Release 三平台资产 ✅、homebrew-tap job 403 ❌；tap 手动同步 0.3.0（homebrew-nmail 4b3fcbe，SHA256 对齐资产 d9cd236d…）；winget fork 分支 nmail-0.3.0 三 manifest + PR microsoft/winget-pkgs#433678（exe SHA256 对齐资产 233e763d…）；官网联动部署触发（run 34688757927）
+- 关键发现: **secret `HOMEBREW_TAP_TOKEN` 从未在 Actions 成功工作**——v0.1.0 时 job 尚未存在（0.1.0/0.2.0 formula 均手动提交 b31fa77/54ec4c4），v0.3.0 起每次 403（重跑复现，非偶发）；判定 token 失效或权限不足
+- 遗留: **待用户检查仓库 Settings→Secrets 的 HOMEBREW_TAP_TOKEN**（fine-grained PAT：有效期未过/仅授权 homebrew-nmail/Contents Read and write），修好后下次发版 tap 步骤才能全自动；winget PR 校验 10–60 分钟，全绿后等审核员批准（可去 PR 页开 auto-merge）
+- 时间: 2026-09-12 18:40 开工，即日完成
+
 ### S-0912-1910-通讯录横向滚动修复 ✅
 - 目标: 用户反馈通讯录表格被裁切且无法左右滑动——滚动容器 `overflow-hidden` 裁掉横向溢出；顺带发现并重启了 8720 旧后端进程（早于通讯录改版代码，与前端接口不匹配致白屏）
 - 范围: frontend(SettingsPage 表格容器/列头/SourceBadges) + docs(CHANGELOG, SESSIONS)
