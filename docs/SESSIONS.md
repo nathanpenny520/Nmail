@@ -18,6 +18,11 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1600-邮件显示三修
+- 目标: 用户反馈邮件显示怪（无样式邮件正文渲染成宋体）且底部有裂图——三项修复：①HtmlMail srcdoc 注入正文基础样式（sans 字体栈+行高，仅兜底不覆盖邮件自带样式）②放行远程图时隐形追踪像素（声明尺寸≤2 置 display:none；远程 img 缺 alt 补 alt="" 优雅降级）③消毒放行邮件自带 `<style>` 标签（沙箱内安全；拦截远程图时同步剥 CSS url()/@import 防追踪回潮）
+- 范围: backend(core/mail_html.py) + frontend(components/HtmlMail.tsx) + docs(CHANGELOG, SESSIONS)
+- 时间: 2026-09-13 16:00 开工
+
 ### S-0913-1535-AI面板长链接溢出 ✅
 - 目标: 用户反馈邮件 AI 助手回复显示越界——长 URL 不可断行戳出气泡（8721 实测文字溢出气泡右缘 ~36px；根因=渲染链路无 overflow-wrap，浏览器默认仅在空格/连字符处断行，URL 的 / . ? 均非断点）
 - 范围: frontend(components/Markdown.tsx, components/AiPanel.tsx, pages/ManagerPage.tsx) + docs(CHANGELOG, SESSIONS)

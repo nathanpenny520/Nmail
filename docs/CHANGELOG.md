@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 邮件显示三修——正文基础字体、追踪像素隐形、放行 style 标签
+- 用户反馈：邮件显示「怪怪的」且底部有裂图——排查：无样式 HTML 邮件正文落在浏览器默认衬线字体（宋体观感，仅页脚有自带字体正常）；裂图实为阿里云 1×1 追踪像素（ac.mmstat.com）被浏览器反追踪拦截的残留图标，图片本身加载正常（关闭拦截生效，remote_blocked=0）
+- ①正文基础样式（HtmlMail.tsx）：srcdoc 注入 `body{font-family:sans 栈;line-height:1.65}`——仅兜底继承，邮件自带 font-family/line-height 不受影响；与发信方向 wrap_email_body_html 同栈，收发观感一致
+- ②追踪像素优雅降级（mail_html.py）：放行远程图时声明尺寸≤2px（width/height 属性或内联样式）置 display:none；缺 alt 的远程图补空 alt——被浏览器反追踪拦截时不再显裂图（headless Chrome 实测：alt="" 失败图零渲染、无 alt 显裂图、1×1 声明不可见）
+- ③放行 `<style>` 标签（mail_html.py）：nh3 默认把 style 连内容整体剥离且不支持白名单放行（tag 与 clean_content_tags 同现即 panic），改为先摘出 CSS、按远程图片口径清洗后注回（bs4 对 style 内容原样输出不转义，`</style>` 逃逸已防）；拦截口径同步剥 style 属性里的远程 url()（nh3 本不清洗属性内容，属既有追踪通道）与 @import，data: 内联保留
+- 测试：pytest 156 全绿（+8：style 保留含子选择器/拦截剥 CSS url 与 @import/style 属性 url/像素隐形/alt 补齐/逃逸守卫/无 style 零影响等）；ruff + npm build 通过
+- 验证：8720 重启后真实邮件（阿里云云盾 id 210）chrome-devtools 实测——邮件自带 `<style>` 链接色生效、正文黑体 16px×1.65、追踪像素 alt="" 加载后 1×1 不可见（被拦截亦不显裂图）、二维码/logo 照常；拦截态占位符与合成 CSS 剥离用例全过
+
 ## 5622630 — fix: AI 回复长链接溢出气泡——Markdown wrap-anywhere 任意断行 + 三处容器 min-w-0
 - 用户反馈：邮件内点开 AI 助手，回复里的长 URL/邮箱地址戳出灰色气泡——根因：渲染链路无任何 overflow-wrap/word-break（全局 break-word 只覆盖写信编辑器），浏览器默认仅在空格/连字符处断行，URL 的 / . ? 均非断点，不可断词溢出气泡右缘（8721 实测 ~36px）
 - 前端：Markdown.tsx 输出包一层 wrap-anywhere（overflow-wrap:anywhere，可继承全后代，URL/长词任意断行兼收缩 min-content）；AiPanel 助手/用户气泡、ManagerPage 总管家用户气泡/消息容器补 min-w-0 防御（实测 flex item 未突破 max-w，防御无副作用）

@@ -13,6 +13,8 @@ interface HtmlMailProps {
  * 允许父级读取 scrollHeight 以自适应高度：body 挂 ResizeObserver，
  * 图片等异步资源加载改变高度时即时复测（定时复测仅兜底）。
  * 正文字号缩放独立于界面字号（zoom 注入沙箱，见下方 UI_ZOOM 校正）。
+ * body 基础样式（字体栈/行高）仅兜底：无样式的邮件不再落到浏览器默认衬线
+ * 字体（宋体观感）；靠继承生效，邮件自带 font-family/line-height 的元素不受影响。
  */
 const BODY_ZOOM: Record<string, number> = { small: 0.85, standard: 1, large: 1.15 }
 // 界面三档的全局缩放（与 index.css 各档 --app-zoom 保持一致）。正文档位语义 =
@@ -21,6 +23,9 @@ const BODY_ZOOM: Record<string, number> = { small: 0.85, standard: 1, large: 1.1
 // 且紧凑界面下正文档选「标准」也到不了原始大小）。从设置读而非 computedStyle：
 // 同一次渲染即响应界面字号切换，不等 CSS 变量应用时序。
 const UI_ZOOM: Record<string, number> = { compact: 0.85, standard: 1, large: 1.12 }
+// 与后端发信方向 wrap_email_body_html 同栈：收发两侧正文观感一致
+const BODY_BASE_STYLE =
+  "font-family:-apple-system,'Segoe UI','Microsoft YaHei',sans-serif;line-height:1.65"
 
 export default function HtmlMail({ html }: HtmlMailProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -99,7 +104,7 @@ export default function HtmlMail({ html }: HtmlMailProps) {
       title="邮件正文"
       style={style}
       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-      srcDoc={`<style>html{zoom:${zoom}}</style>` + html}
+      srcDoc={`<style>html{zoom:${zoom}}body{${BODY_BASE_STYLE}}</style>` + html}
       onLoad={setup}
     />
   )

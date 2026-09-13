@@ -1,8 +1,14 @@
 """HTML 邮件消毒与安全渲染预处理。
 
-两层防护：
+三层防护：
 1. nh3（ammonia）白名单清洗：剔除 script/iframe/事件属性/javascript: URL 等；
-2. 远程图片控制：默认移除 http(s) 图片并统计拦截数；cid 内联图按需转 data URL。
+2. 远程图片控制：默认移除 http(s) 图片并统计拦截数；cid 内联图按需转 data URL；
+   放行时追踪像素（声明尺寸≤2px）隐形、缺 alt 的远程图补空 alt（被浏览器
+   反追踪拦截时不再显示裂图图标）。
+3. <style> 标签放行：nh3 默认把 style 连内容整体剥离且不支持白名单放行
+   （tag 与 clean_content_tags 同现会 panic），故先摘出 CSS 自行清洗再注回；
+   拦截口径下同步剥 CSS 远程 url()/@import（含 style 属性，nh3 不清洗其内容），
+   防 CSS 侧追踪回潮。style 标签仅在沙箱 iframe 渲染，无脚本风险。
 
 另外 http(s) 链接强制 target="_blank"（rel=noopener 由 nh3 link_rel 添加）：
 前端在 sandbox iframe 里渲染正文，若链接在 iframe 内导航，多数站点以
@@ -15,7 +21,7 @@ import re
 from pathlib import Path
 
 import nh3
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 MAX_INLINE_IMAGE_BYTES = 2 * 1024 * 1024  # cid 内联图超过 2MB 不内联
 
@@ -38,6 +44,36 @@ _URL_SCHEMES = {"http", "https", "mailto", "cid"}
 
 _REMOTE_IMG_RE = re.compile(r"<img[^>]+src=[\"']https?://", re.IGNORECASE)
 _CID_RE = re.compile(r"^cid:(.+)$", re.IGNORECASE)
+_CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)(.*?)\1\s*\)", re.IGNORECASE)
+_CSS_IMPORT_RE = re.compile(r"@import\b[^;]*;?", re.IGNORECASE)
+_TINY_ATTR_RE = re.compile(r"^\s*(\d+)")
+_TINY_STYLE_RE = re.compile(r"(?:^|[;\s])(?:width|height)\s*:\s*(\d+(?:\.\d+)?)px", re.IGNORECASE)
+
+
+def _scrub_css(css: str, allow_remote_images: bool) -> str:
+    """按远程图片放行口径清洗 CSS：拦截时剥掉远程 url() 与 @import（data: 内联保留）。"""
+    if allow_remote_images:
+        return css
+
+    def _repl(m: re.Match) -> str:
+        target = (m.group(2) or "").strip().strip("'\"")
+        return m.group(0) if target.lower().startswith("data:") else "none"
+
+    return _CSS_URL_RE.sub(_repl, _CSS_IMPORT_RE.sub("", css))
+
+
+def _append_decl(style: str, decl: str) -> str:
+    style = style.strip().rstrip(";").strip()
+    return f"{style};{decl}" if style else decl
+
+
+def _declared_tiny(img: Tag) -> bool:
+    """声明尺寸 ≤2px（width/height 属性或内联样式）→ 追踪像素。"""
+    for attr in ("width", "height"):
+        m = _TINY_ATTR_RE.match(str(img.get(attr) or ""))
+        if m and int(m.group(1)) <= 2:
+            return True
+    return any(float(m.group(1)) <= 2 for m in _TINY_STYLE_RE.finditer(img.get("style") or ""))
 
 
 def count_remote_images(html: str) -> int:
@@ -54,6 +90,12 @@ def sanitize_email_html(
     cid_map: {content_id: (文件路径, mime)}，仅在 allow_remote_images 时内联。
     返回 (消毒后的 HTML, 被拦截的远程图片数)。
     """
+    # <style> 先摘出（nh3 会连内容整体剥离）：CSS 自行按远程图片口径清洗后注回
+    pre_soup = BeautifulSoup(raw_html or "", "html.parser")
+    css_blocks = [
+        _scrub_css(tag.get_text(), allow_remote_images) for tag in pre_soup.find_all("style")
+    ]
+
     clean = nh3.clean(
         raw_html or "",
         tags=_ALLOWED_TAGS,
@@ -64,10 +106,21 @@ def sanitize_email_html(
     soup = BeautifulSoup(clean, "html.parser")
     blocked = 0
 
+    # 拦截口径下 style 属性里的远程 url() 同样是追踪通道（nh3 不清洗属性内容）
+    if not allow_remote_images:
+        for el in soup.find_all(style=True):
+            el.attrs["style"] = _scrub_css(el.attrs["style"], False)
+
     for img in soup.find_all("img"):
         src = (img.get("src") or "").strip()
         if src.startswith(("http://", "https://")):
             if allow_remote_images:
+                if _declared_tiny(img):
+                    # 追踪像素（声明尺寸 ≤2px）：放行也隐形，不参与排版
+                    img.attrs["style"] = _append_decl(img.get("style") or "", "display:none")
+                elif "alt" not in img.attrs:
+                    # 缺 alt 的远程图补空 alt：加载失败（如被浏览器反追踪拦截）不显裂图
+                    img.attrs["alt"] = ""
                 continue
             blocked += 1
             placeholder = soup.new_tag("span")
@@ -94,6 +147,13 @@ def sanitize_email_html(
         href = (a.get("href") or "").strip()
         if href.startswith(("http://", "https://", "//")):
             a.attrs["target"] = "_blank"
+
+    css = "\n".join(block for block in css_blocks if block.strip())
+    if css.strip():
+        tag = soup.new_tag("style")
+        # 防 </style> 逃逸：CSS 字符串内 \< 是合法转义，规则位置本就无效
+        tag.string = css.replace("</", "<\\/")
+        soup.insert(0, tag)
 
     return str(soup), blocked
 
