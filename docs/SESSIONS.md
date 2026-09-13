@@ -32,6 +32,7 @@
 - 目标: 用户反馈两点——①树「草稿」点击不出页签不合理（同列的 AI 总管家/每日摘要都开页签）：草稿升级为页面页签（PAGE_TABS 机制，`/drafts` 真实路由，激活时树隐藏与其他页面一致，旧深链 `/?view=drafts` 兜底重定向）②页签 w-44 过宽放不下几个：w-44→w-36 + px/gap 收紧，长标题照常 truncate 不溢出
 - 范围: frontend(App, Layout, MailPage, FolderTree, NotificationBell, EmailReader) + docs(REDESIGN_PLAN §3.2–3.4/§5.1 修订, CHANGELOG, SESSIONS)
 - 产出: 提交 7797bf6；npm run build（tsc+字号门禁）通过；curl 实测 /drafts SPA 兜底 200；与 S-0913-1420（共 Layout）/S-0913-1422/代理第二轮并行，Layout 与三文档按 HEAD 基线构造内容外科手术式暂存（git update-index --cacheinfo），各方 WIP 互未夹带
+- 追记（收工后）: 回填提交 c6127db 意外带入并行会话已 git add 进共享 index、尚未 commit 的 WIP——S-0913-1422 的 backend(core/sync.py, core/imap_client.py)+MailBrowser.tsx、S-0913-1420 的 compose(ComposeContext.tsx, ComposeForm.tsx)。代码均为两会话自测完成状态、未损；两会话提交时按各自 CHANGELOG 条目回填哈希、以 git log 对照即可（其代码 diff 已随 c6127db 入库，余下为文档）
 - 遗留: 浏览器走查未跑（chrome-devtools profile 被并行会话占用）——纯前端改动无需重启进程，用户强刷 8720 即见；走查点：点树「草稿」出页签、关页签、刷新后页签记忆、旧深链 /?view=drafts 与 /mydrafts 重定向、AI 停用时草稿入口仍可见
 - 时间: 2026-09-13 14:21 开工，即日完成
 
