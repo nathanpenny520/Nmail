@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 右键菜单弹出位置偏移、贴边不保证可见（全局 zoom 坐标换算）
+- 用户反馈：右键（通讯录/邮件列表/文件夹树）菜单弹出位置明显偏离鼠标；贴近视口底边/右边时不自动收进来，菜单被窗口裁掉
+- 根因：界面全局缩放 `body>#root { zoom: var(--app-zoom) }`（0.85/1/1.12 档）——`e.clientX/Y` 是视觉 px，而 zoom 子树内的 fixed 定位坐标按本地 px 解析、浏览器渲染时再乘回 zoom，`ContextMenu` 直接拿视觉 px 当本地 px 用 → 偏移量 = 坐标 × |zoom−1|，离原点越远偏得越多；视口夹紧公式又混用两种空间（`getBoundingClientRect` 是视觉值、赋给 left/top 的却是本地值），贴边时 `(innerHeight − rect.height − 8) × zoom` 超出视口 → 裁切
+- 修：ContextMenu 内部统一坐标空间——x/Y 先除以 `--app-zoom` 换算成本地 px 再定位/夹紧（视口尺寸同样除以 zoom），夹紧改用 `offsetWidth/Height`（本身就是本地值）并补 `max(0,…)` 下限；定位改 `useLayoutEffect` 消除首帧闪位。二级菜单（「移动到…」等）超出视口时自动向上对齐/向左展开
+- 关联：MailBrowser 列宽拖拽已有同款换算（clientX/zoom），本次为 ContextMenu 补齐
+- 验证：npm run build（tsc+字号门禁）通过（HEAD+本修复的隔离 worktree 亦单独构建通过）；chrome-devtools 挂 dev server 用真实账号数据实测——zoom 1.12/0.85 两档弹出位置均精确贴鼠标（右键 (600,300) → 菜单左上角即 (600,300)），底边/右边右键自动收进视口（菜单底 677.5 ≤ 视口 687−8、右 1111 ≤ 1120−8），「移动到…」二级菜单贴底自动上翻、贴右自动左翻，全程无裁切
+
 ## 182f934 — UX: 代理改全局总开关——开=一律走代理，删账号级开关
 - 用户反馈：代理「全局地址×账号开关」两层模型太技术化——设置页文案像说明书、账号行多一个按钮；期望和正常软件一样，开了代理一律走代理
 - 后端：netproxy 改总开关语义——`network_proxy_enabled`（开=所有账号 IMAP/SMTP 收发与 OAuth 令牌交换一律走代理；本机回环仍直连）；地址二级解析：手动地址（`network_proxy`）留空时自动检测系统代理（urllib.getproxies：macOS 系统代理/Windows 注册表/环境变量，每次连接现读，socks:// 归一 socks5），手动地址优先；`resolve_proxy/httpx_proxy_arg` 去账号开关参数；accounts API 移除 `use_proxy`（DB 列按迁移只追加原则保留不读）；settings GET 附带只读 `detected_proxy` 供设置页展示

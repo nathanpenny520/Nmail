@@ -18,6 +18,11 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1359-右键菜单偏移与可见性
+- 目标: 用户反馈右键菜单两处问题——①弹出位置明显偏离鼠标（全局 `--app-zoom` 子树内 fixed 定位按本地 px 解析，而调用方传的 clientX/Y 是视觉 px，未换算；夹紧公式混用两种坐标空间导致贴边时溢出视口）②菜单不保证可见（不会在贴边时上/下收进来）。修复 ContextMenu 组件：坐标换算 + 视口内夹紧 + 二级菜单越界自动翻转
+- 范围: frontend(components/ContextMenu.tsx) + docs(CHANGELOG, SESSIONS)
+- 时间: 2026-09-13 13:59 开工
+
 ### S-0913-1352-代理一律走代理 ✅
 - 目标: 用户反馈代理「全局地址×账号开关」两层模型太技术化——改正常软件思维：一个总开关，开=所有账号收发与 OAuth 一律走代理（本机回环仍直连），删账号级「代理」按钮；设置页开关+手动地址（空=自动检测系统代理 urllib.getproxies）
 - 范围: backend(core/netproxy.py, imap_client.py, mailbox.py, api/accounts.py, api/settings.py) + frontend(SettingsPage, types, client) + openapi 快照再生 + tests(test_netproxy 更新) + docs(ARCHITECTURE, 使用指南, FAQ, OAuth2 使用指南, CHANGELOG, SESSIONS)
