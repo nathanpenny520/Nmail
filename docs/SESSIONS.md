@@ -26,7 +26,7 @@
 ### S-0913-1345-摘要重要邮件可清除 ✅
 - 目标: 用户反馈「重要邮件通知查看完后还在」——根因是摘要为当日快照（digest_history JSON），查看跳转不改动快照；按用户要求给重要邮件条目加小 ✕ 清除按钮（后端落 dismissed_important 持久化，重新生成不复活；跨天随新摘要自然重置）
 - 范围: backend(api/digest.py, ai/digest.py) + frontend(DigestPage, client) + openapi 快照再生 + tests(test_digest 扩充) + docs(ARCHITECTURE, CHANGELOG, SESSIONS)
-- 产出: 提交（待回填哈希）；pytest 147 全绿（+2）、ruff + npm build 通过、openapi 快照+schema.d.ts 再生；隔离实例（8793，临时数据目录）curl 往返——生成→清除→重生成不复活→未知 id 404 全对，浏览器实测 ✕ 点击即消失
+- 产出: 提交 6fbbd12；pytest 147 全绿（+2）、ruff + npm build 通过、openapi 快照+schema.d.ts 再生；隔离实例（8793，临时数据目录）curl 往返——生成→清除→重生成不复活→未知 id 404 全对，浏览器实测 ✕ 点击即消失
 - 遗留: 需重启 python run.py 生效；「需要回复」列表未加清除（用户未要求）
 - 时间: 2026-09-13 13:45 开工，即日完成
 
