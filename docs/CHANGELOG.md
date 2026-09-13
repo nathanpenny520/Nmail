@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+
+## 待提交 — UI: 设置页内部文档路径改为官网文档链接
+- 用户反馈：设置页出现内部仓库路径（API 区「隧道配置示例见 docs/对外API使用指南.md」、OAuth 区「见项目仓库 docs/OAuth2 使用指南.md」）——对普通用户无意义且暴露内部结构
+- 前端（ExtApiSection.tsx / OauthSettings.tsx）：两处内部 .md 路径全部改为官网文档链接（nmail.whizzzest.com/docs/api/、/docs/oauth/），新标签打开，样式沿用站内链接惯例
+- 文档：docs 站 slug 映射（nmail-site/scripts/sync-docs.mjs）确认对应关系 api/oauth
+- 验证：npm run build（tsc+字号门禁）通过
+
 ## 213eb49 — UX: 新用户初始化定版——页签会话级归零 + 默认设置 + 正文字号与界面字号解耦
 - 用户定版新用户初始化三件事：①页签栏初始化只见「邮件」——页面页签记忆 localStorage 改 sessionStorage（浏览器行为：应用内刷新保留，关闭浏览器标签页/退出应用后归零重见基座；写信页签本为内存态，行为不变）②默认设置对齐——轮询 5→1 分钟、每日摘要 08:30→07:00、界面字号 compact→large、通讯录自动采集开启→关闭（DEFAULT_SETTINGS 仅 get_setting 回退用，老用户已存值不受影响）③正文字号三档与界面字号解耦——HtmlMail 注入沙箱的 zoom 原先与全局缩放相乘（紧凑 0.85 × 小 0.85 = 0.72，「都调小」时邮件正文仅原大 72%，且紧凑界面下正文档选「标准」也到不了原始大小）；改为除以界面档位后，小/标准/大 = 邮件原始字号的 0.85/1/1.15，与界面档位无关
 - 后端（api/settings.py）：DEFAULT_SETTINGS 四项对齐新用户默认

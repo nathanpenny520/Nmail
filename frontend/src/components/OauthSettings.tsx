@@ -191,7 +191,15 @@ function ProviderRow({ provider }: { provider: OauthProviderStatus }) {
               </button>
             )}
             <span className="t-xs text-gray-400">
-              详细步骤与报错对照见项目仓库 <b>docs/OAuth2 使用指南.md</b>
+              详细步骤与报错对照见{' '}
+              <a
+                className="text-indigo-600 underline underline-offset-2"
+                href="https://nmail.whizzzest.com/docs/oauth/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                官网 OAuth2 使用指南
+              </a>
             </span>
           </div>
         </div>
