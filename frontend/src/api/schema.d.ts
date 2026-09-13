@@ -2319,8 +2319,6 @@ export interface components {
             update_check_enabled?: boolean | null;
             /** Network Proxy */
             network_proxy?: string | null;
-            /** Network Proxy Enabled */
-            network_proxy_enabled?: boolean | null;
             /** Contacts Auto Collect */
             contacts_auto_collect?: boolean | null;
         };

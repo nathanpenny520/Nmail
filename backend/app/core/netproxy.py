@@ -1,14 +1,15 @@
 """网络代理：让被墙服务商（Gmail/Outlook 等）的 IMAP/SMTP/OAuth 流量走本机代理。
 
 背景（真实用户实测）：大陆网络裸连 imap.gmail.com 直接 10054/10060；浏览器与
-httpx 能通是因为它们认代理，而 IMAP/SMTP 是裸 socket。本模块提供：
+httpx 能通是因为它们认代理，而 IMAP/SMTP 是裸 socket。语义与浏览器一致（用户
+拍板「正常软件零开关」）：系统有代理就自动走、没有就直连，无任何内部开关——
 
-- 一个全局总开关（settings KV 键 `network_proxy_enabled`）：开=所有账号的
-  IMAP/SMTP 收发与 OAuth 令牌交换一律走代理（正常软件语义，无账号级开关）；
+- 代理地址解析：手动地址（settings KV 键 `network_proxy`，socks5/socks5h/
+  socks4/http，可带 user:pass@）优先，留空时自动检测系统代理
+  （urllib.getproxies：macOS 系统代理/Windows 注册表/HTTP(S)_PROXY 环境变量，
+  每次连接现读——代理工具换端口无需改；socks:// 归一为 socks5）
+- 所有账号的 IMAP/SMTP 收发与 OAuth 令牌交换统一按此生效（无账号级字段）；
   本机回环地址（Proton Bridge 等）始终直连
-- 代理地址：手动地址（键 `network_proxy`，socks5/socks5h/socks4/http，可带
-  user:pass@）留空时自动检测系统代理（urllib.getproxies：macOS 系统代理/
-  Windows 注册表/HTTP(S)_PROXY 环境变量，每次连接现读——代理工具换端口无需改）
 - OAuth 令牌交换代理建连失败自动直连兜底（Outlook 直连可达，不因代理配置
   错误被误伤；Gmail 直连必死则如实报错）
 
@@ -26,7 +27,6 @@ from urllib.parse import urlsplit
 
 import socks
 
-PROXY_ENABLED_KEY = "network_proxy_enabled"
 PROXY_SETTING_KEY = "network_proxy"
 
 _PROXY_SCHEMES: dict[str, tuple[int, int]] = {
@@ -66,13 +66,6 @@ def parse_proxy_url(raw: str) -> dict | None:
     }
 
 
-def proxy_enabled() -> bool:
-    """全局总开关（关=一律直连）。"""
-    from app.db.database import get_setting
-
-    return bool(get_setting(PROXY_ENABLED_KEY, False))
-
-
 def proxy_url_setting() -> str:
     """手动代理地址原文（空=自动检测系统代理）。"""
     from app.db.database import get_setting
@@ -98,9 +91,7 @@ def detect_system_proxy() -> str | None:
 
 
 def effective_proxy_url() -> str | None:
-    """总开关 ×（手动地址 → 系统探测）→ 实际使用的代理 URL；关/未配置返回 None。"""
-    if not proxy_enabled():
-        return None
+    """实际使用的代理 URL：手动地址 → 系统探测；都没有（或关）返回 None=直连。"""
     manual = proxy_url_setting().strip()
     return manual or detect_system_proxy()
 

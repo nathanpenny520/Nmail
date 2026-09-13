@@ -18,6 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1430-代理跟随系统零开关 ✅
+- 目标: 用户反馈 S-0913-1352 的总开关仍不对——「浏览器难道会有代理开关按钮吗」：正常软件是系统有代理就自动走、没有就直连，内部零开关。改为默认永远自动跟随系统代理；主界面只显示当前状态（经 X 连接/直连），手动地址退到高级折叠区（仅代理工具未开系统代理等例外场景）
+- 范围: backend(core/netproxy.py, api/settings.py) + frontend(SettingsPage, types) + openapi 快照再生 + tests(test_netproxy) + docs(使用指南, FAQ, OAuth2 使用指南, ARCHITECTURE, CHANGELOG, SESSIONS)
+- 产出: 提交（待回填哈希）；pytest 147 全绿、ruff + npm build 通过、openapi 快照再生
+- 遗留: 语义变化——系统代理开启时所有账号自动走代理（用户拍板浏览器语义）；真实 Gmail 账号端到端待用户验证
+- 时间: 2026-09-13 14:30 开工，即日完成
+
 ### S-0913-1359-右键菜单偏移与可见性 ✅
 - 目标: 用户反馈右键菜单两处问题——①弹出位置明显偏离鼠标（全局 `--app-zoom` 子树内 fixed 定位按本地 px 解析，而调用方传的 clientX/Y 是视觉 px，未换算；夹紧公式混用两种坐标空间导致贴边时溢出视口）②菜单不保证可见（不会在贴边时上/下收进来）。修复 ContextMenu 组件：坐标换算 + 视口内夹紧 + 二级菜单越界自动翻转
 - 范围: frontend(components/ContextMenu.tsx) + docs(CHANGELOG, SESSIONS)

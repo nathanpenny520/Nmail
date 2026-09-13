@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 代理改「跟随系统、零开关」——撤掉内部总开关按钮
+- 用户反馈（对 182f934 的纠正）：设置页仍有「已关闭」代理开关——「浏览器难道会有这样的代理开关按钮吗？」正常软件是系统有代理就自动走、没有就直连，内部零开关；上一轮把实现细节（Python 不会自动认系统代理）漏成了一颗要用户理解的开关，本质还是内部设置
+- 后端：netproxy 撤总开关——`effective_proxy_url()` = 手动地址（`network_proxy`）→ 系统探测（urllib.getproxies），没有即直连，无任何门控；settings API 移除 `network_proxy_enabled`，GET 增只读 `effective_proxy`（实际生效通道，与 `detected_proxy` 一起供状态行展示）
+- 前端：设置页代理区改为纯状态行（「自动跟随系统代理，无需设置——当前经 X 连接 / 直连，未检测到系统代理」），零控件；手动地址退到 `<details>` 折叠的「手动指定代理地址（一般不用）」，仅代理工具未开系统代理等例外场景使用；types/openapi schema 同步
+- 文档：使用指南/FAQ/OAuth2 指南/ARCHITECTURE（含上轮漏改的 netproxy 行）统一为「跟随系统」口径
+- 验证：pytest 147 全绿（test_netproxy 撤开关契约，新增手动地址优先于系统探测断言）、ruff + npm build 通过、openapi 快照再生
+- 遗留：语义变化——系统代理开启时所有账号自动走代理（用户拍板的浏览器语义）；真实 Gmail 账号端到端待用户验证
+
+
 ## 6484ae9 — fix: 右键菜单弹出位置偏移、贴边不保证可见（全局 zoom 坐标换算）
 - 用户反馈：右键（通讯录/邮件列表/文件夹树）菜单弹出位置明显偏离鼠标；贴近视口底边/右边时不自动收进来，菜单被窗口裁掉
 - 根因：界面全局缩放 `body>#root { zoom: var(--app-zoom) }`（0.85/1/1.12 档）——`e.clientX/Y` 是视觉 px，而 zoom 子树内的 fixed 定位坐标按本地 px 解析、浏览器渲染时再乘回 zoom，`ContextMenu` 直接拿视觉 px 当本地 px 用 → 偏移量 = 坐标 × |zoom−1|，离原点越远偏得越多；视口夹紧公式又混用两种空间（`getBoundingClientRect` 是视觉值、赋给 left/top 的却是本地值），贴边时 `(innerHeight − rect.height − 8) × zoom` 超出视口 → 裁切

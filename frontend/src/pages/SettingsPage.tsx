@@ -59,7 +59,6 @@ export default function SettingsPage() {
   const [uiFont, setUiFont] = useState<'compact' | 'standard' | 'large'>('compact')
   const [bodyFont, setBodyFont] = useState<'small' | 'standard' | 'large'>('standard')
   const [allowRemoteImages, setAllowRemoteImages] = useState(false)
-  const [proxyEnabled, setProxyEnabled] = useState(false)
   const [proxyUrl, setProxyUrl] = useState('')
 
   const [showAddAccount, setShowAddAccount] = useState(false)
@@ -77,7 +76,6 @@ export default function SettingsPage() {
     setUiFont(data.ui_font)
     setBodyFont(data.body_font)
     setAllowRemoteImages(data.allow_remote_images)
-    setProxyEnabled(data.network_proxy_enabled)
     setProxyUrl(data.network_proxy ?? '')
   }, [data])
 
@@ -85,32 +83,29 @@ export default function SettingsPage() {
   const guardVersion = (saved: Settings) => {
     queryClient.setQueryData(['settings'], saved)
     if (saved.ui_font === undefined || saved.poll_interval_minutes === undefined
-        || saved.network_proxy === undefined || saved.network_proxy_enabled === undefined) {
+        || saved.network_proxy === undefined || saved.effective_proxy === undefined) {
       setSettingsError('后端版本较旧，设置未能真正保存——请重启 python run.py 后重试')
     } else {
       setSettingsError('')
     }
   }
 
-  // 通用表单（轮询/摘要时间/代理开关与地址）：改动后由底部粘性保存栏统一提交
+  // 通用表单（轮询/摘要时间/手动代理地址）：改动后由底部粘性保存栏统一提交
   const saveMutation = useMutation({
     mutationFn: api.updateSettings,
     onSuccess: guardVersion,
   })
   const handleSave = () =>
-    saveMutation.mutate({ poll_interval_minutes: pollMinutes, digest_time: digestTime,
-      network_proxy_enabled: proxyEnabled, network_proxy: proxyUrl.trim() })
+    saveMutation.mutate({ poll_interval_minutes: pollMinutes, digest_time: digestTime, network_proxy: proxyUrl.trim() })
   const discardChanges = () => {
     if (!data) return
     setPollMinutes(data.poll_interval_minutes)
     setDigestTime(data.digest_time)
-    setProxyEnabled(data.network_proxy_enabled)
     setProxyUrl(data.network_proxy ?? '')
   }
   const dirty =
     !!data && (pollMinutes !== data.poll_interval_minutes || digestTime !== data.digest_time
-      || proxyEnabled !== data.network_proxy_enabled
-      || (proxyEnabled && proxyUrl.trim() !== (data.network_proxy ?? '')))
+      || proxyUrl.trim() !== (data.network_proxy ?? ''))
 
   // 字号：选择即保存、即时生效
   const fontMutation = useMutation({
@@ -318,39 +313,29 @@ export default function SettingsPage() {
               </select>
             </label>
             <div className="mt-4">
-              <div className="flex items-center justify-between">
-                <span className="t-md text-gray-600">网络代理</span>
-                <label className="flex cursor-pointer items-center gap-2 t-sm text-gray-500">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-indigo-600"
-                    checked={proxyEnabled}
-                    onChange={(e) => setProxyEnabled(e.target.checked)}
-                  />
-                  {proxyEnabled ? '已开启' : '已关闭'}
-                </label>
-              </div>
+              <span className="t-md text-gray-600">网络代理</span>
               <span className="mt-1 block t-sm leading-relaxed text-gray-400">
-                开启后所有邮箱的收发与 Google/微软授权都通过代理（和浏览器一致，无需按账号设置）；
-                本机服务（如 Proton Bridge）不受影响。
+                自动跟随系统代理，无需设置（和浏览器一致）——当前
+                {data?.effective_proxy ? `经 ${data.effective_proxy} 连接` : '直连，未检测到系统代理'}
+                ；所有邮箱统一生效，本机服务（如 Proton Bridge）不受影响。
               </span>
-              {proxyEnabled && (
-                <>
-                  <input
-                    className={`${inputClass} mt-2`}
-                    value={proxyUrl}
-                    onChange={(e) => setProxyUrl(e.target.value)}
-                    placeholder="socks5://127.0.0.1:7890（也支持 http://，可带账号密码）"
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                  <span className="mt-1 block t-sm leading-relaxed text-gray-400">
-                    留空=自动检测系统代理。{data?.detected_proxy
-                      ? `当前检测到：${data.detected_proxy}`
-                      : '当前未检测到——让代理工具开启「系统代理」，或在上方手动填地址'}
-                  </span>
-                </>
-              )}
+              <details className="mt-2">
+                <summary className="cursor-pointer select-none t-sm text-gray-500 hover:text-indigo-600">
+                  手动指定代理地址（一般不用）
+                </summary>
+                <input
+                  className={`${inputClass} mt-2`}
+                  value={proxyUrl}
+                  onChange={(e) => setProxyUrl(e.target.value)}
+                  placeholder="socks5://127.0.0.1:7890（也支持 http://，可带账号密码）"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <span className="mt-1 block t-sm leading-relaxed text-gray-400">
+                  留空=跟随系统代理。仅当代理工具没开「系统代理」、或想指定别的地址时才需要填；
+                  填了会覆盖系统代理（改完记得点下方保存）。
+                </span>
+              </details>
             </div>
           </section>
         )}
