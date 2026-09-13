@@ -20,7 +20,10 @@
 ### S-0913-1420-写信多开与笔形按钮
 - 目标: 用户反馈点标签条 ＋ 只能写一封新邮件——根因是 openNew 对「未落库空白标签」的防连点复用；改为每次点击必新开一封（懒持久化已保证空白页签零成本）；＋ 图标改 SquarePen（与页签 Pencil 区分"新建动作"）
 - 范围: frontend(components/compose/ComposeContext.tsx, components/compose/ComposeForm.tsx, components/Layout.tsx) + docs(REDESIGN_PLAN §3.2, CHANGELOG, SESSIONS)
-- 时间: 2026-09-13 14:20 开工
+- 产出: 代码已入库——compose 两文件随 c6127db、Layout/REDESIGN_PLAN/CHANGELOG/SESSIONS 随 e4ea306（并行会话提交时卷入本会话已暂存文件所致，代码均完整无损）；CHANGELOG 条目哈希回填随本提交。npm run build（tsc+字号门禁）通过；chrome-devtools 在 8720 真实账号实测——连点 ＋ 开两封、切回基座零落库、编辑自动保存后切走切回内容不丢、空白页签关闭无确认无落库
+- 额外修复: 多开后卸载兜底会把从未编辑的空白页签落成空草稿（原复用逻辑掩盖）——ComposeForm 卸载兜底改为仅有未同步编辑时才保存；中间版本在该窗口落得的 5 封空草稿已确认全空并删除
+- 遗留: 无
+- 时间: 2026-09-13 14:20 开工，即日完成
 
 
 ### S-0913-1422-FLAGS对账 ✅
