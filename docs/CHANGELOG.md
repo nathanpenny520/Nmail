@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — UX: 新用户初始化定版——页签会话级归零 + 默认设置 + 正文字号与界面字号解耦
+- 用户定版新用户初始化三件事：①页签栏初始化只见「邮件」——页面页签记忆 localStorage 改 sessionStorage（浏览器行为：应用内刷新保留，关闭浏览器标签页/退出应用后归零重见基座；写信页签本为内存态，行为不变）②默认设置对齐——轮询 5→1 分钟、每日摘要 08:30→07:00、界面字号 compact→large、通讯录自动采集开启→关闭（DEFAULT_SETTINGS 仅 get_setting 回退用，老用户已存值不受影响）③正文字号三档与界面字号解耦——HtmlMail 注入沙箱的 zoom 原先与全局缩放相乘（紧凑 0.85 × 小 0.85 = 0.72，「都调小」时邮件正文仅原大 72%，且紧凑界面下正文档选「标准」也到不了原始大小）；改为除以界面档位后，小/标准/大 = 邮件原始字号的 0.85/1/1.15，与界面档位无关
+- 后端（api/settings.py）：DEFAULT_SETTINGS 四项对齐新用户默认
+- 前端（Layout.tsx / HtmlMail.tsx / SettingsPage.tsx）：页签存储换 sessionStorage；BODY_ZOOM 除以 UI_ZOOM 镜像表（与 index.css 三档 --app-zoom 对应）；设置页 useState 初始档位同步新默认（防加载前闪旧值）、通讯录开关回退值改 false
+- 文档：REDESIGN_PLAN §3.2 页签记忆改会话级并写入新用户初始化规定
+- 验证：pytest 149 全绿、ruff + npm build 通过；隔离 NMAIL_DATA_DIR 实测新库四项默认值；8720 重启后 chrome-devtools 走查——新会话页签栏仅「邮件」、开设置后刷新页签保留、关浏览器标签页重开归零；字号解耦实测 large×standard 注入 zoom=1/1.12（视觉缩放恰为 1，正文恒原大；紧凑档同代码路径）
+
+
 ## 6d45487 — fix: OAuth 令牌丢失致标已读静默失败——secrets 写入加锁 + 失败出声 + 丢凭据可见
 - 用户反馈：点开一封邮件查看后依然亮着未读——排查定案：4 个 Outlook OAuth 账号的 `oauth_token:*` 已从 secrets.json 物理丢失（`set_secret` 无锁读改写整文件，并发写互相覆盖丢键，secrets.json 停在昨天 17:45 只剩 `account_pwd:1`）；调度器对这四个号以 no_credentials 静默跳过 24 小时（账号状态仍 "ok"）、批量已读在 `load_account` 处失败返回 HTTP 200 `{ok:false, failed:1}`（本地按「服务器成功才动本地」不动，20s 轮询把行翻回未读），前端对 ok:false 无任何提示——用户全程无感。清华账号（密码型）不受影响，昨日的 FLAGS 对账验证即在该账号
 - 后端①（security.py）：`set_secret` 读改写加模块级 `threading.Lock`——同步线程刷新 OAuth 令牌 × API 线程存设置的现实并发不再互相覆盖（原子替换只保「文件不损坏」，不保「键不丢」）

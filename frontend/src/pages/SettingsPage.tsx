@@ -61,9 +61,10 @@ export default function SettingsPage() {
     localStorage.setItem('nmail_settings_section', section)
   }, [section])
 
-  const [pollMinutes, setPollMinutes] = useState(5)
-  const [digestTime, setDigestTime] = useState('08:30')
-  const [uiFont, setUiFont] = useState<'compact' | 'standard' | 'large'>('compact')
+  // 初始值 = 新用户默认（backend api/settings.py DEFAULT_SETTINGS）：请求返回前不闪旧档
+  const [pollMinutes, setPollMinutes] = useState(1)
+  const [digestTime, setDigestTime] = useState('07:00')
+  const [uiFont, setUiFont] = useState<'compact' | 'standard' | 'large'>('large')
   const [bodyFont, setBodyFont] = useState<'small' | 'standard' | 'large'>('standard')
   const [allowRemoteImages, setAllowRemoteImages] = useState(false)
 
@@ -1226,7 +1227,7 @@ function ContactsSection() {
   const [message, setMessage] = useState('')
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings })
-  const autoCollect = settings?.contacts_auto_collect ?? true
+  const autoCollect = settings?.contacts_auto_collect ?? false
   const listQuery = useQuery({
     queryKey: ['contacts', viewKeyOf(view), q],
     queryFn: () =>

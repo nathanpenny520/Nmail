@@ -12,9 +12,15 @@ interface HtmlMailProps {
  * 避免 iframe 内导航被目标站 X-Frame-Options 拒绝（「拒绝连接」）。
  * 允许父级读取 scrollHeight 以自适应高度：body 挂 ResizeObserver，
  * 图片等异步资源加载改变高度时即时复测（定时复测仅兜底）。
- * 正文字号缩放独立于界面字号（zoom 注入沙箱）。
+ * 正文字号缩放独立于界面字号（zoom 注入沙箱，见下方 UI_ZOOM 校正）。
  */
 const BODY_ZOOM: Record<string, number> = { small: 0.85, standard: 1, large: 1.15 }
+// 界面三档的全局缩放（与 index.css 各档 --app-zoom 保持一致）。正文档位语义 =
+// 对邮件原始字号的缩放；iframe 处在全局 zoom 子树内会被一起缩，注入前先除掉
+// 界面档位——否则两档相乘（紧凑 0.85 × 小 0.85 = 0.72，「都调小」时正文特别小，
+// 且紧凑界面下正文档选「标准」也到不了原始大小）。从设置读而非 computedStyle：
+// 同一次渲染即响应界面字号切换，不等 CSS 变量应用时序。
+const UI_ZOOM: Record<string, number> = { compact: 0.85, standard: 1, large: 1.12 }
 
 export default function HtmlMail({ html }: HtmlMailProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -25,7 +31,8 @@ export default function HtmlMail({ html }: HtmlMailProps) {
     queryFn: api.getSettings,
     staleTime: Infinity,
   })
-  const zoom = BODY_ZOOM[settings?.body_font ?? 'standard'] ?? 1
+  const appZoom = UI_ZOOM[settings?.ui_font ?? 'standard'] ?? 1
+  const zoom = (BODY_ZOOM[settings?.body_font ?? 'standard'] ?? 1) / appZoom
 
   const remeasure = useCallback(() => {
     try {

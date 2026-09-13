@@ -14,14 +14,15 @@ from app.db.database import get_setting, set_setting
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
+# 新用户初始化默认（2026-09-13 用户定版）：仅 get_setting 的回退值，老用户已存值不受影响
 DEFAULT_SETTINGS: dict[str, object] = {
-    "poll_interval_minutes": 5,
-    "digest_time": "08:30",
-    "ui_font": "compact",     # compact | standard | large
+    "poll_interval_minutes": 1,
+    "digest_time": "07:00",
+    "ui_font": "large",       # compact | standard | large
     "body_font": "standard",  # small | standard | large
     "allow_remote_images": False,  # 全局放行邮件远程图片（默认拦截防追踪）
     "update_check_enabled": True,  # 应用内更新检查（匿名版本对比，可关）
-    "contacts_auto_collect": True,  # 通讯录自动采集（收发往来地址自动入册；关=仅手动）
+    "contacts_auto_collect": False,  # 通讯录自动采集（收发往来地址自动入册；关=仅手动）
 }
 
 

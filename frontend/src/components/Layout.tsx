@@ -46,17 +46,19 @@ function WorkspaceTabs() {
     toggleTreeCollapsed()
   }
 
-  // 页面标签：经右侧图标按钮打开过即留下，去重；记忆在 localStorage，刷新后仍在
+  // 页面标签：经右侧图标按钮打开过即留下，去重。会话级记忆（2026-09-13 用户定版，浏览器行为）：
+  // sessionStorage 挂在浏览器标签页上——应用内刷新保留，关闭浏览器标签页/退出应用即归零，
+  // 新用户初始化与每次重进都只见「邮件」基座；写信页签本为内存态，行为一致
   const [pageTabs, setPageTabs] = useState<string[]>(() => {
     try {
-      const saved: unknown = JSON.parse(localStorage.getItem('nmail_page_tabs') ?? '[]')
+      const saved: unknown = JSON.parse(sessionStorage.getItem('nmail_page_tabs') ?? '[]')
       return Array.isArray(saved) ? saved.filter((p): p is string => typeof p === 'string' && !!PAGE_TABS[p]) : []
     } catch {
       return []
     }
   })
   useEffect(() => {
-    localStorage.setItem('nmail_page_tabs', JSON.stringify(pageTabs))
+    sessionStorage.setItem('nmail_page_tabs', JSON.stringify(pageTabs))
   }, [pageTabs])
   // 直接输 URL / 前进后退进入页面路由时也补一个标签（AI 停用时跳过纯 AI 页面）
   useEffect(() => {
