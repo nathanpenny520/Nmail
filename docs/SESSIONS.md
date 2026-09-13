@@ -21,7 +21,7 @@
 ### S-0913-1616-账号标识色自定义 ✅
 - 目标: 用户反馈颜色是区分邮件/账号的重要手段但设置页不可自定义、折叠侧栏首字母头像不染色（先方案后动手，12 色板 + 展开态加色点已确认）——PATCH 开放 color（调色板校验，8→12 色）、设置页账号卡取色 popover 即点即存、折叠头像账号色浅底深字（激活加深一档）、展开态账号行状态点旁加标识色点
 - 范围: backend(app/api/accounts.py, tests/test_accounts_api.py) + frontend(utils/accountColor.ts 新增, api/client.ts, pages/SettingsPage.tsx, components/FolderTree.tsx, openapi.json+schema.d.ts 快照) + docs(CHANGELOG, SESSIONS)
-- 产出: 提交（待回填哈希）；pytest 账号 API 4 全绿（+1）、ruff、npm run build 通过；8720 重启后 curl 实测 PATCH 改色往返与非法值 400（真实账号 np25，改后复原）；chrome-devtools 实测取色 popover、点色即存即变（邮件列表点同步变色）、折叠头像五账号五色染色、激活档加深
+- 产出: 提交 2ac650d；pytest 账号 API 4 全绿（+1）、ruff、npm run build 通过；8720 重启后 curl 实测 PATCH 改色往返与非法值 400（真实账号 np25，改后复原）；chrome-devtools 实测取色 popover、点色即存即变（邮件列表点同步变色）、折叠头像五账号五色染色、激活档加深
 - 关键决策: 限定调色板不开放任意色（任意色无法保证浅色 UI 对比度与协调性，邮件列表 1.5px 小点过暗/过亮不可见）；折叠头像用浅底深字 100/700 映射而非实色底白字（amber/emerald 白字对比不足）；占用色减淡提示但不禁用（账号数超色板必然重复，用户可故意撞色分组）；改色不触发 IMAP 试连（颜色不影响连通性）
 - 遗留: 无
 - 时间: 2026-09-13 16:16 开工，即日完成
