@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — 设置页补全：通知开关/写信分类/黑白名单管理/本机路径
+## 11f4be2 — 设置页补全：通知开关/写信分类/黑白名单管理/本机路径
 - 用户确认方案：通知开关收进「通用」，新增「写信」分类，黑白名单管理做，暗色/免打扰不做，「关于」显示数据与安装目录（不硬编码、符合实际运行环境）
 - 通知（api/settings.py + NotificationBell.tsx + SettingsPage 通用页）：新增 `desktop_notifications_enabled`（默认开）与 `notify_types`（new_mail/ai_draft/digest/account_error 四类，读侧与默认合并缺省视为开，未知键过滤、空 dict 不落库）；铃铛弹系统通知前按总开关+类型过滤（应用内铃铛与角标不受影响），设置页常驻浏览器权限状态行（未授权可申请/被拒绝给浏览器设置指引——替代原授权后无处可管的琥珀色一次性按钮）
 - 写信分类（SettingsPage 新组件 + ComposeContext）：签名/模板管理复用写信台弹窗（同源 compose-extras，签名卡按账号显示已设/未设）；新增 `auto_insert_signature`（默认关）——开新写信标签时注入该账号签名一次（openNew 预置正文、openReply 插引用块之前 Gmail 惯例、转换失败回退空正文），草稿恢复/AI 拟稿不重复注入
