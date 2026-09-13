@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: AI 回复长链接溢出气泡——Markdown wrap-anywhere 任意断行 + 三处容器 min-w-0
+## 5622630 — fix: AI 回复长链接溢出气泡——Markdown wrap-anywhere 任意断行 + 三处容器 min-w-0
 - 用户反馈：邮件内点开 AI 助手，回复里的长 URL/邮箱地址戳出灰色气泡——根因：渲染链路无任何 overflow-wrap/word-break（全局 break-word 只覆盖写信编辑器），浏览器默认仅在空格/连字符处断行，URL 的 / . ? 均非断点，不可断词溢出气泡右缘（8721 实测 ~36px）
 - 前端：Markdown.tsx 输出包一层 wrap-anywhere（overflow-wrap:anywhere，可继承全后代，URL/长词任意断行兼收缩 min-content）；AiPanel 助手/用户气泡、ManagerPage 总管家用户气泡/消息容器补 min-w-0 防御（实测 flex item 未突破 max-w，防御无副作用）
 - 影响面：Markdown 三个使用方（邮件 AI 助手 / AI 总管家 / 每日摘要 AI 综述）一并治好
