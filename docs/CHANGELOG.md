@@ -13,6 +13,13 @@
 - 遗留：①回复自动签名完整 UI e2e 待草稿会话修好 create_draft 响应序列化（`_get_draft` SELECT 无 JOIN 而 `_draft_dict` 读 `row["email_subject"]`，in_reply_to 非空即 IndexError 500，HEAD dd8c0a9 可复现：POST /api/user-drafts mode=reply）后补验；②桌面通知按类型细分待用户真实开一天感受粒度；③openapi 快照已随本轮再生，含写信保真会话 sanitize-html/preview（其遗留第③项一并清）
 - 并行协调：client.ts/openapi/schema/CHANGELOG/SESSIONS 与草稿删除、写信保真两会话重叠——构造 patch 只暂存本会话 hunks；ARCHITECTURE 仅更新 settings/system 两行（该文件另有他人未提交改动，不卷入）
 
+## 待提交 — fix: 回复草稿单条路径 500（_get_draft 漏 JOIN）
+- S-0913-1634 设置页会话发现的 dd8c0a9 回归，用户指派修复：`_draft_dict` 读 `email_subject/email_sender_name/email_sender_email/email_date/email_snippet` 五列（列表接口经 `_DRAFT_JOIN` 提供），但 `_get_draft` 是裸 `SELECT * FROM user_drafts`——凡 `in_reply_to` 非空的草稿（回复/转发），创建响应、详情、更新、定时、撤销、恢复、排队等全部单条路径一读即 IndexError 500（mode=new 因 `row["in_reply_to"]` 短路幸免，故仅回复场景暴露）
+- 修复（api/user_drafts.py）：`_get_draft` 改用文件内既有 `_DRAFT_JOIN` + `WHERE d.id = ?`（LEFT JOIN 引用邮件，与列表同源；引用邮件被删时 email 上下文安全降级 null 不报错）
+- 回归用例（tests/test_user_drafts.py）：回复草稿创建/详情/更新三态 200 且 email 上下文正确 + 引用邮件删除后 email=null 兜底
+- 验证：pytest 165 全绿（+1）、ruff（app 口径）通过；8720 重启后以当初精确复现请求实测 200；真实数据 UI e2e——回复自动签名完整链路随之打通（编辑器打开、签名位于引用块之前、测试草稿零残留），新邮件路径 4/4
+- 并行协调：验证期间主树 dist 曾被并行会话「提交前隔离构建」覆盖（bundle 缺 auto_insert_signature），已重新整体构建（现 dist 为全量 HEAD）
+
 ## 137d448 — UI: 写信表格编辑补全——列宽拖拽+右键行列增删/合并拆分/表头/底色，链接弹窗与跨平台字体栈
 - 用户确认方案 P1：表格此前只能插 3×3 和整表删除（resizable:false），行列增删/合并/宽度全没有，写错只能删表重来
 - 表格编辑（RichEditor.tsx）：resizable:true 列宽拖拽（TipTap 原生以 colgroup/col width 落盘，发送白名单已在 c053662 预放行，拖拽手柄 CSS 既有）；表格区域右键菜单（复用 ContextMenu 组件）——上/下插行、左/右插列、切换表头行、合并/拆分单元格（当前选区不可用时置灰）、单元格底色（6 浅色+清除，经 TableCell 扩展的 backgroundColor 属性以内联 style 落盘，收件端可见、草稿往返保真）、删除行/列/表格（红色危险项）；右键先以 posAtCoords 把光标落进所点单元格再弹菜单，表格外区域保留原生菜单（复制粘贴不受影响）

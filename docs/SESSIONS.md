@@ -25,6 +25,17 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1719-回复草稿500修复 ✅
+- 目标: 用户指派「把这个 bug 修掉」——S-0913-1634 报告的 dd8c0a9 回归：`_get_draft` 无 emails JOIN 而 `_draft_dict` 读 email_subject 等 5 列，in_reply_to 非空即 IndexError 500（详情/更新/定时/撤销/排队等全部单草稿路径均中招，非止创建）
+- 范围: backend(app/api/user_drafts.py `_get_draft` 改用本文件既有 `_DRAFT_JOIN`, tests/test_user_drafts.py 回归用例) + docs(CHANGELOG, SESSIONS)
+- 产出: 提交（哈希见 CHANGELOG 回填）；pytest 165 全绿（+1 回归用例：创建/详情/更新三态 + 引用邮件被删后 LEFT JOIN 降级 email=null）；ruff（app 口径）通过；8720 重启后 curl 实测——当初的精确复现（POST mode=reply in_reply_to=238）200 且带完整 email 上下文，GET/PATCH/DELETE 单条路径全 200；真实数据 UI e2e 补验通过——回复编辑器打开、签名位于引用块之前（Gmail 惯例）、引用块完整、测试草稿删除零残留，新邮件路径预置签名+静默关闭零落库 4/4
+- 关键决策: 修复取最小面——`_get_draft` 复用文件内既有 `_DRAFT_JOIN`（列表接口同源），不改 `_draft_dict` 契约
+- 排障记录: 期间两个测试假阴性——①并行会话把「我提交前」的隔离构建覆盖了主树 dist（bundle 无 auto_insert_signature），重跑整体构建即愈——提示：跨会话验证 UI 前先 `grep dist/assets/*.js` 确认关键改动在产物里；②测试 profile 的浏览器缓存供旧 index.html——换新 profile 验证
+- 遗留: 无
+- 时间: 2026-09-13 17:19 开工，即日完成
+
+<!-- 有新会话开工时按下方模板登记 -->
+
 ### S-0913-1634-设置页补全 ✅
 - 目标: 用户确认方案——①「通用」加通知块（桌面通知总开关 `desktop_notifications_enabled` + 按类型细分 `notify_types` + 浏览器权限状态常驻行）②新增「写信」分类（签名/模板管理复用写信台弹窗 + `auto_insert_signature` 自动签名，回复时插引用块之前）③黑白名单管理块（复用 sender-lists API，只补管理 UI）④「关于」显示数据目录与安装目录（运行时实时解析，不硬编码）
 - 范围: backend(api/settings.py, api/system.py, config.py) + frontend(types.ts, api/client.ts, pages/SettingsPage.tsx, components/NotificationBell.tsx, components/compose/ComposeContext.tsx + InsertDialogs.tsx〔export EXTRAS_KEY〕, openapi/schema 快照再生) + docs(ARCHITECTURE settings/system 两行, CHANGELOG, SESSIONS)

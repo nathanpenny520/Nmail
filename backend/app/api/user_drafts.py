@@ -95,7 +95,9 @@ def _draft_dict(row) -> dict:  # noqa: ANN001
 
 
 def _get_draft(draft_id: int):
-    row = get_conn().execute("SELECT * FROM user_drafts WHERE id = ?", (draft_id,)).fetchone()
+    # 走 _DRAFT_JOIN：_draft_dict 需要 email_subject 等引用上下文列（无 JOIN 时
+    # in_reply_to 非空的行一读即 IndexError——列表接口有 JOIN，单条路径此前漏了）
+    row = get_conn().execute(f"{_DRAFT_JOIN} WHERE d.id = ?", (draft_id,)).fetchone()
     if row is None:
         raise HTTPException(404, "草稿不存在")
     return row

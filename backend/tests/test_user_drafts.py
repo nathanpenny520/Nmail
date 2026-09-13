@@ -162,3 +162,39 @@ def test_clear_drafts_only_terminal_states():
     assert _count("discarded") == 0
     # editing 草稿全程无恙
     assert _count("editing") == 1
+
+
+def test_single_draft_paths_join_email_context():
+    """回归（S-0913-1719）：_get_draft 曾漏 _DRAFT_JOIN，in_reply_to 非空的草稿
+    走创建响应/详情/更新等单条路径即 IndexError 500（列表接口有 JOIN 幸免）。"""
+    aid = _seed_account()
+    eid = _seed_email(aid, 10, "季度对账单")
+    # 创建（此前 500：插入成功但响应序列化崩溃）
+    resp = client.post(
+        "/api/user-drafts",
+        json={
+            "account_id": aid, "mode": "reply", "in_reply_to": eid,
+            "to_addrs": "boss@example.com", "subject": "Re: 季度对账单",
+            "body_html": "<p>收到</p>",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    draft = resp.json()["draft"]
+    assert draft["email"]["subject"] == "季度对账单"
+    assert draft["email"]["sender_email"] == "boss@example.com"
+    did = draft["id"]
+    # 详情（此前 500）
+    got = client.get(f"/api/user-drafts/{did}")
+    assert got.status_code == 200, got.text
+    assert got.json()["draft"]["email"]["subject"] == "季度对账单"
+    # 更新（此前 500；返回 {"ok": true}，改后回读核对）
+    upd = client.patch(f"/api/user-drafts/{did}", json={"subject": "Re: 季度对账单（已改）"})
+    assert upd.status_code == 200 and upd.json()["ok"] is True
+    reread = client.get(f"/api/user-drafts/{did}")
+    assert reread.json()["draft"]["subject"].endswith("（已改）")
+    # 引用邮件被删后 LEFT JOIN 兜底：email 上下文降级为 null 而非报错
+    conn = database.get_conn()
+    conn.execute("DELETE FROM emails WHERE id = ?", (eid,))
+    conn.commit()
+    orphan = client.get(f"/api/user-drafts/{did}")
+    assert orphan.status_code == 200 and orphan.json()["draft"]["email"] is None
