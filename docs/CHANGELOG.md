@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: HTML 邮件正文只剩上半截——iframe 测高链路不再依赖 onLoad
+- 用户反馈：Google 安全提醒邮件只显示到按钮上半截（8721 实测复现：iframe 内联 style 卡在初始 320px 而内容实际需 869px；屏显 358 = 320×1.12 界面缩放）——库里 HTML 完整、消毒后完整，纯前端渲染问题
+- 根因：React 18 对 srcdoc iframe 的 onLoad 竞态——load 先于监听挂接被触发而错过（srcdoc 解析极快；实测 style 卡死 320px 超 9s、handleLoad 从未运行，即 remeasure/ResizeObserver/兜底定时器全部未注册）。高度自适应整个失效，是否自愈全凭后续 srcDoc 变更（设置加载改 zoom 触发重载）碰巧再触发一次 load 的时序运气
+- 前端（HtmlMail.tsx）：测高注册与 onLoad 解耦——挂载后独立轮询（100ms×50）至 contentDocument.body 就绪即完成测量+ResizeObserver+定时兜底注册；onLoad 仅作提前触发；换邮件/字号档位会整文档重载，effect 依赖 html/zoom 随之重跑
+- 验证：npm run build（tsc）通过；8721 强刷实测——修复前 style 卡 320px 无任何更新，修复后 0.5s 内 893px（=内容 869+24）到位且稳定；切换微软邮件复测 919/943 同样正常
+
 
 ## f209575 — UI: 设置页内部文档路径改为官网文档链接
 - 用户反馈：设置页出现内部仓库路径（API 区「隧道配置示例见 docs/对外API使用指南.md」、OAuth 区「见项目仓库 docs/OAuth2 使用指南.md」）——对普通用户无意义且暴露内部结构

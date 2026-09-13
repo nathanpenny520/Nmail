@@ -45,7 +45,7 @@ export default function HtmlMail({ html }: HtmlMailProps) {
     }
   }, [])
 
-  const handleLoad = () => {
+  const setup = useCallback(() => {
     remeasure()
     // 图片等资源异步加载会改变文档高度：ResizeObserver 即时复测，定时复测兜底
     const doc = iframeRef.current?.contentDocument
@@ -58,7 +58,29 @@ export default function HtmlMail({ html }: HtmlMailProps) {
     for (const delay of [500, 1200, 2500, 4000]) {
       setTimeout(remeasure, delay)
     }
-  }
+  }, [remeasure])
+
+  // 测高链路不能依赖 onLoad：React 18 对 srcdoc iframe 存在竞态——load 事件
+  // 可能在 React 挂上监听之前就已触发（实测表现为 style 永远停在初始 320px、
+  // 邮件被裁剪只剩上半截）。因此挂载后独立轮询到文档就绪再完成测量与监听注册，
+  // onLoad 仅作提前触发；srcDoc 变更（换邮件/字号档位）会整文档重载，需重跑。
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let tries = 0
+    const poll = () => {
+      const doc = iframeRef.current?.contentDocument
+      if (doc?.body) {
+        setup()
+        return
+      }
+      if (++tries < 50) timer = setTimeout(poll, 100)
+    }
+    timer = setTimeout(poll, 100)
+    return () => {
+      clearTimeout(timer)
+      observerRef.current?.disconnect()
+    }
+  }, [setup, html, zoom])
 
   // 窗口尺寸变化时复测（换行数变化会改变文档高度）
   useEffect(() => {
@@ -78,7 +100,7 @@ export default function HtmlMail({ html }: HtmlMailProps) {
       style={style}
       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
       srcDoc={`<style>html{zoom:${zoom}}</style>` + html}
-      onLoad={handleLoad}
+      onLoad={setup}
     />
   )
 }

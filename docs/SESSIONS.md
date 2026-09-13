@@ -18,6 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1536-正文iframe测高失效修复 ✅
+- 目标: 用户反馈 Google 安全提醒邮件只显示上半截（8721 实测复现：iframe style 卡在初始 320px 而内容需 869px；根因=React 18 对 srcdoc iframe 的 onLoad 竞态，load 先于监听器挂载被错过 → remeasure/ResizeObserver/兜底定时器全部未注册）——修复：测高链路不再依赖 onLoad，挂载后独立轮询注册
+- 范围: frontend(components/HtmlMail.tsx〔仅测高逻辑段，与 S-0913-1504 已提交的 zoom 段不同区域〕) + docs(CHANGELOG, SESSIONS)
+- 产出: 提交（待回填哈希）；npm build 通过；8721 强刷实测——修复前 style 卡死 320px 超 9s，修复后 0.5s 内 893px 到位且稳定，切换微软邮件复测正常
+- 遗留: 无
+- 时间: 2026-09-13 15:36 开工，即日完成
+
 ### S-0913-1520-版本口径核对 ✅
 - 目标: 用户核对 nmail-site 与本地开发是否统一（功能页标「v0.4 主线能力」而实际最新发布 v0.3.0）——功能页 12 项能力逐条对照代码与 v0.3.0 tag 全部属实，属版本标注错位：v0.4 为改版计划代号，改版主体已随 v0.3.0 发布
 - 范围: 主仓 docs(PRODUCT_PLAN.md, OAuth2 使用指南.md, 对外API使用指南.md)；官网另提交（features.astro, projects/nmail.md, releases.ts + 官网 CHANGELOG）
