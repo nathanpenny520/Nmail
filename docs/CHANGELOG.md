@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: 版本号解析链——源码直跑不再依赖手工同步的回退常量
+## 3955a76 — fix: 版本号解析链——源码直跑不再依赖手工同步的回退常量
 - 用户反馈：`.venv/bin/python run.py` 源码直跑，关于页显示「当前 v0.2.0」并提示升级 v0.3.0——排查发现该 venv 从未 `pip install -e .`，`importlib.metadata` 读不到 `nmail-app` 元数据，回退到 config.py 硬编码常量 `APP_VERSION = "0.2.0"`（pyproject 已 0.3.0，注释要求「随动」但实际已漂移）；「单一来源」名存实亡
 - 同类隐患更重：release CI 用 `pip install -r requirements.txt + pyinstaller nmail.spec` 打包，冻结环境同样无包元数据 → **已发布的 v0.3.0 三平台二进制实际自报 v0.2.0**，会一直提示用户「升级到 0.3.0」（PyPI/uvx/wheel 用户不受影响）
 - 修：config.py 改为 `_app_version()` 解析链——① 源码/可编辑：tomllib 读仓库根 pyproject.toml（改版本即时生效，pip install -e 的元数据快照过期问题一并消除）→ ② 冻结：读 nmail.spec 打入的随包 pyproject.toml 副本 → ③ wheel/uvx：读包元数据 → ④ 兜底 `"0.0.0"`（故意异常值便于暴露，不随发版维护）；release.sh「无需改 config.py」由隐患变事实

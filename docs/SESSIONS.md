@@ -18,11 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-### S-0913-1347-版本号解析修复 🔄
+### S-0913-1347-版本号解析修复 ✅
 - 目标: 用户反馈 `.venv/bin/python run.py` 源码直跑，关于页仍显示「当前 v0.2.0」并提示升级 v0.3.0——排查版本号管理并修复
 - 范围: backend(app/config.py, tests/test_units.py) + nmail.spec + pyproject.toml/scripts/release.sh 注释 + docs(ARCHITECTURE, RELEASE, CHANGELOG, SESSIONS)
-- 状态: 根因已定位（venv 无 nmail-app 包元数据 → 回退硬编码常量 0.2.0 已过期；冻结二进制同样无元数据，v0.3.0 资产自报 0.2.0），改为主解析链（元数据 → tomllib 读 pyproject → 兜底）进行中
-- 时间: 2026-09-13 13:47 开工
+- 产出: 提交 3955a76；pytest 145 全绿（+4）、ruff 通过；源码直跑 / 冻结模拟（sys.frozen+_MEIPASS）/ 隔离实例 health 实测均报 0.3.0
+- 关键发现: release CI 打包不装包元数据（pip install -r requirements.txt + pyinstaller）→ **已发布 v0.3.0 三平台二进制自报 v0.2.0**，会持续提示「升级到 0.3.0」（PyPI/uvx/wheel 用户不受影响）；随下一版本自愈
+- 遗留: 用户 8720 常驻进程需重启才见新版本号；与 S-0913-1345 会话在 ARCHITECTURE/CHANGELOG/SESSIONS 三文件并行，本次按 hunk 外科手术式暂存，其 WIP 未动
+- 时间: 2026-09-13 13:47 开工，即日完成
 
 ### S-0913-1341-AIKey默认遮蔽 ✅
 - 目标: 用户反馈 AI 配置卡片 API Key 默认明文展示不妥——改默认遮蔽（保留小眼睛显隐；明文回显语义不变，仅改显隐默认值）
