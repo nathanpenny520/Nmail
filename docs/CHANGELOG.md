@@ -13,7 +13,7 @@
 - 遗留：①回复自动签名完整 UI e2e 待草稿会话修好 create_draft 响应序列化（`_get_draft` SELECT 无 JOIN 而 `_draft_dict` 读 `row["email_subject"]`，in_reply_to 非空即 IndexError 500，HEAD dd8c0a9 可复现：POST /api/user-drafts mode=reply）后补验；②桌面通知按类型细分待用户真实开一天感受粒度；③openapi 快照已随本轮再生，含写信保真会话 sanitize-html/preview（其遗留第③项一并清）
 - 并行协调：client.ts/openapi/schema/CHANGELOG/SESSIONS 与草稿删除、写信保真两会话重叠——构造 patch 只暂存本会话 hunks；ARCHITECTURE 仅更新 settings/system 两行（该文件另有他人未提交改动，不卷入）
 
-## 待提交 — fix: 回复草稿单条路径 500（_get_draft 漏 JOIN）
+## 0e08eb5 — fix: 回复草稿单条路径 500（_get_draft 漏 JOIN）
 - S-0913-1634 设置页会话发现的 dd8c0a9 回归，用户指派修复：`_draft_dict` 读 `email_subject/email_sender_name/email_sender_email/email_date/email_snippet` 五列（列表接口经 `_DRAFT_JOIN` 提供），但 `_get_draft` 是裸 `SELECT * FROM user_drafts`——凡 `in_reply_to` 非空的草稿（回复/转发），创建响应、详情、更新、定时、撤销、恢复、排队等全部单条路径一读即 IndexError 500（mode=new 因 `row["in_reply_to"]` 短路幸免，故仅回复场景暴露）
 - 修复（api/user_drafts.py）：`_get_draft` 改用文件内既有 `_DRAFT_JOIN` + `WHERE d.id = ?`（LEFT JOIN 引用邮件，与列表同源；引用邮件被删时 email 上下文安全降级 null 不报错）
 - 回归用例（tests/test_user_drafts.py）：回复草稿创建/详情/更新三态 200 且 email 上下文正确 + 引用邮件删除后 email=null 兜底
