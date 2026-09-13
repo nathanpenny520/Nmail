@@ -1,93 +1,95 @@
 # Nmail
 
-AI 驱动的本地聚合邮箱客户端 · 本地优先 · 隐私自持 · MIT 开源。
+English ｜ [中文](README.zh-CN.md)
 
-你只管看信、写信、拍板；AI 负责分类、过滤噪音、预先写好草稿、每天给你汇报。数据全部留在本机，AI 用你自己的 OpenAI 兼容 API key（也可指向 Ollama / LM Studio 实现 100% 本地推理）。收发走标准 IMAP/SMTP，不自建任何邮件服务；Gmail / Outlook 已停用密码直连，Nmail 内置公开凭证支持 OAuth2 一键授权（也可自建 OAuth 应用，详见 [docs/OAuth2 使用指南.md](docs/OAuth2%20使用指南.md)）。
+An AI-powered local email client that brings all your accounts together · local-first · private by design · MIT open source.
 
-> 产品方案与路线图见 [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)；v0.4 改版主线见 [docs/REDESIGN_PLAN.md](docs/REDESIGN_PLAN.md)；**安装、首次使用与更新详见 [docs/INSTALL.md](docs/INSTALL.md)**；使用手册、常见问题、对外 API、隐私与安全等更多文档见 [docs/](docs/) 目录（官网 <https://nmail.whizzzest.com/docs/> 同步镜像）。当前进度：v0.3.0 已发布，v0.4 改版推进中。
+You read, write, and make the calls; AI sorts your mail, filters the noise, pre-drafts replies, and reports to you daily. All data stays on your machine, and AI uses your own OpenAI-compatible API key (point it at Ollama / LM Studio for 100% local inference). Mail flows over standard IMAP/SMTP — Nmail runs no mail service of its own. Gmail and Outlook no longer accept plain passwords, so Nmail ships built-in public credentials for one-click OAuth2 authorization (you can also register your own OAuth app — see [docs/OAuth2 使用指南.md](docs/OAuth2%20使用指南.md)).
 
-## 快速开始
+> Roadmap: [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md) · v0.4 redesign (current mainline): [docs/REDESIGN_PLAN.md](docs/REDESIGN_PLAN.md). **Install, first run & updates: [docs/INSTALL.md](docs/INSTALL.md)**. More docs (user guide, FAQ, external API, privacy & security) live in [docs/](docs/), mirrored on the website at <https://nmail.whizzzest.com/docs/>. The app UI and all docs are currently Chinese-only; English versions are planned. Status: v0.3.0 released · v0.4 redesign in progress.
 
-三种方式任选：
+## Quick start
 
-**① 单文件可执行（零依赖，双击即用）**
+Three ways to get started:
 
-到 [Releases](../../releases) 下载对应平台文件双击运行，自动打开浏览器：Windows `nmail-windows-x64.exe` ｜ macOS (Apple Silicon) `nmail-macos-arm64` ｜ Linux `nmail-linux-x64`。
-Windows 也可用 winget 安装（manifest 审核通过后可用）：`winget install nathanpenny520.Nmail`；
-macOS (Apple Silicon) 用 Homebrew：`brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail && brew install nmail`。
+**① Single-file executable (zero dependencies — download and run)**
 
-- Windows 可能弹 SmartScreen 提示（未签名）：点「更多信息 → 仍要运行」
-- macOS 首次运行需右键 → 打开（未公证）；Linux：`chmod +x nmail-linux-x64` 后直接运行
+Download the file for your platform from [Releases](../../releases) and double-click; your browser opens automatically: Windows `nmail-windows-x64.exe` ｜ macOS (Apple Silicon) `nmail-macos-arm64` ｜ Linux `nmail-linux-x64`.
+Windows can also install via winget (once the manifest review is approved): `winget install nathanpenny520.Nmail`;
+macOS (Apple Silicon) via Homebrew: `brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail && brew install nmail`.
 
-**② 一条命令（PyPI + uv，推荐日常使用）**
+- Windows may show a SmartScreen prompt (unsigned build): click "More info → Run anyway"
+- macOS: right-click → Open on first run (not notarized); Linux: `chmod +x nmail-linux-x64`, then run it
 
-安装 [uv](https://docs.astral.sh/uv/getting-started/installation/) 后执行：
+**② One command (PyPI + uv — recommended for daily use)**
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
 
 ```bash
 uvx --from nmail-app nmail
 ```
 
-uv 自动准备 Python 运行时，无需手动安装 Python / Node。也可 `pip install nmail-app` 后直接运行 `nmail`（PyPI 发行名为 `nmail-app`——`nmail` 已被第三方占用；命令名与产品名不变）。
+uv prepares the Python runtime for you — no manual Python / Node setup. Alternatively, `pip install nmail-app` and run `nmail` (the PyPI distribution is named `nmail-app` — `nmail` was already taken by another project; the product and command names are unchanged).
 
-**③ 源码开发**
+**③ From source (development)**
 
-要求：Python 3.11+、Node.js 18+。
+Requires Python 3.11+ and Node.js 18+.
 
 ```bash
-# 1. 后端依赖
+# 1. Backend dependencies
 python -m venv .venv
 # Windows:
 .venv\Scripts\pip install -r backend/requirements.txt
 # macOS / Linux:
 # source .venv/bin/activate && pip install -r backend/requirements.txt
 
-# 2. 前端构建
+# 2. Build the frontend
 cd frontend && npm install && npm run build && cd ..
 
-# 3. 启动（自动打开浏览器）
+# 3. Start (opens your browser automatically)
 python run.py
 ```
 
-浏览器访问 http://127.0.0.1:8720（端口被占用会自动顺延，以控制台打印为准）。首次使用约 5 分钟：**① 添加邮箱**——设置 → 添加账号，填邮箱地址自动匹配服务器（密码型账号填授权码/应用专用密码；Gmail/Outlook 点「授权登录」一键 OAuth）；**② 配置 AI**——设置 → AI 配置 新增配置档案（Base URL + API Key + 模型名，可保存多套随时切换），点「测试连接」验证。详见 [docs/INSTALL.md](docs/INSTALL.md)。
+Then open http://127.0.0.1:8720 (if the port is taken, the app falls back to the next one — check the console output). First-time setup takes about 5 minutes: **① Add a mailbox** — Settings → Add account; the address alone matches your provider's servers (password-based accounts use an app-specific password; Gmail/Outlook use one-click OAuth via "Authorize login"). **② Configure AI** — Settings → AI configuration; add a profile (Base URL + API key + model name; save multiple profiles and switch anytime), then click "Test connection". Details in [docs/INSTALL.md](docs/INSTALL.md).
 
-## 自行打包
+## Building it yourself
 
 ```bash
-bash scripts/sync_frontend.sh                       # 构建前端并同步进 Python 包
-.venv/Scripts/pip install pyinstaller               # 仅打包需要（macOS/Linux 用 .venv/bin/）
-.venv/Scripts/pyinstaller nmail.spec                # 产出 dist/nmail 单文件（Windows 为 nmail.exe）
+bash scripts/sync_frontend.sh                       # build the frontend and bundle it into the Python package
+.venv/Scripts/pip install pyinstaller               # only needed for packaging (macOS/Linux: .venv/bin/)
+.venv/Scripts/pyinstaller nmail.spec                # produces the dist/nmail single file (nmail.exe on Windows)
 ```
 
-或只构建 wheel：`pip wheel . -w dist`。发布 PyPI 后用户即可 `uvx --from nmail-app nmail`。打 `v*` tag 时 CI（`.github/workflows/release.yml`）自动完成 wheel 发布、三平台二进制，并（配置 `HOMEBREW_TAP_TOKEN` secret 后）自动同步 Homebrew tap。
+Or build just a wheel: `pip wheel . -w dist`. Once published to PyPI, users can run `uvx --from nmail-app nmail`. Pushing a `v*` tag triggers CI (`.github/workflows/release.yml`) to publish the wheel and three-platform binaries — and, with the `HOMEBREW_TAP_TOKEN` secret configured, sync the Homebrew tap automatically.
 
-**日常发版用一条命令**：`bash scripts/release.sh 0.2.0`（自动改版本号、打 tag、盯 CI、提 winget 版本 PR，并触发官网 nmail-site 自动重建），完整说明见 [docs/RELEASE.md](docs/RELEASE.md)。
+**Releases are one command**: `bash scripts/release.sh 0.2.0` (bumps the version, tags, watches CI, opens the winget version PR, and triggers a rebuild of the website). Full manual: [docs/RELEASE.md](docs/RELEASE.md).
 
-## 更新
+## Updates
 
-- **应用内检查**（默认开启，可在 设置-通用 关闭）：每 24 小时向 GitHub 做一次匿名版本对比，发现新版本会在通知中心提醒；设置页可手动「检查更新」。只发送版本号，不携带任何本机数据。
-- **各渠道升级**：Windows `winget upgrade nathanpenny520.Nmail` ｜ macOS `brew upgrade nmail` ｜ PyPI `uv tool upgrade nmail-app` 或 `pip install -U nmail-app` ｜ 单文件：下载新版覆盖旧 exe。
-- 升级不影响数据：邮件库/密钥/配置在独立数据目录，新版本首次启动自动跑数据库迁移。
+- **In-app check** (on by default; disable under Settings → General): an anonymous version comparison against GitHub every 24 hours; new releases appear in the notification center, and you can also check manually from the settings page. Only the version number is sent — no local data leaves your machine.
+- **Upgrading per channel**: Windows `winget upgrade nathanpenny520.Nmail` ｜ macOS `brew upgrade nmail` ｜ PyPI `uv tool upgrade nmail-app` or `pip install -U nmail-app` ｜ single-file: download the new build and replace the old one.
+- Upgrading never touches your data: the mail store / secrets / settings live in a separate data directory, and the first launch of a new version runs database migrations automatically.
 
-## 开发模式
+## Development mode
 
 ```bash
-# 后端热重载（Windows；macOS/Linux 用 .venv/bin/python 或激活 venv 后直接 python）
+# Backend hot reload (Windows; macOS/Linux use .venv/bin/python, or activate the venv and run `python`)
 cd backend && ../.venv/Scripts/python -m uvicorn app.main:app --reload --port 8720
 
-# 前端 dev server（/api 已代理到 8720）
+# Frontend dev server (/api is proxied to 8720)
 cd frontend && npm run dev   # http://localhost:5173
 ```
 
-## 数据与隐私
+## Data & privacy
 
-- 数据目录遵循各平台标准位置（Windows: `%LOCALAPPDATA%\Nmail` ｜ macOS: `~/Library/Application Support/Nmail` ｜ Linux: `~/.local/share/Nmail`），可用环境变量 `NMAIL_DATA_DIR` 覆盖。
-- `nmail.db`：邮件库与全文索引（SQLite，WAL + FTS5）；`secrets.json`：AI API key、邮箱密码/OAuth 令牌等密钥。
-- 服务仅绑定 `127.0.0.1`，不提供对外监听；AI API key 与邮箱凭据仅存本机 `secrets.json`，设置界面所见即所存（默认遮蔽）；使用云端 AI 端点时邮件正文会发送到该端点，指向本地端点（Ollama 等）则 0 外发。更多细节见 [docs/隐私与安全.md](docs/隐私与安全.md)。
+- The data directory follows each platform's standard location (Windows: `%LOCALAPPDATA%\Nmail` ｜ macOS: `~/Library/Application Support/Nmail` ｜ Linux: `~/.local/share/Nmail`); override with the `NMAIL_DATA_DIR` environment variable.
+- `nmail.db`: mail store and full-text index (SQLite, WAL + FTS5); `secrets.json`: AI API keys, mailbox passwords / OAuth tokens, and other secrets.
+- The server binds to `127.0.0.1` only, with no option to listen externally. AI API keys and mailbox credentials are stored only in the local `secrets.json` — the settings UI shows exactly what's stored (masked by default). When a cloud AI endpoint is configured, email bodies are sent to that endpoint; point it at a local endpoint (Ollama etc.) and nothing leaves your machine. More in [docs/隐私与安全.md](docs/隐私与安全.md).
 
-## 技术栈
+## Tech stack
 
-Python 3.11+ · FastAPI · SQLite (WAL + FTS5) · APScheduler ｜ React 18 · Vite · TypeScript · Tailwind CSS · Tiptap（写信富文本） · ECharts（摘要可视化）
+Python 3.11+ · FastAPI · SQLite (WAL + FTS5) · APScheduler ｜ React 18 · Vite · TypeScript · Tailwind CSS · Tiptap (compose editor) · ECharts (digest visualizations)
 
-## 许可证
+## License
 
 [MIT](LICENSE)
