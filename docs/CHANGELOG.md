@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: 代理状态行实时化 + 彻底删除手动代理地址
+## 5c58628 — fix: 代理状态行实时化 + 彻底删除手动代理地址
 - 用户反馈：状态行「当前直连」疑似写死，要求开了代理能实时看到；「手动指定代理地址」折叠项仍会困惑人，彻底删除
 - 状态行实况：数据本就每次 GET 实时探测（urllib.getproxies），但页面不自动刷新——设置页加独立 3s 轮询查询（与主设置查询隔离，不重置表单），系统代理开关一变，状态行几秒内自动显示「当前经 … 连接 / 直连」
 - 删手动地址：netproxy 移除 `PROXY_SETTING_KEY/proxy_url_setting`，`effective_proxy_url()`=纯系统探测；settings API 移除 `network_proxy` 字段与校验（GET 只读 `detected_proxy/effective_proxy` 不变）；前端删折叠项与 proxyUrl 状态；types/openapi 同步

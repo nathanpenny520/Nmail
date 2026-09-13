@@ -21,7 +21,7 @@
 ### S-0913-1500-代理状态实时化与删手动地址 ✅
 - 目标: 用户反馈两点——①状态行"当前直连"疑似写死，要求开了代理能实时体现（实为每次 GET 实时读系统配置，但页面不自动刷新；加 3s 轮询的独立状态查询）②彻底删除「手动指定代理地址」设置（前后端/测试/文档全移除，地址仅来自系统代理）
 - 范围: backend(core/netproxy.py, api/settings.py) + frontend(SettingsPage, types) + openapi 快照再生 + tests(test_netproxy) + docs(ARCHITECTURE, 使用指南, FAQ, OAuth2 使用指南, CHANGELOG, SESSIONS)
-- 产出: 提交（待回填哈希）；pytest 147 全绿、ruff + npm build 通过、openapi 快照再生
+- 产出: 提交 5c58628；pytest 147 全绿、ruff + npm build 通过、openapi 快照再生
 - 遗留: 代理工具不开「系统代理」模式时 Nmail 感知不到（与浏览器一致，文档已写明）；真实 Gmail 端到端待用户验证
 - 时间: 2026-09-13 15:00 开工，即日完成
 
