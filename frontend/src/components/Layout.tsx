@@ -1,4 +1,4 @@
-import { BarChart3, FilePenLine, Inbox, Pencil, Plus, Settings, Sparkles, X } from 'lucide-react'
+import { BarChart3, FilePenLine, Inbox, Pencil, Settings, Sparkles, SquarePen, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAIEnabled } from '../api/useAI'
@@ -15,7 +15,7 @@ const iconBtnCls = (active: boolean) =>
 /**
  * v0.4 导航（REDESIGN_PLAN §3.2）：无应用侧栏。「邮件」是唯一常驻基座页签，
  * 其余页面（AI 总管家/每日摘要/设置）经标签条右侧小图标按钮点击才产生页签；
- * 写信页签由列表操作或 ＋ 按钮产生。
+ * 写信页签由列表操作或右侧笔形按钮（SquarePen）产生，每次点击必新开一封。
  */
 const PAGE_TABS: Record<string, { label: string; icon: typeof Inbox }> = {
   '/drafts': { label: '草稿', icon: FilePenLine },
@@ -147,7 +147,7 @@ function WorkspaceTabs() {
           onClick={() => openNew()}
           title="新邮件"
         >
-          <Plus className="h-4 w-4" />
+          <SquarePen className="h-4 w-4" />
         </button>
       </div>
     </div>

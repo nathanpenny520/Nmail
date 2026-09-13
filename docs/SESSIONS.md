@@ -17,11 +17,16 @@
 ## 进行中
 
 <!-- 有新会话开工时按下方模板登记 -->
+### S-0913-1420-写信多开与笔形按钮
+- 目标: 用户反馈点标签条 ＋ 只能写一封新邮件——根因是 openNew 对「未落库空白标签」的防连点复用；改为每次点击必新开一封（懒持久化已保证空白页签零成本）；＋ 图标改 SquarePen（与页签 Pencil 区分"新建动作"）
+- 范围: frontend(components/compose/ComposeContext.tsx, components/compose/ComposeForm.tsx, components/Layout.tsx) + docs(REDESIGN_PLAN §3.2, CHANGELOG, SESSIONS)
+- 时间: 2026-09-13 14:20 开工
+
 
 ### S-0913-1422-FLAGS对账 ✅
 - 目标: 用户反馈「邮件都看完了 INBOX 徽章仍 22」——根因是已读状态单向同步：增量同步只拉新 UID，从不回读服务器 FLAGS，外部（TB/网页/手机）的已读变化永远到不了本地，徽章=本地 is_read=0 计数故失真；次因是前端在 Nmail 内读信后不刷新 folder-cache 徽章。修复：①同步尾部 UID SEARCH UNSEEN/FLAGGED 对账本地 is_read/starred ②新邮件入库按服务器 FLAGS 初始化 ③前端已读批处理成功后 invalidate folder-cache
 - 范围: backend(core/sync.py, core/imap_client.py) + frontend(MailBrowser.tsx) + docs(ARCHITECTURE, CHANGELOG, SESSIONS)
-- 产出: 提交（待回填哈希，见 CHANGELOG「未读/星标与服务器 FLAGS 对账」条目）；pytest 147 全绿、ruff + npm build 通过；真实账号（清华邮箱）端到端——Nmail 标未读（徽章 1）→ 仅服务器侧 IMAP 标回已读 → 同步后本地翻正、徽章归零；8720 常驻进程已重启加载新代码
+- 产出: 代码 diff 随 c6127db、ARCHITECTURE 改动随 5c58628 入库（均系并行会话提交时卷入共享 index，内容无损，见 64a8fa2 追记），本会话文档条目随 6aa2248；pytest 147 全绿、ruff + npm build 通过；真实账号（清华邮箱）端到端——Nmail 标未读（徽章 1）→ 仅服务器侧 IMAP 标回已读 → 同步后本地翻正、徽章归零；8720 常驻进程已重启加载新代码
 - 关键决策: 对账=UID SEARCH ↔ 本地全行比对只翻差异行（本地行为主，服务器已删 UID 不凭空进本地）；SEARCH 失败整段跳过不阻塞同步；用户标记与对账的 ms 级竞态窗口由下一轮同步自愈（服务器为真）
 - 遗留: 无
 - 时间: 2026-09-13 14:22 开工，即日完成
