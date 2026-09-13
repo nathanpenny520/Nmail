@@ -18,6 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1341-AIKey默认遮蔽 ✅
+- 目标: 用户反馈 AI 配置卡片 API Key 默认明文展示不妥——改默认遮蔽（保留小眼睛显隐；明文回显语义不变，仅改显隐默认值）
+- 范围: frontend(SettingsPage ProfileFields) + CLAUDE.md + docs(CHANGELOG, SESSIONS)
+- 产出: 提交 待提交；npm build 通过
+- 遗留: 无
+- 时间: 2026-09-13 13:41 开工，即日完成
+
 ### S-0912-2350-uvx启动说明补齐 ✅
 - 目标: 用户问「uvx 安装后怎么用、文档说清了吗」——排查确认 INSTALL.md 仅「① 单文件」有运行后说明，③ Homebrew / ④ uvx 缺失；顺带解答 uvx 目录无关性与缓存残留问题（回答同步沉淀至 promo/微信/README.md）
 - 范围: docs/INSTALL.md + docs/CHANGELOG.md + docs/SESSIONS.md；另仓外 promo/微信/ 长图步骤 1 补「以后每次启动都是这条命令」

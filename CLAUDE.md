@@ -34,7 +34,7 @@ cd ../nmail-site && npm run build               # 官网仓库（独立 git 仓�
 - `backend/app/`：`main.py` 入口（SPA 托管+SSE）· `api/` 路由 · `core/`（IMAP/SMTP/同步/流水线/HTML消毒）· `ai/`（LLM 任务/提示词/摘要）· `db/`（迁移+KV）· `scheduler.py`（轮询+每日摘要）
 - `frontend/src/`：`pages/` 页面 · `components/` 组件 · `api/client.ts` REST + `api/stream.ts` SSE
 - 数据与密钥：`%LOCALAPPDATA%/Nmail`（`nmail.db` + `secrets.json`），`NMAIL_DATA_DIR` 可覆盖
-- 无 OS 独有 API；服务仅绑定 127.0.0.1；API key 存本机 secrets.json 并明文回显设置界面（用户要求所见即所存）
+- 无 OS 独有 API；服务仅绑定 127.0.0.1；API key 存本机 secrets.json 并明文回显设置界面（默认遮蔽、小眼睛显隐；用户要求所见即所存）
 
 ## 关键决策（勿违背）
 

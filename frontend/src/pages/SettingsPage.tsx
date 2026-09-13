@@ -917,8 +917,8 @@ function ProfileFields(props: {
   onModel: (v: string) => void
   onApiKey: (v: string) => void
 }) {
-  // API Key 默认明文（本地应用，输入时可直接核对），可一键隐藏
-  const [keyVisible, setKeyVisible] = useState(true)
+  // API Key 默认遮蔽（保存/测试用的 state 不受影响，所见即所存），小眼睛一键显隐
+  const [keyVisible, setKeyVisible] = useState(false)
   return (
     <>
       <div className="grid grid-cols-[1fr_2fr] gap-3">
