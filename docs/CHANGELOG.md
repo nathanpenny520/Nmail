@@ -11,7 +11,7 @@
 - 验证：主树 npm build 因并行会话 SettingsPage/NotificationBell WIP 暂不可用（非本会话文件）——隔离 worktree（HEAD dd8c0a9 + 本改动）lint:font + tsc --noEmit + vite 全绿；后端零改动
 - 遗留：用户真机走查右键菜单与列宽拖拽；主树待并行 WIP 完成后补一次整体构建
 
-## 待提交 — feat: 写信输入增强——粘贴 Markdown/截图自动处理、HTML 源码视图、收件人视角预览
+## 61af1e2 — feat: 写信输入增强——粘贴 Markdown/截图自动处理、HTML 源码视图、收件人视角预览
 - 用户确认方案 P2 收尾段
 - 粘贴增强（RichEditor.tsx）：①剪贴板截图→内嵌 base64 图（超 1.5MB 提示改附件，与图片按钮同参）②无富文本版的纯文本若命中 Markdown 结构特征（标题/列表/引用/围栏/表格/加粗/分隔线，≥2 处且占非空行多数——单行与普通段落不误转）→ 走既有 /markdown 接口转换插入，失败回退普通文本；富文本 HTML 粘贴不受影响
 - HTML 源码视图：工具栏 FileCode 按钮，查看/贴入源码，应用前经新端点 POST /api/compose-extras/sanitize-html 白名单消毒（与发送消毒同口径，脚本/事件属性/javascript: 进不来）
