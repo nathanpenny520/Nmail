@@ -243,6 +243,8 @@ export const api = {
     request<{ draft: UserDraft }>(`/api/user-drafts/${id}/attachments/${attId}`, { method: 'DELETE' }),
   deleteUserDraft: (id: number) =>
     request<{ ok: boolean }>(`/api/user-drafts/${id}`, { method: 'DELETE' }),
+  clearUserDrafts: (status: 'sent' | 'discarded') =>
+    request<{ deleted: number }>(`/api/user-drafts?status=${status}`, { method: 'DELETE' }),
 
   // ── AI 总管家 Agent（v0.4 P6）──
   agentDecide: (id: number, decision: 'approve' | 'reject', args?: Record<string, unknown>) =>

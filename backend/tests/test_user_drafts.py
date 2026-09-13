@@ -128,3 +128,37 @@ def test_list_statuses_and_email_context():
     assert mine[0]["origin"] == "ai"
     # 非法状态 400
     assert client.get("/api/user-drafts", params={"status": "pending"}).status_code == 400
+
+
+def test_clear_drafts_only_terminal_states():
+    """批量清空：仅 sent/discarded 开放；editing 等在途状态 400 且分毫不动。"""
+    aid = _seed_account()
+    conn = database.get_conn()
+    for status in ("sent", "sent", "discarded", "editing"):
+        conn.execute(
+            "INSERT INTO user_drafts (account_id, mode, to_addrs, subject, body_html,"
+            " status, origin) VALUES (?, 'new', 'a@b.com', 's', '<p>x</p>', ?, 'human')",
+            (aid, status),
+        )
+    conn.commit()
+
+    def _count(status: str) -> int:  # 按本用例账号过滤，隔离其他用例的残留数据
+        drafts = client.get("/api/user-drafts", params={"status": status}).json()["drafts"]
+        return sum(1 for d in drafts if d["account_id"] == aid)
+
+    # 在途状态拒绝
+    assert client.delete("/api/user-drafts", params={"status": "editing"}).status_code == 400
+    assert client.delete("/api/user-drafts", params={"status": "pending_review"}).status_code == 400
+    assert _count("editing") == 1  # 未被误删
+
+    # 清空 sent 只动 sent
+    resp = client.delete("/api/user-drafts", params={"status": "sent"})
+    assert resp.status_code == 200 and resp.json()["deleted"] >= 2
+    assert _count("sent") == 0
+    assert _count("discarded") == 1
+
+    # 清空 discarded；再清一次 deleted=0（幂等）
+    assert client.delete("/api/user-drafts", params={"status": "discarded"}).json()["deleted"] >= 1
+    assert _count("discarded") == 0
+    # editing 草稿全程无恙
+    assert _count("editing") == 1

@@ -175,6 +175,24 @@ def delete_draft(draft_id: int) -> dict:
     return {"ok": True}
 
 
+@router.delete("")
+def clear_drafts(status: str) -> dict:
+    """按状态批量清空（v0.4.x 防历史堆积）。仅开放 sent/discarded 两个终态——
+    editing/scheduled/pending_review 是在途数据，不提供一键批量删除。"""
+    if status not in ("sent", "discarded"):
+        raise HTTPException(400, "仅支持清空已发送/已丢弃")
+    conn = get_conn()
+    ids = [
+        r["id"]
+        for r in conn.execute("SELECT id FROM user_drafts WHERE status = ?", (status,)).fetchall()
+    ]
+    conn.execute("DELETE FROM user_drafts WHERE status = ?", (status,))
+    conn.commit()
+    for i in ids:  # 附件行随 FK 级联删除，磁盘文件手动清
+        _remove_draft_files(i)
+    return {"deleted": len(ids)}
+
+
 # ── 附件持久化 ──────────────────────────────────────────────
 
 @router.post("/{draft_id}/attachments")

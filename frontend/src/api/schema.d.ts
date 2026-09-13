@@ -669,7 +669,12 @@ export interface paths {
         put?: never;
         /** Create Draft */
         post: operations["create_draft_api_user_drafts_post"];
-        delete?: never;
+        /**
+         * Clear Drafts
+         * @description 按状态批量清空（v0.4.x 防历史堆积）。仅开放 sent/discarded 两个终态——
+         *     editing/scheduled/pending_review 是在途数据，不提供一键批量删除。
+         */
+        delete: operations["clear_drafts_api_user_drafts_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3692,6 +3697,39 @@ export interface operations {
                 "application/json": components["schemas"]["UserDraftIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_drafts_api_user_drafts_delete: {
+        parameters: {
+            query: {
+                status: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

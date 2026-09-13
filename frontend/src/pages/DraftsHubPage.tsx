@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlarmClock, Loader2, Pencil, Send, Sparkles, Trash2, Undo2, X,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { parseBackendTime } from '../utils/format'
 import { useFlash } from '../hooks/useFlash'
@@ -62,8 +62,55 @@ export default function DraftsHubPage() {
     void queryClient.invalidateQueries({ queryKey: ['notifications'] })
   }
 
+  // ── 撤销删除（Gmail 心智）：乐观移行 → 5 秒后真正调删除接口，期间可撤销 ──
+  const [pendingDelete, setPendingDelete] = useState<UserDraft | null>(null)
+  const pendingRef = useRef<UserDraft | null>(null)
+  const deleteTimerRef = useRef<number | null>(null)
+
+  const commitDelete = useCallback(() => {
+    const draft = pendingRef.current
+    if (deleteTimerRef.current !== null) {
+      window.clearTimeout(deleteTimerRef.current)
+      deleteTimerRef.current = null
+    }
+    pendingRef.current = null
+    setPendingDelete(null)
+    if (draft) {
+      void api
+        .deleteUserDraft(draft.id)
+        .catch(() => {}) // 草稿可能已被其他入口删除
+        .then(() => queryClient.invalidateQueries({ queryKey: ['user-drafts'] }))
+    }
+  }, [queryClient])
+
+  const undoDelete = useCallback(() => {
+    if (deleteTimerRef.current !== null) {
+      window.clearTimeout(deleteTimerRef.current)
+      deleteTimerRef.current = null
+    }
+    pendingRef.current = null
+    setPendingDelete(null)
+    void queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
+  }, [queryClient])
+
+  const requestDelete = useCallback(
+    (draft: UserDraft) => {
+      if (pendingRef.current) commitDelete() // 上一条立即落定，撤销窗口始终只有一条
+      queryClient.setQueryData<{ drafts: UserDraft[] }>(['user-drafts', tab], (old) =>
+        old ? { drafts: old.drafts.filter((d) => d.id !== draft.id) } : old,
+      )
+      pendingRef.current = draft
+      setPendingDelete(draft)
+      deleteTimerRef.current = window.setTimeout(commitDelete, 5000)
+    },
+    [commitDelete, queryClient, tab],
+  )
+
+  // 离开草稿页即关闭撤销窗口：未落定的删除立即提交
+  useEffect(() => () => { if (pendingRef.current) commitDelete() }, [commitDelete])
+
   return (
-    <div className="flex h-full">
+    <div className="relative flex h-full">
       {/* 草稿列表 */}
       <section
         ref={colRef}
@@ -97,9 +144,12 @@ export default function DraftsHubPage() {
             </div>
           )}
           {drafts.map((d) => (
-            <DraftRow key={d.id} draft={d} tab={tab} active={selected?.id === d.id} onClick={() => setSelectedId(d.id)} onChanged={invalidate} />
+            <DraftRow key={d.id} draft={d} tab={tab} active={selected?.id === d.id} onClick={() => setSelectedId(d.id)} onChanged={invalidate} onDelete={requestDelete} />
           ))}
         </div>
+        {(tab === 'sent' || tab === 'discarded') && drafts.length > 0 && (
+          <ClearFooter tab={tab} onCleared={invalidate} />
+        )}
       </section>
       <SplitDivider
         onMove={moveColWidth}
@@ -110,30 +160,77 @@ export default function DraftsHubPage() {
       {/* 详情预览 */}
       <section className="min-w-0 flex-1 bg-gray-50">
         {selected ? (
-          <DraftDetail draft={selected} tab={tab} onChanged={invalidate} />
+          <DraftDetail draft={selected} tab={tab} onChanged={invalidate} onDelete={requestDelete} />
         ) : (
           <div className="flex h-full items-center justify-center t-sm text-gray-300">选择一份草稿</div>
         )}
       </section>
+      {/* 撤销删除浮条（5 秒窗口） */}
+      {pendingDelete && (
+        <div className="absolute bottom-5 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-full bg-gray-900 py-2 pl-4 pr-3 shadow-lg">
+          <span className="t-sm text-white">已删除「{pendingDelete.subject || '（无主题）'}」</span>
+          <button
+            className="t-sm font-medium text-indigo-300 transition-colors hover:text-indigo-200"
+            onClick={undoDelete}
+          >
+            撤销
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 清空当前终态视图（仅已发送/已丢弃）：两击确认——首击变红进入 3 秒确认期，再击执行。 */
+function ClearFooter({ tab, onCleared }: { tab: 'sent' | 'discarded'; onCleared: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  const revertRef = useRef<number | null>(null)
+  const clear = useMutation({
+    mutationFn: () => api.clearUserDrafts(tab),
+    onSuccess: onCleared,
+  })
+
+  useEffect(() => () => { if (revertRef.current !== null) window.clearTimeout(revertRef.current) }, [])
+
+  return (
+    <div className="border-t border-gray-100 px-3 py-2 text-center">
+      <button
+        className={`t-xs transition-colors ${
+          confirming ? 'font-medium text-red-600' : 'text-gray-300 hover:text-red-500'
+        }`}
+        onClick={() => {
+          if (!confirming) {
+            setConfirming(true)
+            if (revertRef.current !== null) window.clearTimeout(revertRef.current)
+            revertRef.current = window.setTimeout(() => setConfirming(false), 3000)
+            return
+          }
+          if (revertRef.current !== null) window.clearTimeout(revertRef.current)
+          setConfirming(false)
+          clear.mutate()
+        }}
+      >
+        {confirming ? '再点一次确认清空' : `清空${tab === 'sent' ? '已发送' : '已丢弃'}`}
+      </button>
     </div>
   )
 }
 
 function DraftRow({
-  draft, tab, active, onClick, onChanged,
+  draft, tab, active, onClick, onChanged, onDelete,
 }: {
   draft: UserDraft
   tab: Tab
   active: boolean
   onClick: () => void
   onChanged: () => void
+  onDelete: (draft: UserDraft) => void
 }) {
   const queryClient = useQueryClient()
   const quickMutation = useMutation({
-    mutationFn: async (action: 'discard' | 'delete' | 'reopen') => {
+    mutationFn: async (action: 'discard' | 'reopen') => {
       if (action === 'discard') await api.discardUserDraft(draft.id)
-      else if (action === 'reopen') await api.reopenUserDraft(draft.id)
-      else await api.deleteUserDraft(draft.id)
+      else await api.reopenUserDraft(draft.id)
     },
     onSuccess: () => {
       onChanged()
@@ -189,16 +286,27 @@ function DraftRow({
             <Undo2 className="h-3 w-3" />
           </button>
         )}
-        {(tab === 'pending_review' || tab === 'editing' || tab === 'scheduled' || tab === 'discarded') && (
+        {tab === 'pending_review' ? (
           <button
             className="rounded-md border border-gray-200 bg-white p-1 text-gray-500 hover:text-red-600"
-            title={tab === 'pending_review' ? '丢弃' : '彻底删除'}
+            title="丢弃"
             onClick={(e) => {
               e.stopPropagation()
-              quickMutation.mutate(tab === 'pending_review' ? 'discard' : 'delete')
+              quickMutation.mutate('discard')
             }}
           >
             <X className="h-3 w-3" />
+          </button>
+        ) : (
+          <button
+            className="rounded-md border border-gray-200 bg-white p-1 text-gray-500 hover:text-red-600"
+            title={tab === 'sent' ? '删除记录（不影响已发出的邮件）' : '彻底删除'}
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(draft)
+            }}
+          >
+            <Trash2 className="h-3 w-3" />
           </button>
         )}
       </div>
@@ -206,7 +314,14 @@ function DraftRow({
   )
 }
 
-function DraftDetail({ draft, tab, onChanged }: { draft: UserDraft; tab: Tab; onChanged: () => void }) {
+function DraftDetail({
+  draft, tab, onChanged, onDelete,
+}: {
+  draft: UserDraft
+  tab: Tab
+  onChanged: () => void
+  onDelete: (draft: UserDraft) => void
+}) {
   const [instruction, setInstruction] = useState('')
   const [showInstruction, setShowInstruction] = useState(false)
   const [message, flash] = useFlash()
@@ -299,8 +414,12 @@ function DraftDetail({ draft, tab, onChanged }: { draft: UserDraft; tab: Tab; on
                 <Undo2 className="h-3.5 w-3.5" /> 恢复
               </button>
             )}
-            {tab !== 'sent' && tab !== 'pending_review' && (
-              <button className={hubBtn} onClick={() => void act(() => api.deleteUserDraft(draft.id), '已删除')}>
+            {tab !== 'pending_review' && (
+              <button
+                className={hubBtn}
+                title={tab === 'sent' ? '从历史中移除，不影响已发出的邮件' : undefined}
+                onClick={() => onDelete(draft)}
+              >
                 <Trash2 className="h-3.5 w-3.5" /> 删除
               </button>
             )}
