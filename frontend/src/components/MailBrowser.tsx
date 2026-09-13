@@ -362,7 +362,8 @@ export default function MailBrowser({
   const organizing = organizeMutation.isPending || organizeJob?.status === 'running'
 
   // 已读合并写（v0.4 审查 U4）：点击先本地置已读（乐观），800ms 内连续点击
-  // 合并为一次批量请求；快速浏览不再逐封直发 IMAP SEEN。失败仅提示，20s 轮询会校正。
+  // 合并为一次批量请求；快速浏览不再逐封直发 IMAP SEEN。失败仅提示，20s 轮询会校正；
+  // 成功后失效 folder-cache——树未读徽章即时跟随，不等下次同步。
   const readQueueRef = useRef<Set<number>>(new Set())
   const readTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const markReadLocal = (ids: number[]) => {
@@ -379,9 +380,12 @@ export default function MailBrowser({
     const ids = [...readQueueRef.current]
     readQueueRef.current.clear()
     if (ids.length === 0) return
-    void api.batchAction(ids, 'read').catch(() => {
-      setSyncMessage('已读标记失败，列表刷新后会恢复真实状态', 5000)
-    })
+    void api
+      .batchAction(ids, 'read')
+      .then(() => queryClient.invalidateQueries({ queryKey: ['folder-cache'] }))
+      .catch(() => {
+        setSyncMessage('已读标记失败，列表刷新后会恢复真实状态', 5000)
+      })
   }
   useEffect(() => () => {
     // 卸载前把未落地的已读直接发出（fire-and-forget）

@@ -157,13 +157,17 @@ export default function ComposeForm({
     saveTimer.current = window.setTimeout(() => void doSaveRef.current(), 1000)
   }, [accountId, to, cc, bcc, subject, bodyHtml, tabId, updateTab])
 
-  // 卸载兜底：切标签/收起工作台时把防抖窗口内的最后编辑同步上去
+  // 卸载兜底：切标签/收起工作台时把防抖窗口内的最后编辑同步上去。
+  // 未落库且从未编辑的空白标签静默跳过——多开下每次切标签都会卸载前一个表单，
+  // 不能把随手点开的空白页签落成空草稿（显式「保留草稿」路径不走此处，仍会落库）
   useEffect(
     () => () => {
       deadRef.current = true
       window.clearTimeout(saveTimer.current)
       window.clearTimeout(retryTimer.current)
-      void doSaveRef.current().catch(() => {})
+      if (JSON.stringify(payloadRef.current) !== savedRef.current) {
+        void doSaveRef.current().catch(() => {})
+      }
     },
     [],
   )

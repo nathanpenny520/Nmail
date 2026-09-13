@@ -20,7 +20,7 @@ from datetime import datetime, UTC
 
 from imap_tools.errors import MailboxLoginError
 
-from app.core import mailbox
+from app.core import imap_client, mailbox
 from app.core.imap_client import get_uidvalidity, iter_new_mail
 from app.core.mail_html import count_remote_images
 from app.config import get_data_dir
@@ -106,8 +106,9 @@ def _upsert_email(account_id: int, folder: str, parsed) -> int:
     cur = conn.execute(
         "INSERT OR IGNORE INTO emails"
         " (account_id, folder, uid, message_id, subject, sender_name, sender_email,"
-        "  recipients, cc, date, date_sort, snippet, body_text, body_html, remote_img_count)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "  recipients, cc, date, date_sort, snippet, body_text, body_html, remote_img_count,"
+        "  is_read, starred)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             account_id,
             folder,
@@ -124,6 +125,9 @@ def _upsert_email(account_id: int, folder: str, parsed) -> int:
             text,
             parsed.body_html or "",
             count_remote_images(parsed.body_html or ""),
+            # 按服务器 FLAGS 初始化：别处（网页/手机）已读/星标过的新邮件不再误报未读
+            1 if imap_client.SEEN_FLAG in parsed.flags else 0,
+            1 if imap_client.FLAGGED_FLAG in parsed.flags else 0,
         ),
     )
     if cur.rowcount == 0:  # 重复邮件（上次中断前已入库）：回查既有行
@@ -264,6 +268,48 @@ def _save_sync_state(conn, account_id: int, folder: str,
     )
 
 
+def _reconcile_flags(mb, account_id: int, folder: str) -> int:  # noqa: ANN001
+    """以服务器 FLAGS 对账本地已读/星标——外部客户端（TB/网页/手机）已读变化的入网点。
+
+    UID SEARCH UNSEEN/FLAGGED 各一条命令，与本地该文件夹全部行比对，只翻有差异的
+    行（本地行为主：服务器侧已删的 UID 不会凭空进本地）；SEARCH 失败整段跳过。
+    返回翻动行数（日志用），事务由调用方提交。
+    """
+    result = imap_client.search_flag_uids(mb, folder)
+    if result is None:
+        return 0
+    unread_uids, flagged_uids = result
+    conn = get_conn()
+    changed = 0
+    read_ids: list[int] = []
+    unread_ids: list[int] = []
+    star_ids: list[int] = []
+    unstar_ids: list[int] = []
+    for row in conn.execute(
+        "SELECT id, uid, is_read, starred FROM emails WHERE account_id = ? AND folder = ?",
+        (account_id, folder),
+    ).fetchall():
+        want_read = 0 if int(row["uid"]) in unread_uids else 1
+        want_star = 1 if int(row["uid"]) in flagged_uids else 0
+        if int(row["is_read"]) != want_read:
+            (unread_ids if want_read == 0 else read_ids).append(int(row["id"]))
+        if int(row["starred"]) != want_star:
+            (star_ids if want_star else unstar_ids).append(int(row["id"]))
+    for ids, col, val in (
+        (read_ids, "is_read", 1),
+        (unread_ids, "is_read", 0),
+        (star_ids, "starred", 1),
+        (unstar_ids, "starred", 0),
+    ):
+        # 分批防超 SQLite 变量上限
+        for start in range(0, len(ids), 500):
+            chunk = ids[start : start + 500]
+            ph = ",".join("?" * len(chunk))
+            cur = conn.execute(f"UPDATE emails SET {col} = ? WHERE id IN ({ph})", (val, *chunk))
+            changed += cur.rowcount
+    return changed
+
+
 def _sync_folder(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001
     conn = get_conn()
     state = conn.execute(
@@ -320,6 +366,14 @@ def _sync_folder(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001
 
     _save_sync_state(conn, account_id, folder, last_uid, uidvalidity or stored_uidv)
     conn.commit()
+    try:
+        fixed = _reconcile_flags(mb, account_id, folder)
+        if fixed:
+            conn.commit()
+            logger.info("flags reconciled for account %s folder %s: %d rows",
+                        account_id, folder, fixed)
+    except Exception:  # noqa: BLE001 — 对账尽力而为，同步结果不受影响
+        logger.exception("flag reconcile failed for account %s folder %s", account_id, folder)
     return {
         "folder": folder,
         "new_count": new_count,

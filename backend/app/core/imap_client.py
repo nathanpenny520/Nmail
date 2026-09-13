@@ -62,6 +62,8 @@ class ParsedMessage:
     body_text: str
     body_html: str
     attachments: list[ParsedAttachment]
+    # 服务器 FLAGS（\Seen/\Flagged 等）——新邮件入库按此初始化 is_read/starred
+    flags: frozenset = frozenset()
 
 
 def _is_netease(server: str) -> bool:
@@ -227,7 +229,24 @@ def _parse_message(msg, uid: int) -> ParsedMessage:  # noqa: ANN001 — imap-too
         body_text=msg.text or "",
         body_html=msg.html or "",
         attachments=attachments,
+        flags=frozenset(msg.flags or ()),
     )
+
+
+def search_flag_uids(mb: MailBox, folder: str) -> tuple[set[int], set[int]] | None:
+    """UID SEARCH 文件夹的未读与星标 UID 集合（FLAGS 对账用，各一条命令）。
+
+    返回 (未读 UID 集, 星标 UID 集)；服务器不支持/网络异常返回 None，调用方整段
+    跳过对账——对账尽力而为，绝不阻塞同步主干。
+    """
+    try:
+        mb.folder.set(folder)
+        unread = {int(u) for u in mb.uids(AND(seen=False))}
+        flagged = {int(u) for u in mb.uids(AND(flagged=True))}
+        return unread, flagged
+    except Exception:  # noqa: BLE001
+        logger.debug("uid flag search failed for %s", folder)
+        return None
 
 
 def set_flag(mb: MailBox, folder: str, uid: int, flag: MailMessageFlags, value: bool) -> None:
