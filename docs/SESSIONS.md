@@ -21,7 +21,7 @@
 ### S-0913-1536-正文iframe测高失效修复 ✅
 - 目标: 用户反馈 Google 安全提醒邮件只显示上半截（8721 实测复现：iframe style 卡在初始 320px 而内容需 869px；根因=React 18 对 srcdoc iframe 的 onLoad 竞态，load 先于监听器挂载被错过 → remeasure/ResizeObserver/兜底定时器全部未注册）——修复：测高链路不再依赖 onLoad，挂载后独立轮询注册
 - 范围: frontend(components/HtmlMail.tsx〔仅测高逻辑段，与 S-0913-1504 已提交的 zoom 段不同区域〕) + docs(CHANGELOG, SESSIONS)
-- 产出: 提交（待回填哈希）；npm build 通过；8721 强刷实测——修复前 style 卡死 320px 超 9s，修复后 0.5s 内 893px 到位且稳定，切换微软邮件复测正常
+- 产出: 提交 4b1f38b；npm build 通过；8721 强刷实测——修复前 style 卡死 320px 超 9s，修复后 0.5s 内 893px 到位且稳定，切换微软邮件复测正常
 - 遗留: 无
 - 时间: 2026-09-13 15:36 开工，即日完成
 
