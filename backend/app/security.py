@@ -8,9 +8,14 @@ from __future__ import annotations
 import json
 import os
 import stat
+import threading
 from contextlib import suppress
 
 from app.config import get_secrets_path
+
+# 整文件读改写模型：无锁并发（同步线程刷新 OAuth 令牌 × API 线程存设置等）
+# 后写者会带着旧快照覆盖整文件，丢掉别人的键——曾致 OAuth 令牌全失
+_SECRETS_LOCK = threading.Lock()
 
 
 def _read_all() -> dict[str, str]:
@@ -39,12 +44,13 @@ def get_secret(key: str) -> str | None:
 
 def set_secret(key: str, value: str | None) -> None:
     """value 为空或 None 时删除该项。"""
-    data = _read_all()
-    if value:
-        data[key] = value
-    else:
-        data.pop(key, None)
-    _write_all(data)
+    with _SECRETS_LOCK:
+        data = _read_all()
+        if value:
+            data[key] = value
+        else:
+            data.pop(key, None)
+        _write_all(data)
 
 
 def has_secret(key: str) -> bool:

@@ -139,7 +139,8 @@ def _upsert_email(account_id: int, folder: str, parsed) -> int:
     return int(cur.lastrowid)
 
 
-def _set_account_status(account_id: int, status: str, detail: str | None = None) -> None:
+def _set_account_status(account_id: int, status: str, detail: str | None = None,
+                        error_title: str | None = None) -> None:
     conn = get_conn()
     prev = conn.execute("SELECT status, email FROM accounts WHERE id = ?", (account_id,)).fetchone()
     conn.execute(
@@ -155,7 +156,7 @@ def _set_account_status(account_id: int, status: str, detail: str | None = None)
         }
         add_notification(
             "account_error",
-            f"{titles[status]}：{prev['email']}",
+            f"{error_title or titles[status]}：{prev['email']}",
             detail or "请在 设置-账号 中重新验证",
             str(account_id),
         )
@@ -241,6 +242,16 @@ def start_sync(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dict:
         if account_id in _SYNCING:
             return {"started": False, "reason": "syncing"}
         if not mailbox.has_credentials(account_id):
+            # OAuth 账号令牌丢失要可见：置 auth_error+通知（状态迁移时只发一次），
+            # 否则调度器会静默跳过、标已读/收信全部无声失败——曾静默 24 小时无人知
+            row = get_conn().execute(
+                "SELECT auth_type FROM accounts WHERE id = ?", (account_id,)
+            ).fetchone()
+            if row and row["auth_type"] == "oauth2":
+                _set_account_status(
+                    account_id, "auth_error", "OAuth 授权丢失，请到 设置-邮箱账号 重新授权",
+                    error_title="OAuth 授权丢失",
+                )
             return {"started": False, "reason": "no_credentials"}
         _SYNCING.add(account_id)
 

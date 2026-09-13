@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: OAuth 令牌丢失致标已读静默失败——secrets 写入加锁 + 失败出声 + 丢凭据可见
+- 用户反馈：点开一封邮件查看后依然亮着未读——排查定案：4 个 Outlook OAuth 账号的 `oauth_token:*` 已从 secrets.json 物理丢失（`set_secret` 无锁读改写整文件，并发写互相覆盖丢键，secrets.json 停在昨天 17:45 只剩 `account_pwd:1`）；调度器对这四个号以 no_credentials 静默跳过 24 小时（账号状态仍 "ok"）、批量已读在 `load_account` 处失败返回 HTTP 200 `{ok:false, failed:1}`（本地按「服务器成功才动本地」不动，20s 轮询把行翻回未读），前端对 ok:false 无任何提示——用户全程无感。清华账号（密码型）不受影响，昨日的 FLAGS 对账验证即在该账号
+- 后端①（security.py）：`set_secret` 读改写加模块级 `threading.Lock`——同步线程刷新 OAuth 令牌 × API 线程存设置的现实并发不再互相覆盖（原子替换只保「文件不损坏」，不保「键不丢」）
+- 后端②（sync.py）：`start_sync` 对缺凭据的 OAuth 账号置 `auth_error`（"OAuth 授权丢失，请重新授权"）并发一次通知中心消息（沿用状态迁移去重）——不再静默跳过；授权恢复后首次成功同步自动回 `ok`
+- 前端（MailBrowser）：批量已读返回 `ok:false/failed>0` 时提示「已读标记失败：账号连接异常，稍后恢复真实状态」，成功才失效 folder-cache 徽章
+- 文档：ARCHITECTURE 安全模型 secrets 行与 core/sync 行同步
+- 验证：pytest 149 全绿（+2：OAuth 缺令牌置 auth_error 且通知只发一次 / 密码账号缺凭据维持静默）、ruff + npm build 通过；用户当轮完成 4 个 Outlook 账号重新授权，四账号恢复同步；对此前失败的账号 3 邮件 241 实测 batch-action 已读 `{ok:true, failed:0}` → 本地翻正、Inbox 徽章归零（服务器 \Seen 已推）；auth_error 置错路径由用例覆盖
+
+
 ## 3f9c898 — UI: 标签条品牌区 + 汉堡折叠文件夹树（Gmail 式）
 - 用户反馈：左上角 N 图标不醒目且不在中心位置——原是塞在页签条开头的 16px favicon（`mb-1.5 self-center` 对齐 hack 夹在窗口边缘与页签之间）
 - 品牌区：标签条最左改为「汉堡按钮 + 24px N logo + Nmail 字标」，整区垂直居中（撤销对齐 hack）；点标识回邮件基座；品牌区与页签间加竖分隔线

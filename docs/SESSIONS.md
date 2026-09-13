@@ -17,6 +17,16 @@
 ## 进行中
 
 <!-- 有新会话开工时按下方模板登记 -->
+
+### S-0913-1505-OAuth令牌丢失修复
+- 目标: 用户反馈「点开邮件依然显示未读」——排查定案：4 个 Outlook OAuth 账号的 `oauth_token:*` 已从 secrets.json 物理丢失（security.py set_secret 无锁读改写，并发写互相覆盖丢键，昨天 17:45 的写入痕迹），调度器以 no_credentials 静默跳过 24h（状态仍 ok）、批量已读写服务器失败本地不动且前端 200 静默无提示。修复：①set_secret 加进程级锁堵丢键窗口 ②批量已读 ok:false/failed>0 时前端出提示 ③start_sync 对无令牌 OAuth 账号置 auth_error+通知（不再静默）④用户需对 4 个 Outlook 账号各重新授权一次（refresh_token 不可恢复）
+- 范围: backend(app/security.py, core/sync.py) + frontend(MailBrowser.tsx) + docs(ARCHITECTURE, CHANGELOG, SESSIONS)
+- 产出: 提交（待回填哈希）；pytest 149 全绿（+2 回归用例）、ruff + npm build 通过；用户当轮完成 4 个 Outlook 账号重新授权，四账号恢复同步（调度器已全员拉通）；对账号 3 邮件 241 实测已读链路 ok → 徽章归零；8720 重启加载新代码
+- 关键决策: secrets 加锁取进程内 threading.Lock（现实并发=同步线程刷新令牌×API 存设置；跨进程双实例靠约定单实例，run.py 端口顺延即双实例信号）；auth_error 仅 OAuth 缺令牌置（密码号未存授权码属正常态不扰）；通知沿用状态迁移去重
+- 遗留: 无（用户 4 号均已重新授权并验证）
+- 时间: 2026-09-13 15:05 开工，即日完成
+
+
 ### S-0913-1449-品牌区与树折叠 ✅
 - 目标: 用户反馈左上角 N 图标不醒目且不居中——标签条最左改为「汉堡 + 24px logo + Nmail 字标」品牌区（垂直居中，点 logo 回邮件基座）；汉堡 Gmail 式折叠文件夹树（w-48 完整树 ⇄ w-14 图标栏，localStorage 记忆，useSyncExternalStore+事件联动免 Provider）
 - 范围: frontend(components/Layout.tsx, components/FolderTree.tsx, hooks/useSidebar.ts 新增) + docs(REDESIGN_PLAN §3.2, CHANGELOG, SESSIONS)

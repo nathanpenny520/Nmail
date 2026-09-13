@@ -382,7 +382,14 @@ export default function MailBrowser({
     if (ids.length === 0) return
     void api
       .batchAction(ids, 'read')
-      .then(() => queryClient.invalidateQueries({ queryKey: ['folder-cache'] }))
+      .then((res) => {
+        // 后端「服务器成功才动本地」：打标失败仍返回 HTTP 200 + ok:false——必须出声
+        if (!res.ok || res.failed > 0) {
+          setSyncMessage('已读标记失败：账号连接异常，列表稍后恢复真实状态', 6000)
+          return
+        }
+        queryClient.invalidateQueries({ queryKey: ['folder-cache'] })
+      })
       .catch(() => {
         setSyncMessage('已读标记失败，列表刷新后会恢复真实状态', 5000)
       })
