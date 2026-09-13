@@ -56,6 +56,9 @@ function statusDotCls(status: Account['status']): string {
   }
 }
 
+/** 错误态（弹红!角标，Outlook 式）；syncing/never_synced 用小点，正常态无任何标记。 */
+const isAccountError = (s: Account['status']) => s === 'auth_error' || s === 'connection_error'
+
 /** 按 IMAP 分隔符把平铺文件夹名组装成层级树。 */
 interface FolderNode {
   name: string   // 完整名（IMAP 实名）
@@ -255,7 +258,7 @@ export default function FolderTree({
   }
 
   // 折叠态（v0.4 汉堡主菜单，Gmail 式）：纯图标 + tooltip，徽章缩成角标圆点，分组标题隐藏；
-  // 账号变首字母头像（账号色浅底深字 + 状态色角标），点击直达该账号收件箱——文件夹层级收起态不展示，拖拽落点需展开后使用。
+  // 账号变首字母头像（账号色浅底深字；异常弹红!角标、同步/未同步小点、正常无标记），点击直达该账号收件箱——文件夹层级收起态不展示，拖拽落点需展开后使用。
   // 两分支根元素同为 fragment、child0 同为 <aside>：React 原地复用 DOM 节点，折叠/展开宽度变化仍走 transition；
   // 展开态 child1 为拖拽分隔条（border-r 移交分隔条，避免双线），折叠态隐藏
   if (collapsed) {
@@ -317,7 +320,15 @@ export default function FolderTree({
               aria-label={`${a.email} 收件箱`}
             >
               {a.email.charAt(0).toUpperCase()}
-              <span className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${statusDotCls(a.status)}`} />
+              {isAccountError(a.status) ? (
+                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-red-500 t-xs font-bold text-white">
+                  !
+                </span>
+              ) : (
+                a.status !== 'ok' && (
+                  <span className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${statusDotCls(a.status)}`} />
+                )
+              )}
             </button>
           )
         })}
@@ -544,8 +555,20 @@ function AccountBranch({
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </button>
         <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: account.color }} title="账号标识色" />
-        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDotCls(account.status)}`} />
         <span className="truncate">{account.email}</span>
+        {/* 状态指示靠右（Outlook 式）：异常弹红!角标，同步中/未同步小点，正常态无标记——不让标识色和状态色并排成两颗球 */}
+        {isAccountError(account.status) ? (
+          <span
+            className="ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500 t-xs font-bold text-white"
+            title={account.status_detail ?? '账号异常'}
+          >
+            !
+          </span>
+        ) : (
+          account.status !== 'ok' && (
+            <span className={`ml-auto h-1.5 w-1.5 shrink-0 rounded-full ${statusDotCls(account.status)}`} />
+          )
+        )}
       </div>
       {open && (
         <div className="ml-4 border-l border-gray-100">
