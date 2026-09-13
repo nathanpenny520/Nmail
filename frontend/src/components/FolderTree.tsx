@@ -7,6 +7,7 @@ import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
+import { useTreeCollapsed } from '../hooks/useSidebar'
 import type { Account, FolderCacheItem } from '../types'
 import ContextMenu, { type ContextMenuItem } from './ContextMenu'
 import { useCompose } from './compose/ComposeContext'
@@ -30,6 +31,12 @@ const rowCls = (active: boolean) =>
     active
       ? 'bg-indigo-50 font-medium text-indigo-700'
       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+  }`
+
+/** 折叠态（w-14 图标栏）按钮：激活=树选中项正在前台。 */
+const railBtnCls = (active: boolean) =>
+  `flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors ${
+    active ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
   }`
 
 function statusDotCls(status: Account['status']): string {
@@ -232,8 +239,76 @@ export default function FolderTree({
   const isFolderActive = (accountId: number, name: string) =>
     selection.type === 'folder' && selection.accountId === accountId && selection.name === name
 
+  const collapsed = useTreeCollapsed()
+
+  // 折叠态（v0.4 汉堡主菜单，Gmail 式）：纯图标 + tooltip，徽章缩成角标圆点，分组标题隐藏；
+  // 账号变首字母头像（状态色角标），点击直达该账号收件箱——文件夹层级收起态不展示，拖拽落点需展开后使用。
+  // 两分支根元素同为 <aside>，React 原地复用 DOM 节点，宽度变化由 transition 平滑过渡。
+  if (collapsed) {
+    return (
+      <aside className="flex w-14 shrink-0 flex-col items-center overflow-y-auto border-r border-gray-200 bg-white px-1.5 py-2 transition-[width] duration-200">
+        <button
+          className={railBtnCls(isInboxActive(null))}
+          onClick={() => onSelect({ type: 'inbox', accountId: null })}
+          title="聚合收件箱"
+          aria-label="聚合收件箱"
+        >
+          <Inbox className="h-4 w-4" />
+        </button>
+        <button
+          className={`relative ${railBtnCls(false)}`}
+          onClick={() => openPage('/drafts')}
+          title={pendingDraftCount > 0 ? `草稿 · ${pendingDraftCount} 条待审` : '草稿'}
+          aria-label="草稿"
+        >
+          <FilePenLine className="h-4 w-4" />
+          {pendingDraftCount > 0 && (
+            <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-violet-500" />
+          )}
+        </button>
+        {aiEnabled && (
+          <>
+            <button
+              className={railBtnCls(false)}
+              onClick={() => openPage('/assistant')}
+              title="AI 总管家"
+              aria-label="AI 总管家"
+            >
+              <Sparkles className="h-4 w-4 text-violet-500" />
+            </button>
+            <button
+              className={railBtnCls(false)}
+              onClick={() => openPage('/digest')}
+              title="每日摘要"
+              aria-label="每日摘要"
+            >
+              <BarChart3 className="h-4 w-4" />
+            </button>
+          </>
+        )}
+
+        <div className="my-2 h-px w-8 shrink-0 bg-gray-200" />
+
+        {accounts.map((a) => (
+          <button
+            key={a.id}
+            className={`relative mb-1 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full t-sm font-medium transition-colors ${
+              isInboxActive(a.id) ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200/70'
+            }`}
+            onClick={() => onSelect({ type: 'inbox', accountId: a.id })}
+            title={`${a.email}（收件箱）${a.status_detail ? `：${a.status_detail}` : ''}`}
+            aria-label={`${a.email} 收件箱`}
+          >
+            {a.email.charAt(0).toUpperCase()}
+            <span className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${statusDotCls(a.status)}`} />
+          </button>
+        ))}
+      </aside>
+    )
+  }
+
   return (
-    <aside className="flex w-48 shrink-0 flex-col overflow-y-auto border-r border-gray-200 bg-white px-1.5 py-2">
+    <aside className="flex w-48 shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-gray-200 bg-white px-1.5 py-2 transition-[width] duration-200">
       <div className="px-2 pb-1 pt-1 t-xs font-medium text-gray-400">智能视图</div>
       <button className={rowCls(isInboxActive(null))} onClick={() => onSelect({ type: 'inbox', accountId: null })}>
         <Inbox className="h-3.5 w-3.5 shrink-0" />

@@ -17,6 +17,13 @@
 ## 进行中
 
 <!-- 有新会话开工时按下方模板登记 -->
+### S-0913-1449-品牌区与树折叠 ✅
+- 目标: 用户反馈左上角 N 图标不醒目且不居中——标签条最左改为「汉堡 + 24px logo + Nmail 字标」品牌区（垂直居中，点 logo 回邮件基座）；汉堡 Gmail 式折叠文件夹树（w-48 完整树 ⇄ w-14 图标栏，localStorage 记忆，useSyncExternalStore+事件联动免 Provider）
+- 范围: frontend(components/Layout.tsx, components/FolderTree.tsx, hooks/useSidebar.ts 新增) + docs(REDESIGN_PLAN §3.2, CHANGELOG, SESSIONS)
+- 产出: 提交（待回填）；npm run build（tsc+字号门禁）通过；chrome-devtools 在 8720 真实账号走查——展开态品牌区居中醒目、收起态图标栏+首字母头像+状态角标、刷新后收起记忆保留、再展开恢复正常；与并行会话共享 docs（CHANGELOG/SESSIONS 有他人条目重排 WIP）按 HEAD 基线外科手术式暂存互未夹带
+- 遗留: 无
+- 时间: 2026-09-13 14:49 开工，即日完成
+
 ### S-0913-1420-写信多开与笔形按钮
 - 目标: 用户反馈点标签条 ＋ 只能写一封新邮件——根因是 openNew 对「未落库空白标签」的防连点复用；改为每次点击必新开一封（懒持久化已保证空白页签零成本）；＋ 图标改 SquarePen（与页签 Pencil 区分"新建动作"）
 - 范围: frontend(components/compose/ComposeContext.tsx, components/compose/ComposeForm.tsx, components/Layout.tsx) + docs(REDESIGN_PLAN §3.2, CHANGELOG, SESSIONS)

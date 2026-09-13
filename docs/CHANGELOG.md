@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — UI: 标签条品牌区 + 汉堡折叠文件夹树（Gmail 式）
+- 用户反馈：左上角 N 图标不醒目且不在中心位置——原是塞在页签条开头的 16px favicon（`mb-1.5 self-center` 对齐 hack 夹在窗口边缘与页签之间）
+- 品牌区：标签条最左改为「汉堡按钮 + 24px N logo + Nmail 字标」，整区垂直居中（撤销对齐 hack）；点标识回邮件基座；品牌区与页签间加竖分隔线
+- 汉堡折叠（Gmail 主菜单心智，导航模型不变——决策 7 仍成立，折叠的是基座内文件夹树非应用侧栏）：w-48 完整树 ⇄ w-14 图标栏——收起态智能视图/页面入口变纯图标（tooltip 带名称、未读/待审徽章缩角标圆点、AI 入口 Sparkles 保留紫调），账号变首字母圆形头像（状态色角标，点直达该账号收件箱），分组标题隐藏；文件夹层级与拖拽落点仅展开态可用（预期取舍，Gmail 同）
+- 状态与联动：`hooks/useSidebar.ts` 新增——localStorage（`nmail_tree_collapsed`）记忆 + useSyncExternalStore/自定义事件，汉堡（Layout）与树（MailPage）免 Provider 联动，跨页签/刷新保留；其他页签点汉堡先跳回邮件基座再切换；两分支根元素同为 `<aside>`，React 原地复用 DOM，`transition-[width]` 平滑过渡
+- 文档：REDESIGN_PLAN §3.2 示意图 +「品牌区与折叠侧栏」条目 + 涉及文件追记
+- 验证：npm run build（tsc+字号门禁）通过；chrome-devtools 在 8720 真实账号走查——展开态品牌区居中醒目、收起态图标栏+首字母头像+状态角标、刷新后收起记忆保留、再展开恢复正常（devtools profile 起初被并行会话占用，释放后走查）
+
 ## c6127db — fix: 未读/星标与服务器 FLAGS 对账——外部客户端的已读变化不再丢失
 - 用户反馈：邮箱里邮件都看完了，INBOX 徽章仍显示 22——根因是已读状态「只出不进」：增量同步按 UID 水位只拉新邮件、从不回读服务器 FLAGS，新邮件入库（INSERT OR IGNORE）也不记录 FLAGS，Thunderbird/网页/手机上的已读变化永远到不了本地；徽章取自本地 `is_read=0` 计数（folders.cached_list），故与真实状态脱节。次因：在 Nmail 内读信后，合并的批量已读成功时不刷新 folder-cache，树徽章要等下次同步等事件才动
 - 后端（core/sync.py + core/imap_client.py）：①`_sync_folder` 增量拉取完成后加 FLAGS 对账——`UID SEARCH UNSEEN/FLAGGED` 各一条命令，与本地该文件夹全部行比对，只翻 is_read/starred 有差异的行；SEARCH 失败整段跳过，不影响同步主干 ②`ParsedMessage` 携带 flags，新邮件入库即按服务器 \Seen/\Flagged 初始化 is_read/starred（堵「别处已读后才同步到的新邮件仍显示未读」）

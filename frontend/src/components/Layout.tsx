@@ -1,7 +1,8 @@
-import { BarChart3, FilePenLine, Inbox, Pencil, Settings, Sparkles, SquarePen, X } from 'lucide-react'
+import { BarChart3, FilePenLine, Inbox, Menu, Pencil, Settings, Sparkles, SquarePen, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAIEnabled } from '../api/useAI'
+import { toggleTreeCollapsed, useTreeCollapsed } from '../hooks/useSidebar'
 import { useCompose } from './compose/ComposeContext'
 import ComposeWorkbench from './compose/ComposeWorkbench'
 import NotificationBell from './NotificationBell'
@@ -33,6 +34,17 @@ function WorkspaceTabs() {
   const location = useLocation()
   const navigate = useNavigate()
   const aiEnabled = useAIEnabled()
+  const treeCollapsed = useTreeCollapsed()
+
+  // 汉堡主菜单（Gmail 式，REDESIGN_PLAN §3.2）：切换文件夹树展开/折叠；
+  // 在其他页签点击先跳回邮件基座再切换——侧栏只在基座可见，避免「点了没反应」
+  const onMenuClick = () => {
+    if (location.pathname !== '/') {
+      navigate('/')
+      setActiveTab(null)
+    }
+    toggleTreeCollapsed()
+  }
 
   // 页面标签：经右侧图标按钮打开过即留下，去重；记忆在 localStorage，刷新后仍在
   const [pageTabs, setPageTabs] = useState<string[]>(() => {
@@ -73,9 +85,30 @@ function WorkspaceTabs() {
 
   return (
     <div className="flex shrink-0 items-stretch border-b border-gray-200 bg-gray-100 pl-2 pr-1.5">
-      <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pt-1.5">
-        {/* 应用标识（与浏览器标签页 favicon 同源） */}
-        <img src="/icon-192.png" alt="Nmail" className="mb-1.5 mr-0.5 h-4 w-4 shrink-0 self-center rounded-[4px]" />
+      {/* 品牌区：汉堡（折叠文件夹树）+ 应用标识（与浏览器标签页 favicon 同源），整区垂直居中；点标识回邮件基座 */}
+      <div className="flex shrink-0 items-center gap-1 pr-1.5">
+        <button
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-200/60 hover:text-gray-700"
+          onClick={onMenuClick}
+          title={treeCollapsed ? '展开侧栏' : '折叠侧栏'}
+          aria-label={treeCollapsed ? '展开侧栏' : '折叠侧栏'}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <button
+          className="flex shrink-0 items-center gap-1.5 rounded-lg px-1 py-1 transition-colors hover:bg-gray-200/60"
+          onClick={() => {
+            if (location.pathname !== '/') navigate('/')
+            setActiveTab(null)
+          }}
+          title="回到邮件"
+        >
+          <img src="/icon-192.png" alt="Nmail" className="h-6 w-6 rounded-[6px]" />
+          <span className="t-md font-semibold tracking-tight text-gray-800">Nmail</span>
+        </button>
+      </div>
+      <div className="my-2.5 w-px shrink-0 bg-gray-200" />
+      <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pl-2 pt-1.5">
         <button
           className={tabCls(inboxActive)}
           onClick={() => {
