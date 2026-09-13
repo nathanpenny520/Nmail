@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: OAuth 令牌丢失致标已读静默失败——secrets 写入加锁 + 失败出声 + 丢凭据可见
+## 6d45487 — fix: OAuth 令牌丢失致标已读静默失败——secrets 写入加锁 + 失败出声 + 丢凭据可见
 - 用户反馈：点开一封邮件查看后依然亮着未读——排查定案：4 个 Outlook OAuth 账号的 `oauth_token:*` 已从 secrets.json 物理丢失（`set_secret` 无锁读改写整文件，并发写互相覆盖丢键，secrets.json 停在昨天 17:45 只剩 `account_pwd:1`）；调度器对这四个号以 no_credentials 静默跳过 24 小时（账号状态仍 "ok"）、批量已读在 `load_account` 处失败返回 HTTP 200 `{ok:false, failed:1}`（本地按「服务器成功才动本地」不动，20s 轮询把行翻回未读），前端对 ok:false 无任何提示——用户全程无感。清华账号（密码型）不受影响，昨日的 FLAGS 对账验证即在该账号
 - 后端①（security.py）：`set_secret` 读改写加模块级 `threading.Lock`——同步线程刷新 OAuth 令牌 × API 线程存设置的现实并发不再互相覆盖（原子替换只保「文件不损坏」，不保「键不丢」）
 - 后端②（sync.py）：`start_sync` 对缺凭据的 OAuth 账号置 `auth_error`（"OAuth 授权丢失，请重新授权"）并发一次通知中心消息（沿用状态迁移去重）——不再静默跳过；授权恢复后首次成功同步自动回 `ok`
