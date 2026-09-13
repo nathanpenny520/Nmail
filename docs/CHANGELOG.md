@@ -4,7 +4,7 @@
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
 
-## 待提交 — UI: 设置页内部文档路径改为官网文档链接
+## f209575 — UI: 设置页内部文档路径改为官网文档链接
 - 用户反馈：设置页出现内部仓库路径（API 区「隧道配置示例见 docs/对外API使用指南.md」、OAuth 区「见项目仓库 docs/OAuth2 使用指南.md」）——对普通用户无意义且暴露内部结构
 - 前端（ExtApiSection.tsx / OauthSettings.tsx）：两处内部 .md 路径全部改为官网文档链接（nmail.whizzzest.com/docs/api/、/docs/oauth/），新标签打开，样式沿用站内链接惯例
 - 文档：docs 站 slug 映射（nmail-site/scripts/sync-docs.mjs）确认对应关系 api/oauth

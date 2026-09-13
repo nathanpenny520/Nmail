@@ -37,7 +37,7 @@
 ### S-0913-1524-内部文档路径改官网链接 ✅
 - 目标: 用户反馈设置页暴露内部仓库路径（API 区 docs/对外API使用指南.md、OAuth 区 docs/OAuth2 使用指南.md）——前端全部改为官网文档链接 nmail.whizzzest.com/docs/{api,oauth}/，新标签打开
 - 范围: frontend(components/ExtApiSection.tsx, components/OauthSettings.tsx) + docs(CHANGELOG, SESSIONS)
-- 产出: 提交（待回填哈希）；npm run build（tsc+字号门禁）通过；docs 站 sync-docs.mjs 白名单确认 slug 对应
+- 产出: 提交 f209575；npm run build（tsc+字号门禁）通过；docs 站 sync-docs.mjs 白名单确认 slug 对应
 - 遗留: 无
 - 时间: 2026-09-13 15:24 开工，即日完成
 
