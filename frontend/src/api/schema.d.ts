@@ -1894,6 +1894,8 @@ export interface components {
         AccountPatchIn: {
             /** Password */
             password?: string | null;
+            /** Color */
+            color?: string | null;
             /** Imap Server */
             imap_server?: string | null;
             /** Imap Port */

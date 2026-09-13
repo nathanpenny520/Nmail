@@ -7,8 +7,9 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
-import { useTreeCollapsed } from '../hooks/useSidebar'
 import { appZoom, usePanelWidth } from '../hooks/usePanelWidth'
+import { useTreeCollapsed } from '../hooks/useSidebar'
+import { accountColorCls } from '../utils/accountColor'
 import type { Account, FolderCacheItem } from '../types'
 import ContextMenu, { type ContextMenuItem } from './ContextMenu'
 import { useCompose } from './compose/ComposeContext'
@@ -254,7 +255,7 @@ export default function FolderTree({
   }
 
   // 折叠态（v0.4 汉堡主菜单，Gmail 式）：纯图标 + tooltip，徽章缩成角标圆点，分组标题隐藏；
-  // 账号变首字母头像（状态色角标），点击直达该账号收件箱——文件夹层级收起态不展示，拖拽落点需展开后使用。
+  // 账号变首字母头像（账号色浅底深字 + 状态色角标），点击直达该账号收件箱——文件夹层级收起态不展示，拖拽落点需展开后使用。
   // 两分支根元素同为 fragment、child0 同为 <aside>：React 原地复用 DOM 节点，折叠/展开宽度变化仍走 transition；
   // 展开态 child1 为拖拽分隔条（border-r 移交分隔条，避免双线），折叠态隐藏
   if (collapsed) {
@@ -303,20 +304,23 @@ export default function FolderTree({
 
         <div className="my-2 h-px w-8 shrink-0 bg-gray-200" />
 
-        {accounts.map((a) => (
-          <button
-            key={a.id}
-            className={`relative mb-1 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full t-sm font-medium transition-colors ${
-              isInboxActive(a.id) ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200/70'
-            }`}
-            onClick={() => onSelect({ type: 'inbox', accountId: a.id })}
-            title={`${a.email}（收件箱）${a.status_detail ? `：${a.status_detail}` : ''}`}
-            aria-label={`${a.email} 收件箱`}
-          >
-            {a.email.charAt(0).toUpperCase()}
-            <span className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${statusDotCls(a.status)}`} />
-          </button>
-        ))}
+        {accounts.map((a) => {
+          const colorCls = accountColorCls(a.color)
+          return (
+            <button
+              key={a.id}
+              className={`relative mb-1 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full t-sm font-medium transition-colors ${
+                isInboxActive(a.id) ? colorCls.avatarActive : `${colorCls.avatar} hover:opacity-75`
+              }`}
+              onClick={() => onSelect({ type: 'inbox', accountId: a.id })}
+              title={`${a.email}（收件箱）${a.status_detail ? `：${a.status_detail}` : ''}`}
+              aria-label={`${a.email} 收件箱`}
+            >
+              {a.email.charAt(0).toUpperCase()}
+              <span className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${statusDotCls(a.status)}`} />
+            </button>
+          )
+        })}
       </aside>
       </>
     )
@@ -539,6 +543,7 @@ function AccountBranch({
         >
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </button>
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: account.color }} title="账号标识色" />
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDotCls(account.status)}`} />
         <span className="truncate">{account.email}</span>
       </div>

@@ -116,3 +116,26 @@ def test_list_accounts_echoes_password_plaintext():
     oauth_aid = _oauth_account()
     o_row = next(a for a in client.get("/api/accounts").json()["accounts"] if a["id"] == oauth_aid)
     assert o_row["password"] == ""  # OAuth2 账号无授权码，不误显
+
+
+def test_patch_color_updates_without_connection(monkeypatch):
+    """标识色：调色板内直接落库（不触发试连），调色板外 400 且不改值。"""
+    import app.api.accounts as accounts_api
+
+    def _boom(cfg):  # pragma: no cover — 颜色改动若走到试连即为实现错误
+        raise AssertionError("color 改动不应触发连接测试")
+
+    monkeypatch.setattr(accounts_api.imap_client, "test_connection", _boom)
+
+    aid = _pwd_account()
+    ok = client.patch(f"/api/accounts/{aid}", json={"color": "#f97316"})
+    assert ok.status_code == 200
+    assert database.get_conn().execute(
+        "SELECT color FROM accounts WHERE id = ?", (aid,)
+    ).fetchone()["color"] == "#f97316"
+
+    bad = client.patch(f"/api/accounts/{aid}", json={"color": "#123456"})
+    assert bad.status_code == 400
+    assert database.get_conn().execute(
+        "SELECT color FROM accounts WHERE id = ?", (aid,)
+    ).fetchone()["color"] == "#f97316"

@@ -20,6 +20,7 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 COLOR_PALETTE = [
     "#6366f1", "#0ea5e9", "#10b981", "#f59e0b",
     "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6",
+    "#3b82f6", "#f97316", "#84cc16", "#d946ef",
 ]
 
 
@@ -34,6 +35,7 @@ class AccountIn(BaseModel):
 
 class AccountPatchIn(BaseModel):
     password: str | None = None
+    color: str | None = None  # 账号标识色，须在 COLOR_PALETTE 内；None=不改
     imap_server: str | None = None  # 仅授权码账号可改；服务器变更会清空本地邮件重同步
     imap_port: int | None = None
     smtp_server: str | None = None
@@ -241,6 +243,16 @@ def update_account(account_id: int, payload: AccountPatchIn) -> dict:
         conn.execute(
             "UPDATE accounts SET style_prompt = ? WHERE id = ?",
             (text or None, account_id),
+        )
+        conn.commit()
+
+    if payload.color is not None:
+        # 标识色限定调色板（前端浅底深字映射按枚举建表，任意色无法保证对比度）；无需试连直接落库
+        if payload.color not in COLOR_PALETTE:
+            raise HTTPException(400, "color 需为调色板内取值")
+        conn.execute(
+            "UPDATE accounts SET color = ? WHERE id = ?",
+            (payload.color, account_id),
         )
         conn.commit()
 

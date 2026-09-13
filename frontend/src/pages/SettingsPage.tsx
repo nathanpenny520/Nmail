@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, BarChart3, BookUser, Bot, ChevronLeft, Copy, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Pencil, Plug, Plus, RefreshCw, SlidersHorizontal, Trash2, UserPlus, UsersRound } from 'lucide-react'
+import { BadgeCheck, BarChart3, BookUser, Bot, Check, ChevronLeft, Copy, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Pencil, Plug, Plus, RefreshCw, SlidersHorizontal, Trash2, UserPlus, UsersRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
@@ -8,6 +8,7 @@ import ExtApiSection from '../components/ExtApiSection'
 import { OauthConfigCard, ReauthorizeButton } from '../components/OauthSettings'
 import { useCompose } from '../components/compose/ComposeContext'
 import { backendLocalDate } from '../utils/format'
+import { ACCOUNT_COLOR_PALETTE } from '../utils/accountColor'
 import type { Account, AITestResult, AIProfile, ContactGroup, ContactItem, Settings } from '../types'
 
 const inputClass =
@@ -73,6 +74,7 @@ export default function SettingsPage() {
   const [showNewProfile, setShowNewProfile] = useState(false)
   const [styleOpenId, setStyleOpenId] = useState<number | null>(null)
   const [aiGrantsOpenId, setAiGrantsOpenId] = useState<number | null>(null)
+  const [colorPickerOpenId, setColorPickerOpenId] = useState<number | null>(null)
   const [configOpenId, setConfigOpenId] = useState<number | null>(null)
   const [settingsError, setSettingsError] = useState('')
 
@@ -196,6 +198,16 @@ export default function SettingsPage() {
   const deleteAccountMutation = useMutation({
     mutationFn: (id: number) => api.deleteAccount(id),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['accounts'] }),
+  })
+
+  // 标识色即点即存：色板限定 12 色（见 utils/accountColor.ts），改色联动邮件列表/读信/摘要各处
+  const colorMutation = useMutation({
+    mutationFn: ({ id, color }: { id: number; color: string }) => api.updateAccount(id, { color }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['accounts'] }),
+    onError: (err: Error) => {
+      setAccountMessage(`颜色保存失败：${err.message}`)
+      setTimeout(() => setAccountMessage(null), 6000)
+    },
   })
 
   const usageQuery = useQuery({ queryKey: ['ai-usage'], queryFn: api.aiUsage })
@@ -359,7 +371,39 @@ export default function SettingsPage() {
                     className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3"
                   >
                     <div className="flex items-center gap-3">
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: account.color }} />
+                      <div className="relative shrink-0">
+                        <button
+                          className="block h-4 w-4 cursor-pointer rounded-full ring-offset-2 transition-shadow hover:ring-2 hover:ring-gray-300"
+                          style={{ backgroundColor: account.color }}
+                          title="自定义标识色"
+                          aria-label={`自定义 ${account.email} 的标识色`}
+                          onClick={() => setColorPickerOpenId(colorPickerOpenId === account.id ? null : account.id)}
+                        />
+                        {colorPickerOpenId === account.id && (
+                          <div className="absolute -top-1 left-6 z-20 grid w-[172px] grid-cols-4 gap-1.5 rounded-xl border border-gray-200 bg-white p-2 shadow-lg">
+                            {ACCOUNT_COLOR_PALETTE.map((c) => {
+                              const usedBy = accounts.find((x) => x.id !== account.id && x.color === c)
+                              return (
+                                <button
+                                  key={c}
+                                  className={`relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-transform hover:scale-110 ${
+                                    account.color === c ? 'ring-2 ring-gray-900 ring-offset-1' : ''
+                                  } ${usedBy ? 'opacity-40' : ''}`}
+                                  style={{ backgroundColor: c }}
+                                  title={usedBy ? `已被 ${usedBy.email} 使用，仍可选用` : c}
+                                  aria-label={`标识色 ${c}`}
+                                  onClick={() => {
+                                    if (c !== account.color) colorMutation.mutate({ id: account.id, color: c })
+                                    setColorPickerOpenId(null)
+                                  }}
+                                >
+                                  {account.color === c && <Check className="h-3.5 w-3.5 text-white drop-shadow" />}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate t-md font-medium text-gray-800">{account.email}</div>
                         <div className="mt-0.5 t-sm">

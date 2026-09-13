@@ -405,6 +405,7 @@ export const api = {
     request<{ ok: boolean }>(`/api/sender-lists/${id}`, { method: 'DELETE' }),
   updateAccount: (id: number, payload: {
     password?: string
+    color?: string
     imap_server?: string
     imap_port?: number
     smtp_server?: string
