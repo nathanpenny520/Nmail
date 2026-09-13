@@ -11,7 +11,7 @@
 - 测试：pytest 账号 API 4 全绿（+1：色板内落库且不触发试连、色板外 400 且不改值）；ruff + npm run build 通过
 - 验证：8720 重启后 curl 实测 PATCH 往返与非法值 400（np25 真实账号，改后复原）；chrome-devtools 实测取色 popover 交互、点色即存即变、折叠头像五账号五色染色、激活档加深
 
-## 待提交 — UI: 固定分栏全部可拖拽 + 页签拖拽排序（浏览器式）
+## 36583ad — UI: 固定分栏全部可拖拽 + 页签拖拽排序（浏览器式）
 - 用户反馈：树|列表、阅读区|AI 助手、草稿分类列三条竖线都不能拖，要求「浏览器的思想」——竖线可拖、页签也可拖
 - 分栏基建（新增）：`hooks/usePanelWidth`（localStorage 记忆 + clamp + persist/reset；widthRef 在 setWidth 内同步更新——React 18 连续事件下 mousemove 紧跟 mouseup 时渲染可能未提交，persist 不丢最后一步）+ `components/SplitDivider`（bar=1px 视觉线±6px 热区 / edge=浮层边缘透明热区两形态，hover/拖拽中靛蓝高亮，双击复位，全局光标与禁选中沿用 body.dragging-col）；列表|阅读区原分隔条重构到同一组件（行为不变，热区更明显）
 - 四处固定分栏接线：文件夹树 160–360px（默认 192=原 w-48；折叠图标栏不参与；展开态根元素改 fragment、child0 仍为 aside 保 DOM 复用与折叠过渡动画）、AI 助手浮层 320–640（默认 384=原 w-96，edge 热区拖左缘）、草稿分类列 240–440（默认 320=原 w-80）、AI 总管家会话栏 180–360（默认 224=原 w-56）
