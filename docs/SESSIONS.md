@@ -18,6 +18,7 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+
 ### S-0913-1616-账号标识色自定义 ✅
 - 目标: 用户反馈颜色是区分邮件/账号的重要手段但设置页不可自定义、折叠侧栏首字母头像不染色（先方案后动手，12 色板 + 展开态加色点已确认）——PATCH 开放 color（调色板校验，8→12 色）、设置页账号卡取色 popover 即点即存、折叠头像账号色浅底深字（激活加深一档）、展开态账号行状态点旁加标识色点
 - 范围: backend(app/api/accounts.py, tests/test_accounts_api.py) + frontend(utils/accountColor.ts 新增, api/client.ts, pages/SettingsPage.tsx, components/FolderTree.tsx, openapi.json+schema.d.ts 快照) + docs(CHANGELOG, SESSIONS)

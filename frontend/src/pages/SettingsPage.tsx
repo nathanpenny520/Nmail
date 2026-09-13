@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BadgeCheck, BarChart3, BookUser, Bot, Check, ChevronLeft, Copy, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Pencil, Plug, Plus, RefreshCw, SlidersHorizontal, Trash2, UserPlus, UsersRound } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
@@ -75,6 +75,26 @@ export default function SettingsPage() {
   const [styleOpenId, setStyleOpenId] = useState<number | null>(null)
   const [aiGrantsOpenId, setAiGrantsOpenId] = useState<number | null>(null)
   const [colorPickerOpenId, setColorPickerOpenId] = useState<number | null>(null)
+  const colorPickerRef = useRef<HTMLDivElement>(null)
+
+  // 取色 popover 点外/Esc 关闭（浮层基本 UX）；监听 mousedown 以便先于其他点击生效
+  useEffect(() => {
+    if (colorPickerOpenId == null) return
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setColorPickerOpenId(null)
+      }
+    }
+    const onDocKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setColorPickerOpenId(null)
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    document.addEventListener('keydown', onDocKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown)
+      document.removeEventListener('keydown', onDocKeyDown)
+    }
+  }, [colorPickerOpenId])
   const [configOpenId, setConfigOpenId] = useState<number | null>(null)
   const [settingsError, setSettingsError] = useState('')
 
@@ -371,7 +391,7 @@ export default function SettingsPage() {
                     className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="relative shrink-0">
+                      <div className="relative shrink-0" ref={colorPickerOpenId === account.id ? colorPickerRef : undefined}>
                         <button
                           className="block h-4 w-4 cursor-pointer rounded-full ring-offset-2 transition-shadow hover:ring-2 hover:ring-gray-300"
                           style={{ backgroundColor: account.color }}
