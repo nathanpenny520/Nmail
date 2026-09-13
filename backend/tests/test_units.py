@@ -1,8 +1,13 @@
-"""零成本纯函数单元：发件人名单匹配 / 回复主题 / 服务商探测 XML / 更新比较。"""
+"""零成本纯函数单元：发件人名单匹配 / 回复主题 / 服务商探测 XML / 更新比较 / 版本解析。"""
 from __future__ import annotations
 
+import sys
+import tomllib
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
+from app import config
+from app.config import APP_VERSION, _version_from_pyproject
 from app.core.imap_client import reply_subject
 from app.core.pipeline import match_sender_list
 from app.core.providers import _server_from_xml
@@ -92,3 +97,34 @@ def test_is_newer_semver_compare():
 def test_is_newer_handles_garbage():
     assert _is_newer(None, "0.1.0") is False
     assert _is_newer("not-a-version", "0.1.0") is False
+
+
+# ── config 版本解析 ─────────────────────────────────────────
+# 契约：pyproject.toml 是版本唯一来源（T5）——源码读仓库根、冻结读随包资源、wheel 回退包元数据
+
+
+def test_app_version_matches_pyproject():
+    root = Path(__file__).resolve().parents[2]  # tests/ → backend/ → 仓库根
+    with (root / "pyproject.toml").open("rb") as fp:
+        assert APP_VERSION == tomllib.load(fp)["project"]["version"]
+
+
+def test_version_from_pyproject(tmp_path):
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "9.9.9"\n')
+    assert _version_from_pyproject(tmp_path) == "9.9.9"
+    assert _version_from_pyproject(tmp_path / "nope") is None  # 文件缺失 → None
+    (tmp_path / "pyproject.toml").write_text("not toml [")
+    assert _version_from_pyproject(tmp_path) is None  # 解析失败 → None
+
+
+def test_app_version_frozen_reads_bundled_pyproject(tmp_path, monkeypatch):
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "8.8.8"\n')
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    assert config._app_version() == "8.8.8"  # 冻结环境读 spec 打入的随包副本
+
+
+def test_app_version_falls_back_to_metadata(monkeypatch):
+    monkeypatch.setattr(config, "_version_from_pyproject", lambda base: None)
+    monkeypatch.setattr(config, "_metadata_version", lambda name: "7.7.7")
+    assert config._app_version() == "7.7.7"  # site-packages 旁无 pyproject → 包元数据

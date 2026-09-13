@@ -18,6 +18,12 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1347-版本号解析修复 🔄
+- 目标: 用户反馈 `.venv/bin/python run.py` 源码直跑，关于页仍显示「当前 v0.2.0」并提示升级 v0.3.0——排查版本号管理并修复
+- 范围: backend(app/config.py, tests/test_units.py) + nmail.spec + pyproject.toml/scripts/release.sh 注释 + docs(ARCHITECTURE, RELEASE, CHANGELOG, SESSIONS)
+- 状态: 根因已定位（venv 无 nmail-app 包元数据 → 回退硬编码常量 0.2.0 已过期；冻结二进制同样无元数据，v0.3.0 资产自报 0.2.0），改为主解析链（元数据 → tomllib 读 pyproject → 兜底）进行中
+- 时间: 2026-09-13 13:47 开工
+
 ### S-0913-1341-AIKey默认遮蔽 ✅
 - 目标: 用户反馈 AI 配置卡片 API Key 默认明文展示不妥——改默认遮蔽（保留小眼睛显隐；明文回显语义不变，仅改显隐默认值）
 - 范围: frontend(SettingsPage ProfileFields) + CLAUDE.md + docs(CHANGELOG, SESSIONS)

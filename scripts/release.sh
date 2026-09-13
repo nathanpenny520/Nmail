@@ -41,7 +41,7 @@ gh auth status >/dev/null 2>&1 || die "gh 未登录：gh auth login"
 info "预检通过：版本 ${VERSION}（${TAG}）"
 
 # ── 1. 改版本号 ──
-# 版本唯一来源是 pyproject.toml；config.py 自 0.2.0 起 importlib.metadata 动态读取，无需改
+# 版本唯一来源是 pyproject.toml；config.py 运行时解析本文件（源码/冻结读文件，wheel 读元数据），无需改 config.py
 sed -i.bak "s/^version = \"[0-9][0-9.]*\"/version = \"$VERSION\"/" pyproject.toml
 rm -f pyproject.toml.bak
 grep -q "version = \"$VERSION\"" pyproject.toml || die "pyproject.toml 版本号替换失败"

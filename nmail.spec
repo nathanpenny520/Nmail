@@ -17,7 +17,10 @@ _ICON = {"win32": "nmail.ico", "darwin": "nmail.icns"}.get(sys.platform)
 _icon_path = ROOT / "assets" / _ICON if _ICON else None
 ICON = str(_icon_path) if _icon_path and _icon_path.exists() else None
 
-datas = [(str(STATIC), "app/static")] if STATIC.is_dir() else []
+# pyproject.toml 是版本唯一来源：冻结环境无包元数据，config._app_version 读随包副本解析版本
+datas = [(str(ROOT / "pyproject.toml"), ".")]
+if STATIC.is_dir():
+    datas.append((str(STATIC), "app/static"))
 
 a = Analysis(
     [str(ROOT / "backend" / "app" / "cli.py")],

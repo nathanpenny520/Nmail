@@ -7,20 +7,45 @@ from __future__ import annotations
 
 import os
 import sys
+import tomllib
+from importlib.metadata import PackageNotFoundError, version as _metadata_version
 from pathlib import Path
 
 from platformdirs import user_data_dir
 
 APP_NAME = "Nmail"
 
-# 版本号单一来源是 pyproject.toml（T5）：已安装（wheel/uvx/editable）时读包元数据；
-# 源码直跑或冻结环境无元数据时回退常量——改版本时只需改 pyproject，此处随动。
-try:
-    from importlib.metadata import PackageNotFoundError, version
 
-    APP_VERSION = version("nmail-app")
-except PackageNotFoundError:
-    APP_VERSION = "0.2.0"
+def _version_from_pyproject(base: Path) -> str | None:
+    """读 pyproject.toml 的 [project].version；文件缺失或解析失败返回 None。"""
+    try:
+        with (base / "pyproject.toml").open("rb") as fp:
+            return tomllib.load(fp)["project"]["version"]
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        return None
+
+
+def _app_version() -> str:
+    """版本号唯一来源是 pyproject.toml（T5）。解析顺序：
+
+    ① 源码直跑/可编辑安装：读仓库根 pyproject.toml，随改动即时生效；
+    ② PyInstaller 冻结包：nmail.spec 已把 pyproject.toml 打入随包资源，读解包目录；
+    ③ wheel/uvx 安装（site-packages 旁无 pyproject）：读包元数据；
+    ④ 兜底 "0.0.0"——以上全失败（异常环境）时的故意异常值，便于暴露问题，不随发版维护。
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", None) or Path(sys.executable).parent)
+    else:
+        base = Path(__file__).resolve().parents[2]
+    if v := _version_from_pyproject(base):
+        return v
+    try:
+        return _metadata_version("nmail-app")
+    except PackageNotFoundError:
+        return "0.0.0"
+
+
+APP_VERSION = _app_version()
 
 
 def get_data_dir() -> Path:

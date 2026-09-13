@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 版本号解析链——源码直跑不再依赖手工同步的回退常量
+- 用户反馈：`.venv/bin/python run.py` 源码直跑，关于页显示「当前 v0.2.0」并提示升级 v0.3.0——排查发现该 venv 从未 `pip install -e .`，`importlib.metadata` 读不到 `nmail-app` 元数据，回退到 config.py 硬编码常量 `APP_VERSION = "0.2.0"`（pyproject 已 0.3.0，注释要求「随动」但实际已漂移）；「单一来源」名存实亡
+- 同类隐患更重：release CI 用 `pip install -r requirements.txt + pyinstaller nmail.spec` 打包，冻结环境同样无包元数据 → **已发布的 v0.3.0 三平台二进制实际自报 v0.2.0**，会一直提示用户「升级到 0.3.0」（PyPI/uvx/wheel 用户不受影响）
+- 修：config.py 改为 `_app_version()` 解析链——① 源码/可编辑：tomllib 读仓库根 pyproject.toml（改版本即时生效，pip install -e 的元数据快照过期问题一并消除）→ ② 冻结：读 nmail.spec 打入的随包 pyproject.toml 副本 → ③ wheel/uvx：读包元数据 → ④ 兜底 `"0.0.0"`（故意异常值便于暴露，不随发版维护）；release.sh「无需改 config.py」由隐患变事实
+- 附带：nmail.spec datas 加 pyproject.toml；pyproject/release.sh/RELEASE.md/ARCHITECTURE.md 过期注释同步更正；新增 4 单测（版本与 pyproject 一致 / 解析器缺失与坏文件 / 冻结读随包副本 / 元数据回退）
+- 验证：pytest 145 全绿（+4）、ruff 通过；源码直跑与冻结模拟（sys.frozen+_MEIPASS）实测解析 0.3.0；隔离实例（临时 NMAIL_DATA_DIR，8791 端口）/api/health 报 0.3.0
+- 遗留：已发出的 v0.3.0 二进制无法在原处修复，随下一版本自愈；源码直跑的常驻进程需重启才见新版本号
+
 ## f2609c8 — UI: AI 配置 API Key 输入框默认遮蔽
 - 用户反馈：AI 配置卡片里 API Key 默认明文展示不妥，应默认遮蔽——此前「默认明文」是 0911 反馈「Key 刷新后不可见」时一并改的（把「明文回显」与「默认可见」绑在了一起）；本次只改显隐默认值，回显语义不变
 - 改：SettingsPage `ProfileFields`（编辑卡与新建卡共用）`keyVisible` 初始值 true→false，输入框默认 `type=password`，小眼睛一键显隐不变；保存/测试连接读取的是 state 里的真实值，遮蔽不影响任何行为
