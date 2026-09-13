@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import { api } from './api/client'
 import { ComposeProvider } from './components/compose/ComposeContext'
 import DigestPage from './pages/DigestPage'
+import DraftsHubPage from './pages/DraftsHubPage'
 import MailPage from './pages/MailPage'
 import ManagerPage from './pages/ManagerPage'
 import SettingsPage from './pages/SettingsPage'
@@ -28,9 +29,9 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<MailPage />} />
-            {/* v0.4 旧路由重定向：待审草稿/草稿箱并入统一「草稿」视图（P3），归档并入树（P2） */}
-            <Route path="/drafts" element={<Navigate to="/?view=drafts" replace />} />
-            <Route path="/mydrafts" element={<Navigate to="/?view=drafts" replace />} />
+            {/* 草稿为页面页签（v0.4.x 修订）；/mydrafts 旧路由并入，/?view=drafts 旧深链在 MailPage 兜底重定向 */}
+            <Route path="/drafts" element={<DraftsHubPage />} />
+            <Route path="/mydrafts" element={<Navigate to="/drafts" replace />} />
             {/* v0.4 §4.6：本地归档视图退役，Archived 在各账号文件夹树中 */}
             <Route path="/archived" element={<Navigate to="/" replace />} />
             <Route path="/digest" element={<DigestPage />} />

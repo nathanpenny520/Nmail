@@ -1,4 +1,4 @@
-import { BarChart3, Inbox, Pencil, Plus, Settings, Sparkles, X } from 'lucide-react'
+import { BarChart3, FilePenLine, Inbox, Pencil, Plus, Settings, Sparkles, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAIEnabled } from '../api/useAI'
@@ -18,6 +18,7 @@ const iconBtnCls = (active: boolean) =>
  * 写信页签由列表操作或 ＋ 按钮产生。
  */
 const PAGE_TABS: Record<string, { label: string; icon: typeof Inbox }> = {
+  '/drafts': { label: '草稿', icon: FilePenLine },
   '/digest': { label: '每日摘要', icon: BarChart3 },
   '/assistant': { label: 'AI 总管家', icon: Sparkles },
   '/settings': { label: '设置', icon: Settings },
@@ -59,9 +60,10 @@ function WorkspaceTabs() {
   }
 
   const inboxActive = activeTabId === null && location.pathname === '/'
-  // 统一宽度：所有页签同宽（浏览器式），标题超长截断（审核意见：长短不一观感差）
+  // 统一宽度：所有页签同宽（浏览器式），标题超长截断（审核意见：长短不一观感差）；
+  // 2026-09-13 用户反馈 w-44 放不下几个 → 缩至 w-36 并收紧内距，固定标签完整显示、长标题照常截断
   const tabCls = (active: boolean) =>
-    `flex w-44 shrink-0 items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 t-sm transition-colors ${
+    `flex w-36 shrink-0 items-center gap-1 rounded-t-lg border border-b-0 px-2.5 py-1.5 t-sm transition-colors ${
       active
         ? 'border-gray-200 bg-white font-medium text-indigo-700'
         : 'border-transparent text-gray-500 hover:bg-gray-200/60'

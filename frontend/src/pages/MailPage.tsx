@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive } from 'lucide-react'
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { useJob } from '../api/useJob'
 import { useFlash } from '../hooks/useFlash'
@@ -9,27 +9,17 @@ import type { EmailSummary } from '../types'
 import FolderTree, { type TreeSelection } from '../components/FolderTree'
 import MailBrowser from '../components/MailBrowser'
 import { Modal } from '../components/compose/ui'
-import DraftsHubPage from './DraftsHubPage'
-
-function selectionFromParams(view: string | null): TreeSelection {
-  switch (view) {
-    case 'drafts':
-      return { type: 'drafts' }
-    default:
-      return { type: 'inbox', accountId: null }
-  }
-}
 
 /**
  * 邮件基座页（v0.4，REDESIGN_PLAN §3/§4）：左侧文件夹树 + 内容区。
- * - 视图初值取 URL（承接旧路由重定向深链），之后由树驱动；
+ * - 视图初值固定聚合收件箱（旧 /?view=drafts 深链就地重定向到草稿页签），之后由树驱动；
  * - 选中服务器文件夹 = 按需同步（后台轮询只拉 INBOX）；
  * - 本地归档存量一次性迁移弹窗（§4.6：归档语义改服务器移动）。
  */
 export default function MailPage() {
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
-  const [sel, setSel] = useState<TreeSelection>(() => selectionFromParams(searchParams.get('view')))
+  const [sel, setSel] = useState<TreeSelection>({ type: 'inbox', accountId: null })
 
   // 选中服务器文件夹 → 触发按需同步（先出本地缓存，增量补齐后列表自动刷新）
   const select = (next: TreeSelection) => {
@@ -100,6 +90,9 @@ export default function MailPage() {
     dropMutation.mutate({ ids, folder })
   }
 
+  // 草稿页签化（v0.4.x）：旧深链 /?view=drafts 就地转跳草稿页签（hooks 须先全部执行，勿提前 return）
+  if (searchParams.get('view') === 'drafts') return <Navigate to="/drafts" replace />
+
   return (
     <div className="flex h-full min-w-0">
       <FolderTree selection={sel} onSelect={select} onDropEmails={onDropEmails} />
@@ -110,7 +103,6 @@ export default function MailPage() {
         {sel.type === 'folder' && (
           <MailBrowser key={`folder-${sel.accountId}-${sel.name}`} initialAccountId={sel.accountId} initialFolder={sel.name} />
         )}
-        {sel.type === 'drafts' && <DraftsHubPage />}
       </div>
       {(moveJob?.status === 'running' || moveNote) && (
         <div className="pointer-events-none fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-indigo-200 bg-white px-4 py-1.5 t-sm text-indigo-600 shadow-lg">

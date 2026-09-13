@@ -12,11 +12,10 @@ import ContextMenu, { type ContextMenuItem } from './ContextMenu'
 import { useCompose } from './compose/ComposeContext'
 import { Modal } from './compose/ui'
 
-/** 邮件基座的树选中项（v0.4：智能视图 + 账号收件箱 + 服务器文件夹）。 */
+/** 邮件基座的树选中项（v0.4：智能视图 + 账号收件箱 + 服务器文件夹；草稿升级为页面页签后不在树选中态内）。 */
 export type TreeSelection =
   | { type: 'inbox'; accountId: number | null }
   | { type: 'folder'; accountId: number; name: string }
-  | { type: 'drafts' }
 
 const SPECIAL_META: Record<string, { icon: typeof Inbox }> = {
   sent: { icon: Send },
@@ -121,12 +120,7 @@ export default function FolderTree({
     localStorage.setItem('nmail_tree_expanded', JSON.stringify(expanded))
   }, [expanded])
   useEffect(() => {
-    const id =
-      selection.type === 'folder'
-        ? selection.accountId
-        : selection.type === 'inbox'
-          ? selection.accountId
-          : null
+    const id = selection.accountId
     if (id != null) setExpanded((prev) => (prev.includes(id) ? prev : [...prev, id]))
   }, [selection])
 
@@ -245,8 +239,8 @@ export default function FolderTree({
         <Inbox className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">聚合收件箱</span>
       </button>
-      {/* v0.4 P3：待审草稿+草稿箱合并为「草稿」单一视图（AI 停用时手写稿仍可见） */}
-      <button className={rowCls(selection.type === 'drafts')} onClick={() => onSelect({ type: 'drafts' })}>
+      {/* v0.4 P3：待审草稿+草稿箱合并为「草稿」单一视图（AI 停用时手写稿仍可见）；v0.4.x 升级为页面页签，激活时树隐藏（同 AI 总管家） */}
+      <button className={rowCls(false)} onClick={() => openPage('/drafts')}>
         <FilePenLine className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">草稿</span>
         {pendingDraftCount > 0 && (

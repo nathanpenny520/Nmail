@@ -79,7 +79,7 @@ export default function NotificationBell() {
     const ref = n.ref_id
     let target: string | null = null
     if (n.type === 'ai_draft' && ref) target = `/?focus=${ref}`
-    else if (n.type === 'ai_draft_summary') target = '/?view=drafts'
+    else if (n.type === 'ai_draft_summary') target = '/drafts'
     else if (n.type === 'digest') target = '/digest'
     else if (n.type === 'account_error') target = '/settings'
     if (target) {

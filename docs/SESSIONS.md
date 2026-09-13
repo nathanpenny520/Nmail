@@ -18,6 +18,11 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1421-草稿页签化
+- 目标: 用户反馈两点——①树「草稿」点击不出页签不合理（同列的 AI 总管家/每日摘要都开页签）：草稿升级为页面页签（PAGE_TABS 机制，`/drafts` 真实路由，激活时树隐藏与其他页面一致，旧深链 `/?view=drafts` 兜底重定向）②页签 w-44 过宽放不下几个：w-44→w-36 + px/gap 收紧，长标题照常 truncate 不溢出
+- 范围: frontend(App, Layout, MailPage, FolderTree, NotificationBell, EmailReader) + docs(REDESIGN_PLAN §3.2–3.4/§5.1 修订, CHANGELOG, SESSIONS)
+- 时间: 2026-09-13 14:21 开工
+
 ### S-0913-1500-代理状态实时化与删手动地址 ✅
 - 目标: 用户反馈两点——①状态行"当前直连"疑似写死，要求开了代理能实时体现（实为每次 GET 实时读系统配置，但页面不自动刷新；加 3s 轮询的独立状态查询）②彻底删除「手动指定代理地址」设置（前后端/测试/文档全移除，地址仅来自系统代理）
 - 范围: backend(core/netproxy.py, api/settings.py) + frontend(SettingsPage, types) + openapi 快照再生 + tests(test_netproxy) + docs(ARCHITECTURE, 使用指南, FAQ, OAuth2 使用指南, CHANGELOG, SESSIONS)

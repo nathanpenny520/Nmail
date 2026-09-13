@@ -52,7 +52,7 @@ export default function EmailReader({
       api.regenerateDraftForEmail(detail.id, draftInstr.trim() || undefined),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
-      navigate('/?view=drafts')
+      navigate('/drafts')
     },
     onError: (err: Error) => {
       setListMessage(`拟稿失败：${err.message}`)

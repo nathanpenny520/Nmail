@@ -12,6 +12,13 @@
 - 遗留：代理工具不开「系统代理」模式时 Nmail 感知不到（与浏览器一致），文档已写明；真实 Gmail 端到端待用户验证
 
 
+## 待提交 — UX: 树「草稿」升级为页面页签 + 页签缩窄
+- 用户反馈：①点树「智能视图 ▸ 草稿」不出独立页签，不合理——同列的 AI 总管家/每日摘要都会开页签；②页签太宽（w-44=176px），一排放不下几个
+- 前端（页签化）：`/drafts` 从重定向改为真实路由渲染 DraftsHubPage，纳入 PAGE_TABS 机制（点开即留、去重、可关、localStorage 记忆；AI 停用时手写稿仍可用，不属 AI-only）；树「草稿」改走 openPage，页签激活时树隐藏（与其他页面一致）；`TreeSelection` 删 drafts 分支；旧深链 `/?view=drafts` 在 MailPage 就地重定向兜底，`/mydrafts` 改指 `/drafts`；通知铃「草稿汇总」与阅读器「拟稿完成跳转」两处深链同步改
+- 前端（缩窄）：页签统一宽度 w-44→w-36（144px）、px-3→px-2.5、gap-1.5→gap-1——文字区约 86px，「每日摘要」「AI 总管家」等固定标签完整显示，写信页签长标题照常 truncate 不溢出；「所有页签统一宽度」原则不变
+- 文档：REDESIGN_PLAN §3.2/§3.3/§3.4/§5.1 同步修订
+- 验证：npm run build（tsc+字号门禁）通过；curl 实测 /drafts SPA 兜底 200；浏览器走查因 chrome-devtools 被并行会话占用未跑，待用户强刷 8720 走查
+
 ## 3c64111 — fix: 代理改「跟随系统、零开关」——撤掉内部总开关按钮
 - 用户反馈（对 182f934 的纠正）：设置页仍有「已关闭」代理开关——「浏览器难道会有这样的代理开关按钮吗？」正常软件是系统有代理就自动走、没有就直连，内部零开关；上一轮把实现细节（Python 不会自动认系统代理）漏成了一颗要用户理解的开关，本质还是内部设置
 - 后端：netproxy 撤总开关——`effective_proxy_url()` = 手动地址（`network_proxy`）→ 系统探测（urllib.getproxies），没有即直连，无任何门控；settings API 移除 `network_proxy_enabled`，GET 增只读 `effective_proxy`（实际生效通道，与 `detected_proxy` 一起供状态行展示）
