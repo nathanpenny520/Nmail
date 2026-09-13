@@ -18,6 +18,13 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1520-版本口径核对 ✅
+- 目标: 用户核对 nmail-site 与本地开发是否统一（功能页标「v0.4 主线能力」而实际最新发布 v0.3.0）——功能页 12 项能力逐条对照代码与 v0.3.0 tag 全部属实，属版本标注错位：v0.4 为改版计划代号，改版主体已随 v0.3.0 发布
+- 范围: 主仓 docs(PRODUCT_PLAN.md, OAuth2 使用指南.md, 对外API使用指南.md)；官网另提交（features.astro, projects/nmail.md, releases.ts + 官网 CHANGELOG）
+- 产出: 主仓 5b413cf；官网 ce8f2a0（已 push，自动部署）；官网 npm run build 通过，dist 逐处 grep 验证（功能页零 v0.4 残留，/docs plan/oauth/api 三镜像已跟上）
+- 遗留: ①README「进度改 v0.4 推进中」（8823d45，并行会话所改）未动——同一口径，若 v0.4.0 近期不发版建议下轮统一 ②功能页「收件人白名单」实为「收件人 ∈ 通讯录∪历史往来」的近似表述，经核对保留
+- 时间: 2026-09-13 15:20 开工，即日完成
+
 ### S-0913-1505-OAuth令牌丢失修复
 - 目标: 用户反馈「点开邮件依然显示未读」——排查定案：4 个 Outlook OAuth 账号的 `oauth_token:*` 已从 secrets.json 物理丢失（security.py set_secret 无锁读改写，并发写互相覆盖丢键，昨天 17:45 的写入痕迹），调度器以 no_credentials 静默跳过 24h（状态仍 ok）、批量已读写服务器失败本地不动且前端 200 静默无提示。修复：①set_secret 加进程级锁堵丢键窗口 ②批量已读 ok:false/failed>0 时前端出提示 ③start_sync 对无令牌 OAuth 账号置 auth_error+通知（不再静默）④用户需对 4 个 Outlook 账号各重新授权一次（refresh_token 不可恢复）
 - 范围: backend(app/security.py, core/sync.py) + frontend(MailBrowser.tsx) + docs(ARCHITECTURE, CHANGELOG, SESSIONS)
