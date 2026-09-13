@@ -18,12 +18,6 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
-### S-0913-1504-新用户初始化与字号
-- 目标: 用户定版新用户初始化——①页签栏初始化只有「邮件」：页面页签 localStorage→sessionStorage（应用内刷新保留、关闭浏览器标签页/退出应用归零，浏览器行为）②默认设置：轮询 1 分钟、摘要 07:00、界面字号大、通讯录自动采集关（改 DEFAULT_SETTINGS，仅影响新装用户）③正文字号与界面字号解耦：HtmlMail 沙箱 zoom 除以界面档位（原先相乘，「都调小」正文仅 0.72）
-- 范围: backend(api/settings.py) + frontend(components/Layout.tsx〔仅页签存储段，与品牌区会话不同区域〕, components/HtmlMail.tsx, pages/SettingsPage.tsx) + docs(REDESIGN_PLAN §3.2, CHANGELOG, SESSIONS)
-- 时间: 2026-09-13 15:04 开工
-
-
 ### S-0913-1505-OAuth令牌丢失修复
 - 目标: 用户反馈「点开邮件依然显示未读」——排查定案：4 个 Outlook OAuth 账号的 `oauth_token:*` 已从 secrets.json 物理丢失（security.py set_secret 无锁读改写，并发写互相覆盖丢键，昨天 17:45 的写入痕迹），调度器以 no_credentials 静默跳过 24h（状态仍 ok）、批量已读写服务器失败本地不动且前端 200 静默无提示。修复：①set_secret 加进程级锁堵丢键窗口 ②批量已读 ok:false/failed>0 时前端出提示 ③start_sync 对无令牌 OAuth 账号置 auth_error+通知（不再静默）④用户需对 4 个 Outlook 账号各重新授权一次（refresh_token 不可恢复）
 - 范围: backend(app/security.py, core/sync.py) + frontend(MailBrowser.tsx) + docs(ARCHITECTURE, CHANGELOG, SESSIONS)
@@ -345,6 +339,15 @@
 - 时间: 2026-09-11 13:35 完成
 
 ## 已完成
+
+### S-0913-1504-新用户初始化与字号 ✅
+- 目标: 用户定版新用户初始化——①页签栏初始化只有「邮件」：页面页签 localStorage→sessionStorage（应用内刷新保留、关闭浏览器标签页/退出应用归零，浏览器行为）②默认设置：轮询 1 分钟、摘要 07:00、界面字号大、通讯录自动采集关（改 DEFAULT_SETTINGS，仅影响新装用户）③正文字号与界面字号解耦：HtmlMail 沙箱 zoom 除以界面档位（原先相乘，「都调小」正文仅 0.72）
+- 范围: backend(api/settings.py) + frontend(components/Layout.tsx〔仅页签存储段，与品牌区会话不同区域〕, components/HtmlMail.tsx, pages/SettingsPage.tsx) + docs(REDESIGN_PLAN §3.2, CHANGELOG, SESSIONS)
+- 产出: 提交 213eb49；pytest 149 全绿、ruff + npm build 通过；隔离 NMAIL_DATA_DIR 新库四项默认值实测（轮询 1 分钟/摘要 07:00/界面字号 large/通讯录自动采集关）；8720 重启后 chrome-devtools 走查——新会话页签栏仅「邮件」、开设置后刷新页签保留、关浏览器标签页重开归零；字号解耦实测 large×standard 注入 zoom=1/1.12、视觉缩放恰为 1（正文恒原大）
+- 遗留: 紧凑×小档组合与实测组合同代码路径（同一公式），未逐一走查；并行 OAuth 会话工作树里 CHANGELOG/SESSIONS 尚有「待提交」形态 WIP（其回填后恢复似将标题退回），已原样保留、由该会话对照 6d45487/ba9982e 理顺
+- 时间: 2026-09-13 15:04 开工，即日完成
+
+
 
 ### S-0911-1718-提升计划M4
 - 目标: 执行 IMPROVEMENT_PLAN M4 护栏与前端提效——T2 ruff 扩规则、T5 版本号、T1 pytest、T3 CI、3.7b 公共件归拢、3.7a 类型生成基建
