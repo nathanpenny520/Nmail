@@ -31,7 +31,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `main.py` | 入口、lifespan（迁移+调度器启停）、SPAStaticFiles 回退、本机来源校验中间件（`/api/ext/*` 豁免改持 API Key + ext 调用日志） | 路由先于静态挂载注册 |
 | `api/deps.py` | API 层公共错误翻译 | `mail_error_to_http`（MailError→4xx/502 翻译表）、`ai_config_or_400`（AI 未配置/停用→400）、`ai_result_or_http`（AI 调用统一 400/502）——端点零样板 |
 | `api/system.py` | `/api/health`、`/api/update-check`（24h 节流，force 可立即检查） | — |
-| `api/settings.py` | 通用设置 KV 读写 + AI 端点测试 | 含 `ui_font/body_font` 档位校验、`network_proxy` 手动代理地址即时校验；GET 附带只读 `detected_proxy`（系统代理探测）与 `effective_proxy`（实际生效通道）供设置页状态行展示；AI 配置已移至 profiles；`/api/ai/test` 字段省略时回退激活档案 |
+| `api/settings.py` | 通用设置 KV 读写 + AI 端点测试 | 含 `ui_font/body_font` 档位校验；GET 附带只读 `detected_proxy`（系统代理探测）与 `effective_proxy`（实际生效通道，前端 3s 轮询实时展示）；AI 配置已移至 profiles；`/api/ai/test` 字段省略时回退激活档案 |
 | `api/accounts.py` | 账号 CRUD/测试/探测/后台同步触发/服务商预设/文风提示词 | 授权码存 `secrets.json`（key=`account_pwd:{id}`）；`POST /accounts/probe` 未收录域名自动探测；代理跟随系统自动生效（`core/netproxy`，无账号级字段无开关）；OAuth 账号拒绝改密（400 指引重新授权）、删除账号时一并清 OAuth 令牌与 folders 缓存 ；列表/详情回传 `password` 明文（授权码所见即所存，同 AI key；仅本机 API——对外 ext 有独立窄 DTO 不含密码） |
 | `api/folders.py` | 文件夹：缓存列表/强制刷新/创建/重命名/删除（v0.4 P2，自 accounts.py 迁入并扩展） | 树数据源走 folders 表缓存（空/refresh=1 才连服务器 LIST）；重命名/删除的文件夹名走查询参数（名内含分隔符）；系统文件夹（INBOX+SPECIAL-USE 识别）不可改删（`folder_guard`）；RENAME 本地缓存/邮件/断点跟随（UID 不变），DELETE 清邮件行/断点/附件目录 |
 | `api/oauth.py` | Gmail/Outlook OAuth2：`GET /api/oauth/status`（**三态**：configured 自建 / builtin_available / can_authorize + 生效客户端掩码与回调地址）、`PUT /api/oauth/config`（自建 client_id/secret/回调路径登记，configured 语义=自建已配置）、`POST /api/oauth/authorize`（发起授权返 auth_url，内置凭证免预检）、`GET /api/oauth/flow/{state}`（前端轮询结果）、`GET /oauth/callback` + `GET /`（回环回调，直出自关闭 HTML；失败页附高级区自建降级引导） | 回调地址=`http://localhost:{进程端口}{生效客户端登记路径}`（端口随 run.py 动态，端口被占会顺延——桌面型 OAuth 客户端对 localhost 回环不校验端口，**路径不豁免**）；`GET /` 按 state 参数与 SPA 首页分流（授权重定向必带 state；不带则回退前端 index.html），仅在精确 `/` 拦截、其余路径仍归 SPA；回调里完成换令牌→建/转账号→触发首同步（存令牌带签发 client_id）；流程状态进程内 10 分钟 TTL，state 防伪、verifier 用后即弃；回调页不携带任何令牌内容 |
@@ -52,11 +52,11 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `core/providers.py` | 20 个服务商预设（含中文授权码提示）+ 未收录域名自动探测 | 按域名自动匹配；`probe_server()`：autoconfig 标准接口 → 常见主机名 993/465 并发试连（只收加密端口） |
 | `core/imap_client.py` | IMAP/SMTP 封装 | 连接/读写超时 60s；`iter_new_mail` 分块产出新增邮件（SEARCH UID 清单 → 稠密窗口区间 FETCH、稀疏窗口逐 UID 精确拉取——移入型文件夹如「已删除」日期与 UID 不单调，QQ 会把任何多 UID 集合按 min:max 连续展开）；网易系需 IMAP ID 命令；SMTP 端口 465=SSL/587=STARTTLS；`append_sent` 发送后归档；`MailConfig.access_token` 非空时 IMAP 走 `xoauth2`、SMTP 走 `AUTH XOAUTH2`（不广播时回退裸 docmd） |
 | `core/oauth.py` | Gmail/Outlook OAuth2 授权与令牌管理（PKCE 授权码流程、XOAUTH2 编码、令牌刷新） | 服务商参数内置（Gmail scope 仅 `https://mail.google.com/`、Outlook 用 outlook.office.com 资源 + offline_access；端口 465=SSL/587=STARTTLS）。**客户端来源（v0.4 P5，D1=A）**：`BUILTIN_CLIENTS` 内置公开桌面客户端凭证开箱即用（redirect_path="/"，来源 Thunderbird 公开源码，免责见模块 docstring）；用户自建（secrets `oauth_client:{provider}`，redirect_path 缺省 `/oauth/callback`）永远优先，`get_client()` 回退链带 source 标记。令牌存 `oauth_token:{account_id}`（expires_at 预扣 120s 余量、微软轮换覆盖、**client_id=签发客户端**）；`client_for_refresh` 按签发者选边刷新（内置/自建混用不互相污染）；`ensure_access_token` 按账号加锁防并发重复刷新；令牌交换跟随全局代理（`netproxy.httpx_proxy_arg`）；教程见 docs/OAuth2 使用指南.md（快速授权）与自建教程（高级） |
-| `core/netproxy.py` | 网络代理（被墙服务商场景）：跟随系统、零开关的建连层（语义=浏览器） | 地址解析：手动地址（设置键 `network_proxy`，socks5/socks5h/socks4/http 可带账密）优先，留空自动检测系统代理（urllib.getproxies：macOS 系统代理/Windows 注册表/env，每次连接现读；socks:// 归一 socks5）；所有账号 IMAP/SMTP/OAuth 统一生效（无账号级字段无开关，`accounts.use_proxy` 已废弃不读）；PySocks 套接字 + 标准库注入（IMAP4_SSL 覆盖 `_create_socket`、smtplib 覆盖 `_get_socket`，httpx 显式传 proxy），不全局替换 socket（保本地回环与并发隔离）；socks5 rdns=True 防污染；坏配置静默直连；本机回环永不代理（Proton Bridge） |
+| `core/netproxy.py` | 网络代理（被墙服务商场景）：跟随系统、零开关零配置的建连层（语义=浏览器） | 地址解析：自动检测系统代理（urllib.getproxies：macOS 系统代理/Windows 注册表/env，每次连接现读；socks:// 归一 socks5），无手动地址无开关（`network_proxy` 设置已整体移除）；所有账号 IMAP/SMTP/OAuth 统一生效（无账号级字段，`accounts.use_proxy` 已废弃不读）；PySocks 套接字 + 标准库注入（IMAP4_SSL 覆盖 `_create_socket`、smtplib 覆盖 `_get_socket`，httpx 显式传 proxy），不全局替换 socket（保本地回环与并发隔离）；socks5 rdns=True 防污染；坏配置静默直连；本机回环永不代理（Proton Bridge） |
 | `core/mailbox.py` | 账号凭据/连接统一入口（全项目唯一 MailConfig 构造点） | `load_account`（账号行+密钥 → AccountHandle，缺一抛 `MailError`；OAuth 账号先 `oauth.ensure_access_token` 刷新令牌再装配）、`has_credentials`、`open_imap`；API 层 `_imap_for` 等拼装点逐步迁移至此（IMPROVEMENT_PLAN §3.1）；添加账号入库前的表单直连预检除外 |
 | `core/folders.py` | 服务器文件夹缓存与 CRUD（v0.4 P2，REDESIGN_PLAN §4） | folders 表只做缓存（服务器为真）；SPECIAL-USE 标记优先、名称启发式兜底（sent/drafts/junk/trash/all；不做 archive 启发式防误标）；`folder_guard` 系统文件夹守卫；`ensure_archive_with_mb` 归档文件夹惰性创建；删除/服务器消失的文件夹清理本地邮件行/断点/缓存/附件目录 |
 | `core/contacts.py` | 通讯录采集与联想（v0.4 P4，REDESIGN_PLAN §5.3） | `upsert_contact` SELECT-then-UPDATE/INSERT（表达式索引不支持 upsert 冲突目标且作用域含 NULL）；source=manual 只计数不覆盖姓名；`collect_sender`（sync 新邮件）/`collect_addresses`（发送 To/Cc/Bcc，支持「Name <a@x>」）受 `contacts_auto_collect` 开关门控（关=不入册，已有数据保留）；`suggest` 全局去重取最优行、use_count×最近加权；管理侧 `list_contacts_agg`/`list_groups`/`set_members`（成员按 email 记，删除联系人后清孤儿行） |
-| `core/sync.py` | UID 增量同步 | 分块断点续拉（每块入库+断点同一事务提交，中断从断点续传）；`start_sync` 后台线程执行（防重入），进度写账号 status=`syncing`+status_detail；网络异常自动重试一次；首同步限 30 天；UIDVALIDITY 变化自愈；登录失败→`auth_error`+一次性通知；同步完成后触发 AI 流水线 |
+| `core/sync.py` | UID 增量同步 | 分块断点续拉（每块入库+断点同一事务提交，中断从断点续传）；`start_sync` 后台线程执行（防重入），进度写账号 status=`syncing`+status_detail；网络异常自动重试一次；首同步限 30 天；UIDVALIDITY 变化自愈；登录失败→`auth_error`+一次性通知；增量拉取后 FLAGS 对账（`UID SEARCH UNSEEN/FLAGGED` ↔ 本地 is_read/starred，只翻差异行——外部客户端已读/星标变化的入网点，SEARCH 失败跳过不阻塞同步）；新邮件按服务器 FLAGS 初始化已读/星标；同步完成后触发 AI 流水线 |
 | `core/outbox.py` | 草稿发送唯一实现（API 与调度器共用）+ 旧数据迁移 | `send_user_draft`：状态校验（editing/scheduled/**pending_review**）→地址解析→消毒+纯文本派生→`mailbox.send_message`→标记 sent/清附件/回复原邮件补标已读；失败抛 `MailError`；`draft_dir` 为附件目录唯一出处。`migrate_legacy_ai_drafts`：v0.4 P3 启动期一次性把旧 drafts 表（AI 待审）并入 user_drafts（Markdown→HTML 与原 approve 同源、Re: 主题、收件人=原发件人、状态映射 pending→pending_review；KV `legacy_drafts_migrated` 门控，门控与数据同一事务原子提交）；旧 drafts 表保留只读 |
 | `core/jobs.py` | 轻量任务执行器（ThreadPool 2 线程） | `@runner(kind)` 注册表 + `submit`（dedupe 防双击）+ `report`（进度/阶段入 jobs 表）+ 失败进表；`GET /api/jobs/*` 供前端 useJob 1s 轮询 |
 | `core/batch_ops.py` | 批量 IMAP 动作任务体（trash/move/archive/unarchive 异步化） | 按账号分组共用连接、进度按账号上报；R2 语义（拿不到新 UID 删行交增量重建）与「服务器成功才动本地」保持；archive 逐账号惰性建归档夹再移动；打标类在端点同步执行 |
@@ -93,7 +93,8 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 
 ### 同步管线（每次轮询/手动收信）
 ```
-UID 增量拉取 → 落库+附件落盘 → 白名单(留收件箱)/黑名单(直接归档)
+UID 增量拉取 → 落库+附件落盘 → FLAGS 对账(UID SEARCH UNSEEN/FLAGGED ↔ 本地 is_read/starred)
+→ 白名单(留收件箱)/黑名单(直接归档)
 → AI 批量分类(category/importance/needs_reply/reason)
 → 营销(promo)自动本地归档 → 需回复且账号权限≥draft_review → 生成草稿+通知
 ```

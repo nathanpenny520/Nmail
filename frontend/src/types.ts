@@ -20,11 +20,9 @@ export interface Settings {
   body_font: 'small' | 'standard' | 'large'
   allow_remote_images: boolean
   update_check_enabled: boolean
-  /** 手动代理地址（socks5://127.0.0.1:7890 / http://...）；空=自动检测系统代理 */
-  network_proxy: string
   /** 系统代理探测结果（只读展示，不入库） */
   detected_proxy: string | null
-  /** 实际生效通道（手动或检测到的系统代理；null=直连）——只读展示，不入库 */
+  /** 实际生效通道（检测到的系统代理；null=直连）——只读展示，不入库 */
   effective_proxy: string | null
   /** 通讯录自动采集（收发往来地址自动入册）；关=仅手动增改 */
   contacts_auto_collect: boolean
@@ -37,7 +35,6 @@ export interface SettingsPayload {
   body_font?: 'small' | 'standard' | 'large'
   allow_remote_images?: boolean
   update_check_enabled?: boolean
-  network_proxy?: string
   contacts_auto_collect?: boolean
 }
 

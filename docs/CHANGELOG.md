@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 代理状态行实时化 + 彻底删除手动代理地址
+- 用户反馈：状态行「当前直连」疑似写死，要求开了代理能实时看到；「手动指定代理地址」折叠项仍会困惑人，彻底删除
+- 状态行实况：数据本就每次 GET 实时探测（urllib.getproxies），但页面不自动刷新——设置页加独立 3s 轮询查询（与主设置查询隔离，不重置表单），系统代理开关一变，状态行几秒内自动显示「当前经 … 连接 / 直连」
+- 删手动地址：netproxy 移除 `PROXY_SETTING_KEY/proxy_url_setting`，`effective_proxy_url()`=纯系统探测；settings API 移除 `network_proxy` 字段与校验（GET 只读 `detected_proxy/effective_proxy` 不变）；前端删折叠项与 proxyUrl 状态；types/openapi 同步
+- 文档：使用指南/FAQ/OAuth2 指南统一为「跟随系统代理，工具须开系统代理模式」口径；ARCHITECTURE 两行同步
+- 验证：pytest 147 全绿（test_netproxy 全面改探测打桩：resolve/httpx/OAuth 回退/设置只读字段）、ruff + npm build 通过、openapi 快照再生
+- 遗留：代理工具不开「系统代理」模式时 Nmail 感知不到（与浏览器一致），文档已写明；真实 Gmail 端到端待用户验证
+
+
 ## 3c64111 — fix: 代理改「跟随系统、零开关」——撤掉内部总开关按钮
 - 用户反馈（对 182f934 的纠正）：设置页仍有「已关闭」代理开关——「浏览器难道会有这样的代理开关按钮吗？」正常软件是系统有代理就自动走、没有就直连，内部零开关；上一轮把实现细节（Python 不会自动认系统代理）漏成了一颗要用户理解的开关，本质还是内部设置
 - 后端：netproxy 撤总开关——`effective_proxy_url()` = 手动地址（`network_proxy`）→ 系统探测（urllib.getproxies），没有即直连，无任何门控；settings API 移除 `network_proxy_enabled`，GET 增只读 `effective_proxy`（实际生效通道，与 `detected_proxy` 一起供状态行展示）
