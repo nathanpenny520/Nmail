@@ -3,15 +3,17 @@ import {
   Archive, BarChart3, Ban, ChevronDown, ChevronRight, FilePenLine, FileText, Folder, FolderPlus,
   Inbox, Mail, Pencil, RefreshCw, Send, Sparkles, Trash2,
 } from 'lucide-react'
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
 import { useTreeCollapsed } from '../hooks/useSidebar'
+import { appZoom, usePanelWidth } from '../hooks/usePanelWidth'
 import type { Account, FolderCacheItem } from '../types'
 import ContextMenu, { type ContextMenuItem } from './ContextMenu'
 import { useCompose } from './compose/ComposeContext'
 import { Modal } from './compose/ui'
+import SplitDivider from './SplitDivider'
 
 /** 邮件基座的树选中项（v0.4：智能视图 + 账号收件箱 + 服务器文件夹；草稿升级为页面页签后不在树选中态内）。 */
 export type TreeSelection =
@@ -241,11 +243,23 @@ export default function FolderTree({
 
   const collapsed = useTreeCollapsed()
 
+  // 展开态树宽可拖拽记忆（v0.4.x 浏览器式分栏；折叠图标栏 w-14 不参与）。默认 192px = 原 w-48
+  const { width: treeWidth, setWidth: setTreeWidth, persist: persistTreeWidth, reset: resetTreeWidth } =
+    usePanelWidth('nmail_tree_width', { min: 160, max: 360, fallback: 192 })
+  const treeRef = useRef<HTMLElement>(null)
+  const [treeResizing, setTreeResizing] = useState(false)
+  const moveTreeWidth = (e: MouseEvent) => {
+    if (!treeRef.current) return
+    setTreeWidth((e.clientX - treeRef.current.getBoundingClientRect().left) / appZoom())
+  }
+
   // 折叠态（v0.4 汉堡主菜单，Gmail 式）：纯图标 + tooltip，徽章缩成角标圆点，分组标题隐藏；
   // 账号变首字母头像（状态色角标），点击直达该账号收件箱——文件夹层级收起态不展示，拖拽落点需展开后使用。
-  // 两分支根元素同为 <aside>，React 原地复用 DOM 节点，宽度变化由 transition 平滑过渡。
+  // 两分支根元素同为 fragment、child0 同为 <aside>：React 原地复用 DOM 节点，折叠/展开宽度变化仍走 transition；
+  // 展开态 child1 为拖拽分隔条（border-r 移交分隔条，避免双线），折叠态隐藏
   if (collapsed) {
     return (
+      <>
       <aside className="flex w-14 shrink-0 flex-col items-center overflow-y-auto border-r border-gray-200 bg-white px-1.5 py-2 transition-[width] duration-200">
         <button
           className={railBtnCls(isInboxActive(null))}
@@ -304,11 +318,17 @@ export default function FolderTree({
           </button>
         ))}
       </aside>
+      </>
     )
   }
 
   return (
-    <aside className="flex w-48 shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-gray-200 bg-white px-1.5 py-2 transition-[width] duration-200">
+    <>
+    <aside
+      ref={treeRef}
+      style={{ width: treeWidth, ...(treeResizing ? { transition: 'none' } : null) }}
+      className="flex shrink-0 flex-col overflow-y-auto overflow-x-hidden bg-white px-1.5 py-2 transition-[width] duration-200"
+    >
       <div className="px-2 pb-1 pt-1 t-xs font-medium text-gray-400">智能视图</div>
       <button className={rowCls(isInboxActive(null))} onClick={() => onSelect({ type: 'inbox', accountId: null })}>
         <Inbox className="h-3.5 w-3.5 shrink-0" />
@@ -440,6 +460,16 @@ export default function FolderTree({
         </Modal>
       )}
     </aside>
+    <SplitDivider
+      onMove={moveTreeWidth}
+      onReset={resetTreeWidth}
+      onDragStart={() => setTreeResizing(true)}
+      onDragEnd={() => {
+        setTreeResizing(false)
+        persistTreeWidth()
+      }}
+    />
+    </>
   )
 }
 

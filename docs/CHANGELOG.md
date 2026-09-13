@@ -3,6 +3,21 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — UI: 账号标识色自定义（12 色板）+ 折叠头像与树行染色
+- 用户反馈：颜色是区分邮件/账号的重要手段，但设置页不允许自定义颜色，且折叠侧栏首字母头像不上色——排查：颜色本就是 accounts 表字段（创建时按 COLOR_PALETTE 轮转赋初值），只是 PATCH 接口与设置页从未开放；折叠头像在 FolderTree 写死灰底/靛底，没读 a.color
+- 后端（accounts.py）：AccountPatchIn 新增 color（限定调色板内取值，否则 400）；色板 8→12 色（+blue/orange/lime/fuchsia 500 系，OAuth 建号轮转同源）；改色不触发试连直接落库（颜色不影响连通性）
+- 前端：新增 utils/accountColor.ts——色板常量（色相序展示）+ Tailwind 浅底深字映射（100/700，激活档 200/800，对比度全过；调色板外取值回退灰兜底）；设置页账号卡标识色点变可点按钮，弹出 4×3 取色 popover（当前色描边+打勾，被其他账号占用的色减淡提示「仍可选用」——账号数超色板数时必然重复，不做禁用；即点即存）
+- 染色联动：折叠侧栏首字母头像按账号色浅底深字（激活加深一档，右上状态角标语义不变）；展开态账号行在状态点旁加标识色点；邮件列表/读信/摘要的账号色点均为查询时 join，改色后自动跟随
+- 测试：pytest 账号 API 4 全绿（+1：色板内落库且不触发试连、色板外 400 且不改值）；ruff + npm run build 通过
+- 验证：8720 重启后 curl 实测 PATCH 往返与非法值 400（np25 真实账号，改后复原）；chrome-devtools 实测取色 popover 交互、点色即存即变、折叠头像五账号五色染色、激活档加深
+
+## 待提交 — UI: 固定分栏全部可拖拽 + 页签拖拽排序（浏览器式）
+- 用户反馈：树|列表、阅读区|AI 助手、草稿分类列三条竖线都不能拖，要求「浏览器的思想」——竖线可拖、页签也可拖
+- 分栏基建（新增）：`hooks/usePanelWidth`（localStorage 记忆 + clamp + persist/reset；widthRef 在 setWidth 内同步更新——React 18 连续事件下 mousemove 紧跟 mouseup 时渲染可能未提交，persist 不丢最后一步）+ `components/SplitDivider`（bar=1px 视觉线±6px 热区 / edge=浮层边缘透明热区两形态，hover/拖拽中靛蓝高亮，双击复位，全局光标与禁选中沿用 body.dragging-col）；列表|阅读区原分隔条重构到同一组件（行为不变，热区更明显）
+- 四处固定分栏接线：文件夹树 160–360px（默认 192=原 w-48；折叠图标栏不参与；展开态根元素改 fragment、child0 仍为 aside 保 DOM 复用与折叠过渡动画）、AI 助手浮层 320–640（默认 384=原 w-96，edge 热区拖左缘）、草稿分类列 240–440（默认 320=原 w-80）、AI 总管家会话栏 180–360（默认 224=原 w-56）
+- 页签拖拽排序（落地 §3.2 既有增强项）：统一顺序源 `sessionStorage.nmail_tab_order`（`page:<路由>`/`compose:<tabId>`；缺失剔除、新开按打开序追加尾部），「邮件」基座钉死首位不在序列；HTML5 dnd（dragover 目标页签前/后半段→插入点）+ 左缘 2px 插入指示线 + 拖拽中源页签半透明 + 页签条空白处放置=追加尾部；中键点击页签=关闭（浏览器习惯）
+- 验证：npm run build（tsc+字号门禁）通过；隔离 headless Chrome（独立 profile）对 8720 真实实例 15 项断言全过——五处分隔条拖宽/落盘无最后一步丢失/双击复位/刷新记忆、页签换位（页面页签置前+写信页签跨组插入）/中键关闭/顺序落 sessionStorage/刷新保留；AI 面板以已读邮件打开验证（零服务器变更）；headless CDP 不合成原生 dblclick，双击复位经合成事件验证 onDoubleClick 路径（与原列表分隔条同机制）
+
 ## 12fa0b2 — fix: 邮件显示三修——正文基础字体、追踪像素隐形、放行 style 标签
 - 用户反馈：邮件显示「怪怪的」且底部有裂图——排查：无样式 HTML 邮件正文落在浏览器默认衬线字体（宋体观感，仅页脚有自带字体正常）；裂图实为阿里云 1×1 追踪像素（ac.mmstat.com）被浏览器反追踪拦截的残留图标，图片本身加载正常（关闭拦截生效，remote_blocked=0）
 - ①正文基础样式（HtmlMail.tsx）：srcdoc 注入 `body{font-family:sans 栈;line-height:1.65}`——仅兜底继承，邮件自带 font-family/line-height 不受影响；与发信方向 wrap_email_body_html 同栈，收发观感一致

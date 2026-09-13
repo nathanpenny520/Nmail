@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronLeft, ChevronRight, Inbox, Loader2, Paperclip, Pencil, RefreshCw, Search, Sparkles, Star,
 } from 'lucide-react'
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, type EmailQuery } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
@@ -17,6 +17,8 @@ import {
 import { useCompose } from './compose/ComposeContext'
 import ContextMenu, { type ContextMenuItem } from './ContextMenu'
 import EmailReader from './EmailReader'
+import SplitDivider from './SplitDivider'
+import { appZoom, usePanelWidth } from '../hooks/usePanelWidth'
 
 const PAGE_SIZE = 50
 
@@ -76,45 +78,16 @@ export default function MailBrowser({
   const [showImages, setShowImages] = useState(false)
   const [syncMessage, setSyncMessage] = useFlash(5000)
 
-  // 分屏布局：列表宽度可拖拽，阅读区可全屏，均记忆在本地
-  const [listWidth, setListWidth] = useState(() => {
-    const saved = Number(localStorage.getItem('nmail_list_width'))
-    return saved >= 240 && saved <= 640 ? saved : 340
-  })
+  // 分屏布局：列表宽度可拖拽（SplitDivider + usePanelWidth），阅读区可全屏，均记忆在本地
+  const { width: listWidth, setWidth: setListWidth, persist: persistListWidth, reset: resetListWidth } =
+    usePanelWidth('nmail_list_width', { min: 240, max: 640, fallback: 340 })
   const [readerFull, setReaderFull] = useState(() => localStorage.getItem('nmail_reader_full') === '1')
   const listRef = useRef<HTMLElement>(null)
-  const dragging = useRef(false)
-  const widthRef = useRef(listWidth)
-  widthRef.current = listWidth
 
-  const startDrag = (e: ReactMouseEvent) => {
-    e.preventDefault()
-    dragging.current = true
-    document.body.classList.add('dragging-col')
+  const moveListWidth = (e: MouseEvent) => {
+    if (!listRef.current) return
+    setListWidth((e.clientX - listRef.current.getBoundingClientRect().left) / appZoom())
   }
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!dragging.current || !listRef.current) return
-      // 全局 zoom 会缩放视觉坐标，换算回布局 px
-      const zoom = Number(getComputedStyle(document.documentElement).getPropertyValue('--app-zoom')) || 1
-      const w = Math.min(640, Math.max(240, (e.clientX - listRef.current.getBoundingClientRect().left) / zoom))
-      widthRef.current = w
-      setListWidth(w)
-    }
-    const onUp = () => {
-      if (!dragging.current) return
-      dragging.current = false
-      document.body.classList.remove('dragging-col')
-      localStorage.setItem('nmail_list_width', String(widthRef.current))
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [])
 
   const toggleFull = () => {
     setReaderFull((v) => {
@@ -734,17 +707,12 @@ export default function MailBrowser({
         </div>
       </section>
       {/* 拖拽分隔条：悬停高亮，双击复位 */}
-      <div
-        onMouseDown={startDrag}
-        onDoubleClick={() => {
-          setListWidth(340)
-          localStorage.setItem('nmail_list_width', '340')
-        }}
-        className="relative w-px shrink-0 cursor-col-resize bg-gray-200 hover:bg-indigo-400"
+      <SplitDivider
+        onMove={moveListWidth}
+        onReset={resetListWidth}
+        onDragEnd={persistListWidth}
         title="拖拽调整列表宽度（双击复位）"
-      >
-        <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
-      </div>
+      />
       </>
       )}
 

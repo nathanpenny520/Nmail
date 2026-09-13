@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Loader2, Send, Sparkles, X } from 'lucide-react'
 import { api } from '../api/client'
 import { streamChat } from '../api/stream'
+import { appZoom, usePanelWidth } from '../hooks/usePanelWidth'
 import type { EmailDetail } from '../types'
 import Markdown from './Markdown'
+import SplitDivider from './SplitDivider'
 
 interface AiPanelProps {
   email: EmailDetail
@@ -25,6 +27,15 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // 面板宽度可拖拽记忆（v0.4.x 浏览器式分栏）：右停靠浮层拖左缘，默认 384px = 原 w-96
+  const { width: panelWidth, setWidth: setPanelWidth, persist: persistWidth, reset: resetWidth } =
+    usePanelWidth('nmail_ai_width', { min: 320, max: 640, fallback: 384 })
+  const panelRef = useRef<HTMLDivElement>(null)
+  const movePanelWidth = (e: MouseEvent) => {
+    if (!panelRef.current) return
+    setPanelWidth((panelRef.current.getBoundingClientRect().right - e.clientX) / appZoom())
+  }
 
   const profilesQuery = useQuery({ queryKey: ['ai-profiles'], queryFn: api.getAIProfiles })
   const profiles = profilesQuery.data?.profiles ?? []
@@ -64,7 +75,19 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
   }
 
   return (
-    <div className="fixed inset-y-0 right-0 z-30 flex w-96 flex-col border-l border-gray-200 bg-white shadow-2xl">
+    <div
+      ref={panelRef}
+      style={{ width: panelWidth }}
+      className="fixed inset-y-0 right-0 z-30 flex flex-col border-l border-gray-200 bg-white shadow-2xl"
+    >
+      {/* 左缘拖拽热区（edge 形态：border-l 为视觉线） */}
+      <SplitDivider
+        edge
+        onMove={movePanelWidth}
+        onReset={resetWidth}
+        onDragEnd={persistWidth}
+        title="拖拽调整面板宽度（双击复位）"
+      />
       <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
         <span className="flex shrink-0 items-center gap-2 t-md font-semibold text-violet-700">
           <Sparkles className="h-4 w-4" /> AI 助手

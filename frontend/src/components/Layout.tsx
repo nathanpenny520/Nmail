@@ -1,5 +1,5 @@
 import { BarChart3, FilePenLine, Inbox, Menu, Pencil, Settings, Sparkles, SquarePen, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type DragEvent as ReactDragEvent } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAIEnabled } from '../api/useAI'
 import { toggleTreeCollapsed, useTreeCollapsed } from '../hooks/useSidebar'
@@ -27,6 +27,13 @@ const PAGE_TABS: Record<string, { label: string; icon: typeof Inbox }> = {
 
 // 纯 AI 页面：AI 停用（传统邮件模式）时从按钮与标签条隐藏
 const AI_ONLY_TABS = ['/digest', '/assistant']
+
+/**
+ * 页签统一顺序键（v0.4.x 浏览器式拖拽排序，REDESIGN_PLAN §3.2 增强）：
+ * `page:<路由>` ｜ `compose:<tabId>`（写信页签）。「邮件」基座钉死首位不参与，
+ * 相当于浏览器的钉选页签。
+ */
+type TabKey = string
 
 /** 主区顶部的标签条：邮件基座（固定）+ 已开启的页面页签 + 写信页签，右侧图标按钮区。 */
 function WorkspaceTabs() {
@@ -73,11 +80,93 @@ function WorkspaceTabs() {
     if (location.pathname === path) navigate('/')
   }
 
+  // 页签统一顺序：会话级记忆（与 pageTabs 同生命周期），只存开启中页签的相对顺序——
+  // 已关页签剔除、新开页签按打开序追加尾部。「邮件」基座不在序列内（钉死首位）。
+  const [tabOrder, setTabOrder] = useState<TabKey[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(sessionStorage.getItem('nmail_tab_order') ?? '[]')
+      return Array.isArray(saved) ? saved.filter((k): k is string => typeof k === 'string') : []
+    } catch {
+      return []
+    }
+  })
+  useEffect(() => {
+    sessionStorage.setItem('nmail_tab_order', JSON.stringify(tabOrder))
+  }, [tabOrder])
+
+  // 页面页签先过 AI 停用过滤再进顺序（与渲染口径一致；重新启用后原顺序恢复）
+  const pageKeys = pageTabs
+    .filter((path) => aiEnabled || !AI_ONLY_TABS.includes(path))
+    .map((p) => `page:${p}`)
+  const composeKeys = tabs.map((t) => `compose:${t.tabId}`)
+  const alive = new Set([...pageKeys, ...composeKeys])
+  const orderedKeys = [
+    ...[...new Set(tabOrder)].filter((k) => alive.has(k)),
+    ...[...pageKeys, ...composeKeys].filter((k) => !tabOrder.includes(k)),
+  ]
+
+  // 拖拽排序状态：dragKey=拖动中页签（渲染半透明）；dropHint.before=插入点（null=追加到末尾）
+  const [dragKey, setDragKey] = useState<TabKey | null>(null)
+  const [dropHint, setDropHint] = useState<{ before: TabKey | null } | null>(null)
+
+  const moveTab = (key: TabKey, before: TabKey | null) => {
+    const rest = orderedKeys.filter((k) => k !== key)
+    const idx = before == null ? rest.length : rest.indexOf(before)
+    rest.splice(idx < 0 ? rest.length : idx, 0, key)
+    setTabOrder(rest)
+  }
+
+  // 与邮件行同一套 HTML5 dnd；插入指示线画在目标页签左缘（后半段悬停=插到下一页签之前）
+  const tabDrag = (key: TabKey) => ({
+    draggable: true,
+    onDragStart: (e: ReactDragEvent) => {
+      e.dataTransfer.setData('application/x-nmail-tab', key)
+      e.dataTransfer.effectAllowed = 'move'
+      setDragKey(key)
+    },
+    onDragEnd: () => {
+      setDragKey(null)
+      setDropHint(null)
+    },
+    onDragOver: (e: ReactDragEvent) => {
+      if (dragKey == null || dragKey === key) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      const rect = e.currentTarget.getBoundingClientRect()
+      const after = e.clientX >= rect.left + rect.width / 2
+      const idx = orderedKeys.indexOf(key)
+      setDropHint({ before: after ? orderedKeys[idx + 1] ?? null : key })
+    },
+    onDrop: (e: ReactDragEvent) => {
+      e.preventDefault()
+      if (dragKey == null) return
+      moveTab(dragKey, dropHint?.before ?? null)
+      setDragKey(null)
+      setDropHint(null)
+    },
+  })
+
+  // 页签条空白处（目标=容器自身）：允许放置并提示追加到末尾
+  const stripDrag = {
+    onDragOver: (e: ReactDragEvent) => {
+      if (dragKey == null || e.target !== e.currentTarget) return
+      e.preventDefault()
+      setDropHint({ before: null })
+    },
+    onDrop: (e: ReactDragEvent) => {
+      if (dragKey == null || e.target !== e.currentTarget) return
+      e.preventDefault()
+      moveTab(dragKey, null)
+      setDragKey(null)
+      setDropHint(null)
+    },
+  }
+
   const inboxActive = activeTabId === null && location.pathname === '/'
   // 统一宽度：所有页签同宽（浏览器式），标题超长截断（审核意见：长短不一观感差）；
   // 2026-09-13 用户反馈 w-44 放不下几个 → 缩至 w-36 并收紧内距，固定标签完整显示、长标题照常截断
   const tabCls = (active: boolean) =>
-    `flex w-36 shrink-0 items-center gap-1 rounded-t-lg border border-b-0 px-2.5 py-1.5 t-sm transition-colors ${
+    `relative flex w-36 shrink-0 items-center gap-1 rounded-t-lg border border-b-0 px-2.5 py-1.5 t-sm transition-colors ${
       active
         ? 'border-gray-200 bg-white font-medium text-indigo-700'
         : 'border-transparent text-gray-500 hover:bg-gray-200/60'
@@ -110,7 +199,7 @@ function WorkspaceTabs() {
         </button>
       </div>
       <div className="my-2.5 w-px shrink-0 bg-gray-200" />
-      <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pl-2 pt-1.5">
+      <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pl-2 pt-1.5" {...stripDrag}>
         <button
           className={tabCls(inboxActive)}
           onClick={() => {
@@ -121,27 +210,77 @@ function WorkspaceTabs() {
           <Inbox className="h-3.5 w-3.5 shrink-0" />
           <span className="whitespace-nowrap">邮件</span>
         </button>
-        {pageTabs.filter((path) => aiEnabled || !AI_ONLY_TABS.includes(path)).map((path) => {
-          const meta = PAGE_TABS[path]
-          const Icon = meta.icon
-          const active = activeTabId === null && location.pathname === path
+        {/* 页面页签 + 写信页签按统一顺序渲染（拖拽换位；中键关闭，浏览器习惯） */}
+        {orderedKeys.map((key) => {
+          const dragging = dragKey === key
+          const indicator =
+            dragKey != null && dropHint?.before === key ? (
+              <span className="pointer-events-none absolute -left-[3px] bottom-1 top-1 w-0.5 rounded-full bg-indigo-500" />
+            ) : null
+          if (key.startsWith('page:')) {
+            const path = key.slice(5)
+            const meta = PAGE_TABS[path]
+            if (!meta) return null
+            const Icon = meta.icon
+            const active = activeTabId === null && location.pathname === path
+            return (
+              <div
+                key={key}
+                onClick={() => {
+                  if (location.pathname !== path) navigate(path)
+                  setActiveTab(null)
+                }}
+                onAuxClick={(e) => {
+                  if (e.button === 1) {
+                    e.preventDefault()
+                    closePageTab(path)
+                  }
+                }}
+                {...tabDrag(key)}
+                title={meta.label}
+                className={`${tabCls(active)} cursor-pointer group ${dragging ? 'opacity-40' : ''}`}
+              >
+                {indicator}
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{meta.label}</span>
+                <button
+                  className="shrink-0 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    closePageTab(path)
+                  }}
+                  title="关闭标签"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )
+          }
+          const tab = tabs.find((t) => `compose:${t.tabId}` === key)
+          if (!tab) return null
           return (
             <div
-              key={path}
-              onClick={() => {
-                if (location.pathname !== path) navigate(path)
-                setActiveTab(null)
+              key={key}
+              onClick={() => setActiveTab(tab.tabId)}
+              onAuxClick={(e) => {
+                if (e.button === 1) {
+                  e.preventDefault()
+                  requestClose(tab.tabId)
+                }
               }}
-              className={`${tabCls(active)} cursor-pointer group`}
-              title={meta.label}
+              {...tabDrag(key)}
+              title={tab.title}
+              className={`${tabCls(tab.tabId === activeTabId)} cursor-pointer group ${dragging ? 'opacity-40' : ''}`}
             >
-              <Icon className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{meta.label}</span>
+              {indicator}
+              {tab.dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" title="有未保存改动" />}
+              <Pencil className="h-3 w-3 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{tab.title}</span>
               <button
                 className="shrink-0 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation()
-                  closePageTab(path)
+                  requestClose(tab.tabId)
                 }}
                 title="关闭标签"
               >
@@ -150,28 +289,6 @@ function WorkspaceTabs() {
             </div>
           )
         })}
-        {tabs.map((tab) => (
-          <div
-            key={tab.tabId}
-            onClick={() => setActiveTab(tab.tabId)}
-            className={`${tabCls(tab.tabId === activeTabId)} cursor-pointer group`}
-            title={tab.title}
-          >
-            {tab.dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" title="有未保存改动" />}
-            <Pencil className="h-3 w-3 shrink-0" />
-            <span className="min-w-0 flex-1 truncate">{tab.title}</span>
-            <button
-              className="shrink-0 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation()
-                requestClose(tab.tabId)
-              }}
-              title="关闭标签"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ))}
       </div>
       {/* 右侧图标按钮区：AI 总管家/每日摘要已移入树「智能视图」（审核意见），此处仅剩通知/设置/写信 */}
       <div className="flex shrink-0 items-center gap-0.5 pb-1.5 pl-1.5">

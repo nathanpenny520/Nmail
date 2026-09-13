@@ -8,6 +8,8 @@ import { useAIEnabled } from '../api/useAI'
 import { streamAgentEvents } from '../api/stream'
 import { relativeTime } from '../utils/format'
 import Markdown from '../components/Markdown'
+import SplitDivider from '../components/SplitDivider'
+import { appZoom, usePanelWidth } from '../hooks/usePanelWidth'
 import type { Account, AgentEvent, ChatSession } from '../types'
 
 interface ChatMsg {
@@ -37,6 +39,15 @@ export default function ManagerPage() {
   const [error, setError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
+
+  // 会话历史栏宽度可拖拽记忆（v0.4.x 浏览器式分栏），默认 224px = 原 w-56
+  const { width: colWidth, setWidth: setColWidth, persist: persistColWidth, reset: resetColWidth } =
+    usePanelWidth('nmail_manager_col_width', { min: 180, max: 360, fallback: 224 })
+  const colRef = useRef<HTMLElement>(null)
+  const moveColWidth = (e: MouseEvent) => {
+    if (!colRef.current) return
+    setColWidth((e.clientX - colRef.current.getBoundingClientRect().left) / appZoom())
+  }
 
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
   const accounts: Account[] = accountsQuery.data?.accounts ?? []
@@ -235,7 +246,11 @@ export default function ManagerPage() {
         </div>
       )}
       {/* 会话历史栏 */}
-      <aside className="flex w-56 shrink-0 flex-col border-r border-gray-100 bg-gray-50/60">
+      <aside
+        ref={colRef}
+        style={{ width: colWidth }}
+        className="flex shrink-0 flex-col bg-gray-50/60"
+      >
         <div className="flex items-center justify-between px-3 py-3">
           <span className="t-sm font-medium text-gray-500">对话历史</span>
           <button
@@ -295,6 +310,12 @@ export default function ManagerPage() {
           ))}
         </div>
       </aside>
+      <SplitDivider
+        onMove={moveColWidth}
+        onReset={resetColWidth}
+        onDragEnd={persistColWidth}
+        title="拖拽调整历史栏宽度（双击复位）"
+      />
 
       {/* 对话区 */}
       <div className="mx-auto flex h-full min-w-0 max-w-3xl flex-1 flex-col px-6">

@@ -18,6 +18,15 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1551-分栏拖拽与页签拖拽 ✅
+- 目标: 用户反馈树|列表、阅读区|AI 助手、草稿分类列三条竖线不可拖，要求浏览器思想——竖线可拖、页签也可拖（先方案后动手，方案已确认）
+- 范围: frontend(components/SplitDivider.tsx 新增, hooks/usePanelWidth.ts 新增, MailBrowser, FolderTree, AiPanel, DraftsHubPage, ManagerPage, Layout) + docs(REDESIGN_PLAN §3.2, CHANGELOG, SESSIONS)
+- 产出: 提交（待回填哈希）；npm run build（tsc+字号门禁）通过；隔离 headless Chrome（独立 profile，不占 chrome-devtools MCP profile）对 8720 真实实例 15 项断言全过——五处分隔条拖宽/落盘/双击复位/刷新记忆、页签换位/跨组插入/中键关闭/顺序落盘/刷新保留；AI 面板以已读邮件打开（零服务器变更）
+- 关键决策: 分栏抽象为 usePanelWidth+SplitDivider 供四处复用（列表|阅读区一并重构）；widthRef 必须在 setWidth 内同步更新（React 18 连续事件下 mousemove 紧跟 mouseup 时渲染未提交，否则 persist 丢最后一步）；页签统一顺序源 nmail_tab_order 混排 page/compose 两组、「邮件」基座钉死首位；FolderTree 展开态根改 fragment、child0 同为 aside 保折叠过渡动画
+- 并行协调: 与账号标识色会话共享 FolderTree.tsx（其 accountColorCls hunks 与本会话分栏 hunks 叠放）——提交按惯例构造 patch 只暂存本会话 hunks；chrome-devtools MCP profile 被并行会话占用，改用 /tmp 独立 puppeteer-core 环境
+- 遗留: 无
+- 时间: 2026-09-13 15:51 开工，即日完成
+
 ### S-0913-1600-邮件显示三修 ✅
 - 目标: 用户反馈邮件显示怪（无样式邮件正文渲染成宋体）且底部有裂图——三项修复：①HtmlMail srcdoc 注入正文基础样式（sans 字体栈+行高，仅兜底不覆盖邮件自带样式）②放行远程图时隐形追踪像素（声明尺寸≤2 置 display:none；远程 img 缺 alt 补 alt="" 优雅降级）③消毒放行邮件自带 `<style>` 标签（沙箱内安全；拦截远程图时同步剥 CSS url()/@import 防追踪回潮）
 - 范围: backend(core/mail_html.py) + frontend(components/HtmlMail.tsx) + docs(CHANGELOG, ARCHITECTURE, SESSIONS)

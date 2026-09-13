@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlarmClock, Loader2, Pencil, Send, Sparkles, Trash2, Undo2, X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { parseBackendTime } from '../utils/format'
 import { useFlash } from '../hooks/useFlash'
+import { appZoom, usePanelWidth } from '../hooks/usePanelWidth'
 import type { UserDraft } from '../types'
 import HtmlMail from '../components/HtmlMail'
+import SplitDivider from '../components/SplitDivider'
 import { useCompose } from '../components/compose/ComposeContext'
 
 type Tab = 'pending_review' | 'editing' | 'scheduled' | 'sent' | 'discarded'
@@ -37,6 +39,15 @@ function fmtTime(iso: string | null, utcNaive = false): string {
 export default function DraftsHubPage() {
   const [tab, setTab] = useState<Tab>('pending_review')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+
+  // 列表栏宽度可拖拽记忆（v0.4.x 浏览器式分栏），默认 320px = 原 w-80
+  const { width: colWidth, setWidth: setColWidth, persist: persistColWidth, reset: resetColWidth } =
+    usePanelWidth('nmail_drafts_col_width', { min: 240, max: 440, fallback: 320 })
+  const colRef = useRef<HTMLElement>(null)
+  const moveColWidth = (e: MouseEvent) => {
+    if (!colRef.current) return
+    setColWidth((e.clientX - colRef.current.getBoundingClientRect().left) / appZoom())
+  }
   const queryClient = useQueryClient()
   const { data, isLoading } = useQuery({
     queryKey: ['user-drafts', tab],
@@ -54,7 +65,11 @@ export default function DraftsHubPage() {
   return (
     <div className="flex h-full">
       {/* 草稿列表 */}
-      <section className="flex w-80 shrink-0 flex-col border-r border-gray-200 bg-white">
+      <section
+        ref={colRef}
+        style={{ width: colWidth }}
+        className="flex shrink-0 flex-col bg-white"
+      >
         <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
           <h1 className="t-md font-semibold">草稿</h1>
           <div className="flex gap-0.5 rounded-lg bg-gray-100 p-0.5">
@@ -86,6 +101,12 @@ export default function DraftsHubPage() {
           ))}
         </div>
       </section>
+      <SplitDivider
+        onMove={moveColWidth}
+        onReset={resetColWidth}
+        onDragEnd={persistColWidth}
+        title="拖拽调整列表宽度（双击复位）"
+      />
       {/* 详情预览 */}
       <section className="min-w-0 flex-1 bg-gray-50">
         {selected ? (
