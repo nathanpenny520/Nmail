@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: 邮件显示三修——正文基础字体、追踪像素隐形、放行 style 标签
+## 12fa0b2 — fix: 邮件显示三修——正文基础字体、追踪像素隐形、放行 style 标签
 - 用户反馈：邮件显示「怪怪的」且底部有裂图——排查：无样式 HTML 邮件正文落在浏览器默认衬线字体（宋体观感，仅页脚有自带字体正常）；裂图实为阿里云 1×1 追踪像素（ac.mmstat.com）被浏览器反追踪拦截的残留图标，图片本身加载正常（关闭拦截生效，remote_blocked=0）
 - ①正文基础样式（HtmlMail.tsx）：srcdoc 注入 `body{font-family:sans 栈;line-height:1.65}`——仅兜底继承，邮件自带 font-family/line-height 不受影响；与发信方向 wrap_email_body_html 同栈，收发观感一致
 - ②追踪像素优雅降级（mail_html.py）：放行远程图时声明尺寸≤2px（width/height 属性或内联样式）置 display:none；缺 alt 的远程图补空 alt——被浏览器反追踪拦截时不再显裂图（headless Chrome 实测：alt="" 失败图零渲染、无 alt 显裂图、1×1 声明不可见）
