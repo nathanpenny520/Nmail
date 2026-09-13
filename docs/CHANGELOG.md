@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — UI: AI 配置 API Key 输入框默认遮蔽
+## f2609c8 — UI: AI 配置 API Key 输入框默认遮蔽
 - 用户反馈：AI 配置卡片里 API Key 默认明文展示不妥，应默认遮蔽——此前「默认明文」是 0911 反馈「Key 刷新后不可见」时一并改的（把「明文回显」与「默认可见」绑在了一起）；本次只改显隐默认值，回显语义不变
 - 改：SettingsPage `ProfileFields`（编辑卡与新建卡共用）`keyVisible` 初始值 true→false，输入框默认 `type=password`，小眼睛一键显隐不变；保存/测试连接读取的是 state 里的真实值，遮蔽不影响任何行为
 - 验证：npm run build（tsc）通过
