@@ -383,7 +383,7 @@ export default function ManagerPage() {
             if (m.role === 'user') {
               return (
                 <div key={i} className="flex justify-end">
-                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-violet-600 px-3.5 py-2.5 t-md leading-relaxed text-white">
+                  <div className="min-w-0 max-w-[85%] wrap-anywhere whitespace-pre-wrap rounded-2xl bg-violet-600 px-3.5 py-2.5 t-md leading-relaxed text-white">
                     {m.content}
                   </div>
                 </div>
@@ -401,7 +401,7 @@ export default function ManagerPage() {
             }
             return (
               <div key={i} className="flex justify-start">
-                <div className="max-w-[90%] space-y-2">
+                <div className="min-w-0 max-w-[90%] space-y-2">
                   {(m.events ?? []).map((ev, j) => (
                     <EventCard key={`${i}-${j}`} ev={ev as AgentEvent & { status?: string }} onDecide={decide} onUndo={undoAction} />
                   ))}

@@ -1,10 +1,11 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-/** 聊天气泡内的紧凑 Markdown 渲染（AI 回复/综述用）。 */
+/** 聊天气泡内的紧凑 Markdown 渲染（AI 回复/综述用）。wrap-anywhere：长 URL 等不可断词允许任意断行（可继承），且收缩 min-content 防气泡撑破 max-w。 */
 export default function Markdown({ text }: { text: string }) {
   return (
-    <ReactMarkdown
+    <div className="wrap-anywhere">
+      <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
         p: ({ children }) => <p className="my-1.5 first:mt-0 last:mb-0">{children}</p>,
@@ -41,7 +42,8 @@ export default function Markdown({ text }: { text: string }) {
         hr: () => <hr className="my-2 border-current/20" />,
       }}
     >
-      {text}
-    </ReactMarkdown>
+        {text}
+      </ReactMarkdown>
+    </div>
   )
 }

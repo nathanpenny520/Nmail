@@ -18,6 +18,14 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1535-AI面板长链接溢出
+- 目标: 用户反馈邮件 AI 助手回复显示越界——长 URL 不可断行戳出气泡（8721 实测文字溢出气泡右缘 ~36px；根因=渲染链路无 overflow-wrap，浏览器默认仅在空格/连字符处断行，URL 的 / . ? 均非断点）
+- 范围: frontend(components/Markdown.tsx, components/AiPanel.tsx, pages/ManagerPage.tsx) + docs(CHANGELOG, SESSIONS)
+- 产出: 提交（待回填哈希）；npm run build（tsc+字号门禁）通过；8721 真实 AI 回复端到端——长邮箱地址气泡内正常断行、文字零溢出、气泡 316px=90% 上限、无横向滚动；与并行会话共享 docs 按 HEAD 基线构造内容暂存互未夹带
+- 关键决策: 治本在 Markdown 输出层包 wrap-anywhere（overflow-wrap:anywhere 可继承，一处覆盖三个使用方），气泡层 min-w-0 仅防御；getBoundingClientRect 受界面 zoom（large 档 1.12×）缩放而 clientWidth 不受，跨坐标系对比会误判「突破 max-w」
+- 遗留: 无
+- 时间: 2026-09-13 15:35 开工
+
 ### S-0913-1536-正文iframe测高失效修复 ✅
 - 目标: 用户反馈 Google 安全提醒邮件只显示上半截（8721 实测复现：iframe style 卡在初始 320px 而内容需 869px；根因=React 18 对 srcdoc iframe 的 onLoad 竞态，load 先于监听器挂载被错过 → remeasure/ResizeObserver/兜底定时器全部未注册）——修复：测高链路不再依赖 onLoad，挂载后独立轮询注册
 - 范围: frontend(components/HtmlMail.tsx〔仅测高逻辑段，与 S-0913-1504 已提交的 zoom 段不同区域〕) + docs(CHANGELOG, SESSIONS)

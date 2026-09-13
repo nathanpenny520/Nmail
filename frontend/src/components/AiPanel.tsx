@@ -111,7 +111,7 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
           if (m.role === 'user') {
             return (
               <div key={i} className="flex justify-end">
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-violet-600 px-3 py-2 t-sm leading-relaxed text-white">
+                <div className="min-w-0 max-w-[85%] wrap-anywhere whitespace-pre-wrap rounded-2xl bg-violet-600 px-3 py-2 t-sm leading-relaxed text-white">
                   {m.content}
                 </div>
               </div>
@@ -128,7 +128,7 @@ export default function AiPanel({ email, onClose }: AiPanelProps) {
           }
           return (
             <div key={i} className="flex justify-start">
-              <div className="max-w-[90%] rounded-2xl bg-gray-100 px-3 py-2 t-sm text-gray-800">
+              <div className="min-w-0 max-w-[90%] rounded-2xl bg-gray-100 px-3 py-2 t-sm text-gray-800">
                 <Markdown text={m.content} />
               </div>
             </div>
