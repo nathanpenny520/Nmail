@@ -26,8 +26,8 @@ from bs4 import BeautifulSoup, Tag
 MAX_INLINE_IMAGE_BYTES = 2 * 1024 * 1024  # cid 内联图超过 2MB 不内联
 
 _ALLOWED_TAGS = {
-    "a", "b", "blockquote", "br", "center", "code", "div", "em", "font", "h1", "h2",
-    "h3", "h4", "h5", "h6", "hr", "i", "img", "li", "ol", "p", "pre", "s", "small",
+    "a", "b", "blockquote", "br", "center", "code", "col", "colgroup", "div", "em", "font", "h1", "h2",
+    "h3", "h4", "h5", "h6", "hr", "i", "img", "li", "mark", "ol", "p", "pre", "s", "small",
     "span", "strong", "sub", "sup", "table", "tbody", "td", "th", "thead", "tr", "u", "ul",
 }
 
@@ -173,6 +173,57 @@ def sanitize_outgoing_html(html: str) -> str:
     )
 
 
+# 收件端兜底样式：编辑器排版来自本地 CSS（.ProseMirror），收件人客户端没有——
+# 主流邮箱会剥离 <style> 与类、只认内联样式，故发送前把同参数样式写进 style 属性。
+# 与 frontend/src/index.css 的 .mail-editor/.mail-preview 保持同参，改动需三处同步。
+_DECORATE_MONO = "'Courier New',Consolas,monospace"
+_DECORATE_STYLE: dict[str, str] = {
+    "p": "margin:0 0 1em",
+    "h1": "font-size:1.5em;font-weight:600;margin:0.6em 0 0.3em",
+    "h2": "font-size:1.3em;font-weight:600;margin:0.6em 0 0.3em",
+    "h3": "font-size:1.15em;font-weight:600;margin:0.6em 0 0.3em",
+    "blockquote": (
+        "border-left:3px solid #e5e7eb;padding-left:12px;margin:0.5em 0;color:#6b7280"
+    ),
+    "pre": (
+        "background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;"
+        f"padding:10px 12px;font-size:13px;font-family:{_DECORATE_MONO}"
+    ),
+    "table": "border-collapse:collapse",
+    "td": "border:1px solid #d1d5db;padding:4px 10px",
+    "th": "border:1px solid #d1d5db;padding:4px 10px;background:#f9fafb;font-weight:600",
+    "hr": "border:none;border-top:1px solid #e5e7eb",
+    "img": "max-width:100%",
+}
+
+
+def decorate_outgoing_html(html: str) -> str:
+    """发件方向内联化：把编辑器观感写进内联 style，收件端不依赖自家默认样式。
+
+    在 sanitize_outgoing_html 之后调用（只处理白名单内的标签）；用户已有内联
+    样式在后追加（同名声明后者生效，兜底不覆盖用户显式设置）。幂等性不做——
+    只在发送管线跑一次，草稿里存的始终是未装饰的编辑器 HTML。
+    """
+    soup = BeautifulSoup(html or "", "html.parser")
+    for el in soup.find_all("p"):
+        # li 内段落不额外撑行距（与编辑器 li>p{margin:0} 同参）
+        decl = "margin:0" if el.find_parent("li") else _DECORATE_STYLE["p"]
+        el.attrs["style"] = _append_decl(el.get("style") or "", decl)
+    for tag_name, decl in _DECORATE_STYLE.items():
+        if tag_name == "p":
+            continue
+        for el in soup.find_all(tag_name):
+            el.attrs["style"] = _append_decl(el.get("style") or "", decl)
+    for el in soup.find_all("code"):
+        # pre 内代码只去行内码样式（底色交给 pre），等宽字体仍显式带上（不依赖收件端继承）
+        extra = f"background:none;padding:0;font-family:{_DECORATE_MONO}" if el.find_parent("pre") else (
+            f"background:#f3f4f6;border-radius:4px;padding:1px 4px;font-size:0.92em;"
+            f"font-family:{_DECORATE_MONO}"
+        )
+        el.attrs["style"] = _append_decl(el.get("style") or "", extra)
+    return str(soup)
+
+
 def html_to_plain_text(html: str) -> str:
     """HTML → 纯文本，作为发出邮件的 text/plain alternative。"""
     soup = BeautifulSoup(html or "", "html.parser")
@@ -181,7 +232,12 @@ def html_to_plain_text(html: str) -> str:
     for block in soup.find_all(
         ["p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"]
     ):
-        block.append("\n")
+        if block.name in ("p", "div") and block.find_parent(["td", "th"]):
+            block.append(" ")  # 单元格内段落用空格衔接，避免整表碎成多行
+        else:
+            block.append("\n")
+    for cell in soup.find_all(["td", "th"]):
+        cell.append(" ")  # 单元格之间补空格（无处理时 "表头A表头B" 粘连）
     text = soup.get_text()
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 

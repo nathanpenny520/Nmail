@@ -9,6 +9,14 @@
 - 后端（user_drafts.py）：新增 `DELETE /api/user-drafts?status=sent|discarded` 批量清空（仅两个终态开放，在途状态 400；附件磁盘目录随清同步删除），解掉 LIMIT 200 隐形堆积
 - 测试：后端 pytest 全绿（含新增批量清空用例）；ruff + tsc/vite build 通过；8720 重启后 chrome-devtools 真实实例实测——已发送行尾/详情删除、撤销浮条出现与行恢复、超时落定、清空两击全链路断言通过；批量清空另在隔离数据目录实例验证（只动自建记录，用户 3 条真实已发送全程无恙）
 
+## 待提交 — fix: 写信发送保真——高亮/表格/段距等样式内联化到收件端
+- 用户反馈与实证：写信编辑器的高亮发出去即变裸文本（`mark` 不在发件消毒白名单，nh3 剥标签留文本，后端消毒函数实测复现）；表格边框/表头灰底只存在于编辑器本地 CSS（.ProseMirror），收件人收到的是无边框裸表格；段距/引用/代码块/标题观感全依赖收件方客户端默认样式，与编辑器所见不一致（Gmail 段落默认 1em vs 编辑器 0.35em 等）
+- 后端（mail_html.py）：① `mark` 入 `_ALLOWED_TAGS`（收发双向同套白名单，高亮保真），顺带放行 col/colgroup+width（表格列宽预放行）② 新增 `decorate_outgoing_html`——发送前把与编辑器同参数的样式写进内联 style（p margin:0 0 1em、h1–h3 字号字重边距、blockquote 竖线、pre/code 等宽字体与底色、table border-collapse + td/th 边框内边距 + th 灰底加粗、img max-width、hr），li 内段落 margin:0 不撑行距；用户已有内联样式在后追加、同名声明后者生效（兜底不覆盖显式设置）③ `html_to_plain_text` 表格单元格补空格分隔（原"表头A表头B"粘连不可读）
+- 发送管线（outbox.py）：sanitize → decorate → wrap 三步；纯文本 alternative 由装饰后 HTML 派生
+- 前端（index.css）：编辑器与 AI 预览段距 0.35em 0 → 0 0 1em，与发送内联样式同参（所见即所发）；mail_html.py 内注释标注三处同参需同步
+- 测试：pytest 164 全绿（+7：mark 保真回归/表格段落内联化/既有样式保留/引用代码块/发送管线端到端/纯文本表格分隔等）；ruff + npm run build 通过
+- 遗留：后端改动需重启 python run.py 生效；Outlook 桌面版（Word 引擎）不渲染 data: URI 内嵌图的 cid 化改造随 P2 预览一起评估
+
 ## f426d7b — UI: 树内账号状态指示改 Outlook 式红!角标
 - 用户反馈两轮：先嫌展开树「标识色点+绿色状态点」两颗球扎眼（正常态绿色零信息量），再明确要求异常直接冒感叹号（Outlook 式），不要再出现多个色球
 - 定稿语义（FolderTree 展开行+折叠头像统一）：正常=无任何状态标记（只剩标识色一颗球）；同步中=琥珀脉动小点；未同步=灰点；授权过期/连接异常=红底白!角标（展开行右端 ml-auto、折叠头像右上角标，title 带状态详情）——「有感叹号=有事」一眼可辨

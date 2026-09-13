@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from app.core.mail_html import (
     count_remote_images,
+    decorate_outgoing_html,
     html_to_plain_text,
     markdown_to_email_html,
     sanitize_email_html,
     sanitize_outgoing_html,
+    wrap_email_body_html,
 )
 
 
@@ -153,3 +155,51 @@ def test_style_tag_escape_guard():
 def test_document_without_style_unchanged():
     out = _clean('<p style="color:red">hi</p>')
     assert "<style>" not in out and 'style="color:red"' in out
+
+
+def test_outgoing_mark_highlight_preserved():
+    # 回归：mark 曾不在发件白名单，高亮发出去即被剥成裸文本
+    out = sanitize_outgoing_html('<p>前<mark style="background-color:#fff176">高亮</mark>后</p>')
+    assert "<mark" in out and "background-color:#fff176" in out
+
+
+def test_decorate_outgoing_html_table_and_paragraph():
+    html = (
+        "<table><tbody><tr><th>表头</th><td>格</td></tr></tbody></table>"
+        "<p>段落</p><ul><li><p>列表项</p></li></ul>"
+    )
+    out = decorate_outgoing_html(html)
+    assert "border-collapse:collapse" in out
+    assert "border:1px solid #d1d5db;padding:4px 10px" in out  # td/th 边框进内联
+    assert "background:#f9fafb" in out  # th 灰底
+    assert "margin:0 0 1em" in out  # 普通段落
+    assert "margin:0" in out  # li 内段落不撑行距
+
+
+def test_decorate_keeps_existing_style():
+    out = decorate_outgoing_html('<p style="text-align:center">居中</p>')
+    assert "text-align:center" in out and "margin:0 0 1em" in out
+
+
+def test_decorate_blockquote_pre_code():
+    html = "<blockquote><p>引用</p></blockquote><pre><code>code()</code></pre><p><code>行内</code></p>"
+    out = decorate_outgoing_html(html)
+    assert "border-left:3px solid #e5e7eb" in out
+    assert out.count("font-family:") == 3  # pre + 两处 code（等宽字体带到收件端）
+    assert "background:#f3f4f6" in out  # 行内码底色
+    assert "background:none" in out  # pre 内代码不重复行内码样式
+
+
+def test_send_pipeline_mark_and_table_survive():
+    raw = '<p><mark style="background-color:#fff176">高亮</mark></p><table><tr><td>甲</td></tr></table>'
+    out = wrap_email_body_html(decorate_outgoing_html(sanitize_outgoing_html(raw)))
+    assert "<mark" in out  # 高亮到达收件端
+    assert "border:1px solid" in out  # 表格边框到达收件端
+
+
+def test_plain_text_table_cells_separated():
+    out = html_to_plain_text(
+        "<table><tr><th>甲</th><th>乙</th></tr><tr><td>1</td><td>2</td></tr></table>"
+    )
+    assert "甲 乙" in out
+    assert "1 2" in out

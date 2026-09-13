@@ -14,6 +14,7 @@ from app.config import get_data_dir
 from app.core import mailbox
 from app.core.imap_client import SEEN_FLAG, reply_subject
 from app.core.mail_html import (
+    decorate_outgoing_html,
     html_to_plain_text,
     markdown_to_email_html,
     sanitize_outgoing_html,
@@ -117,7 +118,7 @@ def send_user_draft(draft_id: int) -> None:
 
     handle = mailbox.load_account(int(row["account_id"]))
 
-    html = wrap_email_body_html(sanitize_outgoing_html(row["body_html"]))
+    html = wrap_email_body_html(decorate_outgoing_html(sanitize_outgoing_html(row["body_html"])))
     text = html_to_plain_text(html)
 
     # 回复信件带上 In-Reply-To，让对方客户端正确串线

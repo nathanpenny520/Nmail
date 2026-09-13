@@ -61,7 +61,8 @@ body.dragging-col {
   word-break: break-word;
 }
 .mail-editor .ProseMirror p {
-  margin: 0.35em 0;
+  /* 段距与发送时注入的内联样式同参（mail_html.decorate_outgoing_html），所见即所发 */
+  margin: 0 0 1em;
 }
 .mail-editor .ProseMirror h1,
 .mail-editor .ProseMirror h2,
@@ -166,7 +167,7 @@ body.dragging-col {
   color: #1f2937;
   word-break: break-word;
 }
-.mail-preview p { margin: 0.35em 0; }
+.mail-preview p { margin: 0 0 1em; }
 .mail-preview h1, .mail-preview h2, .mail-preview h3 { font-weight: 600; margin: 0.6em 0 0.3em; }
 .mail-preview h1 { font-size: 1.5em; }
 .mail-preview h2 { font-size: 1.3em; }

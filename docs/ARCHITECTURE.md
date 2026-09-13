@@ -101,7 +101,7 @@ UID 增量拉取 → 落库+附件落盘 → FLAGS 对账(UID SEARCH UNSEEN/FLAG
 
 ### 安全模型
 - HTML 邮件：nh3 白名单（http(s) 链接强制 target=_blank + rel=noopener）→ 远程图默认拦截（计数）→ 前端 sandbox iframe（allow-same-origin+allow-popups-to-escape-sandbox，无脚本；外链点击在新标签由浏览器正常打开，不在 iframe 内导航）；srcdoc 注入 body 基础样式（sans 字体栈+行高，仅兜底继承），邮件自带 `<style>` 随消毒放行（拦截口径下其 CSS 远程资源已剥）
-- 发信：multipart/alternative（写信工作台：TipTap HTML 经 `sanitize_outgoing_html` 白名单消毒后直发 + 派生纯文本；AI 草稿 approve 同走 `imap_client` 发送）；草稿 approve 带 In-Reply-To 并归档 Sent
+- 发信：multipart/alternative（写信工作台：TipTap HTML 经 `sanitize_outgoing_html` 白名单消毒 → `decorate_outgoing_html` 收件端兜底内联化（编辑器排版来自本地 CSS，收件人客户端没有——发送前把同参数样式写进内联 style：段距/标题/引用/代码块/表格边框等，用户已有内联样式不覆盖；与 index.css 编辑器样式保持同参）→ `wrap_email_body_html` 基础样式外层 + 派生纯文本；AI 草稿 approve 同走 `imap_client` 发送）；草稿 approve 带 In-Reply-To 并归档 Sent
 - 密钥：本地 `secrets.json`（POSIX chmod 600，原子写：临时文件+`os.replace`；进程内 `threading.Lock` 串行化读改写——整文件覆盖模型下无锁并发会丢键，曾致 OAuth 令牌全失）；AI key 按档案存放（`ai_profile_key:{id}`）明文回显（所见即所存）；OAuth 令牌按账号存放（`oauth_token:{id}`，含 refresh_token）与客户端配置（`oauth_client:{provider}`）不回传前端；服务仅 127.0.0.1
 - 来源校验（main.py 中间件）：Host 必须为本机主机名（端口与实际监听一致才严格比对）；浏览器附带 Origin 时必须为本机源——挡恶意网页对 127.0.0.1 的 drive-by POST 与 DNS rebinding。**例外**：`/api/ext/*`（对外 API，v0.4 P7）豁免两道来源校验、改持 X-Api-Key 认证（外部脚本经自建隧道到达时 Host/Origin 本非本机；浏览器跨站带不上自定义头——预检不通，drive-by 由密钥兜住）；全部 ext 调用（含被拒的）落 api_calls（/health 除外）
 - 对外 API 密钥：api_keys 表存 sha256 哈希（唯一索引）+ scopes JSON + 每日上限；明文存 secrets.json（`ext_api_key:{id}`）所见即所存；限流 60 次/分钟/密钥（内存滑动窗）；api_enabled 总开关默认关

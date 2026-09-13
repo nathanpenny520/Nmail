@@ -16,6 +16,13 @@
 
 ## 进行中
 
+### S-0913-1632-写信保真与编辑增强
+- 目标: 用户确认的写信区三段方案——P0 发送保真（mark 高亮被 nh3 白名单剥掉的实证 bug、表格/段落/引用/代码块样式内联化、纯文本表格分隔符）、P1 编辑能力（表格可调宽+右键行列增删/合并拆分/表头切换/底色、链接弹窗、跨平台字体栈）、P2 输入增强（粘贴 Markdown 自动转换、粘贴截图插入、HTML 源码视图、收件人视角预览）
+- 范围: backend(app/core/mail_html.py, app/core/outbox.py, app/api/compose_extras.py〔P2〕, tests) + frontend(components/compose/*, index.css, api/client.ts+openapi/schema 快照〔P2 再生成〕) + docs(CHANGELOG, SESSIONS, ARCHITECTURE)；共享文档与并行会话重叠处按惯例构造 patch 暂存
+- 状态: 进行中
+
+<!-- 有新会话开工时按下方模板登记 -->
+
 <!-- 有新会话开工时按下方模板登记 -->
 
 
