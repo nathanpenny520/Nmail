@@ -1906,8 +1906,6 @@ export interface components {
             ai_permission?: string | null;
             /** Style Prompt */
             style_prompt?: string | null;
-            /** Use Proxy */
-            use_proxy?: boolean | null;
         };
         /** AgentDecisionIn */
         AgentDecisionIn: {
@@ -2321,6 +2319,8 @@ export interface components {
             update_check_enabled?: boolean | null;
             /** Network Proxy */
             network_proxy?: string | null;
+            /** Network Proxy Enabled */
+            network_proxy_enabled?: boolean | null;
             /** Contacts Auto Collect */
             contacts_auto_collect?: boolean | null;
         };

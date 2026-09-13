@@ -3,11 +3,14 @@
 背景（真实用户实测）：大陆网络裸连 imap.gmail.com 直接 10054/10060；浏览器与
 httpx 能通是因为它们认代理，而 IMAP/SMTP 是裸 socket。本模块提供：
 
-- 全局代理地址设置（settings KV 键 `network_proxy`），形如
-  socks5://127.0.0.1:7890（也支持 socks5h/socks4/http，可带 user:pass@）
-- 账号级「走代理」开关（accounts.use_proxy）：只对勾选的账号生效，免得国内
-  账号被硬塞进代理；OAuth 令牌交换优先走全局代理、代理建连失败自动直连
-  兜底（Outlook 直连可达，不因代理配置错误被误伤；Gmail 直连必死则如实报错）
+- 一个全局总开关（settings KV 键 `network_proxy_enabled`）：开=所有账号的
+  IMAP/SMTP 收发与 OAuth 令牌交换一律走代理（正常软件语义，无账号级开关）；
+  本机回环地址（Proton Bridge 等）始终直连
+- 代理地址：手动地址（键 `network_proxy`，socks5/socks5h/socks4/http，可带
+  user:pass@）留空时自动检测系统代理（urllib.getproxies：macOS 系统代理/
+  Windows 注册表/HTTP(S)_PROXY 环境变量，每次连接现读——代理工具换端口无需改）
+- OAuth 令牌交换代理建连失败自动直连兜底（Outlook 直连可达，不因代理配置
+  错误被误伤；Gmail 直连必死则如实报错）
 
 实现取舍：不全局替换 socket.socket（会波及 Proton Bridge 等本地回环连接，
 且并发线程互相串代理）；改为子类注入——imaplib.IMAP4_SSL 覆盖
@@ -23,6 +26,7 @@ from urllib.parse import urlsplit
 
 import socks
 
+PROXY_ENABLED_KEY = "network_proxy_enabled"
 PROXY_SETTING_KEY = "network_proxy"
 
 _PROXY_SCHEMES: dict[str, tuple[int, int]] = {
@@ -62,26 +66,59 @@ def parse_proxy_url(raw: str) -> dict | None:
     }
 
 
+def proxy_enabled() -> bool:
+    """全局总开关（关=一律直连）。"""
+    from app.db.database import get_setting
+
+    return bool(get_setting(PROXY_ENABLED_KEY, False))
+
+
 def proxy_url_setting() -> str:
-    """全局代理地址设置原文（空=直连）。"""
+    """手动代理地址原文（空=自动检测系统代理）。"""
     from app.db.database import get_setting
 
     return str(get_setting(PROXY_SETTING_KEY, "") or "")
 
 
-def resolve_proxy(use_proxy: bool) -> dict | None:
-    """账号开关 × 全局地址 → 本连接实际使用的代理配置；不代理时返回 None。"""
-    if not use_proxy:
+def detect_system_proxy() -> str | None:
+    """读系统代理（macOS 系统代理/Windows 注册表/HTTP(S)_PROXY 环境变量）。
+
+    只是读配置记录——与本进程"会不会自动走代理"无关；读到地址后由本模块
+    显式接管（PySocks）。代理工具开「系统代理」即自动识别，无需手抄地址。
+    """
+    import urllib.request
+
+    proxies = urllib.request.getproxies()
+    for scheme in ("https", "http", "socks"):
+        url = proxies.get(scheme)
+        if url:
+            # macOS 系统代理的 SOCKS 项形如 socks://host:port；统一当 socks5 处理
+            return f"socks5://{url[len('socks://'):]}" if url.startswith("socks://") else url
+    return None
+
+
+def effective_proxy_url() -> str | None:
+    """总开关 ×（手动地址 → 系统探测）→ 实际使用的代理 URL；关/未配置返回 None。"""
+    if not proxy_enabled():
+        return None
+    manual = proxy_url_setting().strip()
+    return manual or detect_system_proxy()
+
+
+def resolve_proxy() -> dict | None:
+    """本连接实际使用的代理配置；不代理时返回 None。"""
+    url = effective_proxy_url()
+    if not url:
         return None
     try:
-        return parse_proxy_url(proxy_url_setting())
+        return parse_proxy_url(url)
     except ValueError:
-        return None  # 设置损坏时静默直连：连不上有 connection_error 兜底，不打断同步
+        return None  # 配置损坏时静默直连：连不上有 connection_error 兜底，不打断同步
 
 
 def httpx_proxy_arg() -> str | None:
     """OAuth/autoconfig 等 httpx 调用的 proxy 参数（None=不显式指定，env 仍生效）。"""
-    url = proxy_url_setting().strip()
+    url = effective_proxy_url()
     if not url:
         return None
     try:

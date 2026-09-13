@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — UX: 代理改全局总开关——开=一律走代理，删账号级开关
+- 用户反馈：代理「全局地址×账号开关」两层模型太技术化——设置页文案像说明书、账号行多一个按钮；期望和正常软件一样，开了代理一律走代理
+- 后端：netproxy 改总开关语义——`network_proxy_enabled`（开=所有账号 IMAP/SMTP 收发与 OAuth 令牌交换一律走代理；本机回环仍直连）；地址二级解析：手动地址（`network_proxy`）留空时自动检测系统代理（urllib.getproxies：macOS 系统代理/Windows 注册表/环境变量，每次连接现读，socks:// 归一 socks5），手动地址优先；`resolve_proxy/httpx_proxy_arg` 去账号开关参数；accounts API 移除 `use_proxy`（DB 列按迁移只追加原则保留不读）；settings GET 附带只读 `detected_proxy` 供设置页展示
+- 前端：设置页代理改「开关+地址」一组——开关开启才显示地址输入与探测状态（检测到/未检测到提示）；账号列表删「代理」按钮；types/client/openapi 快照与 schema.d.ts 同步再生
+- 文档：使用指南/FAQ/OAuth2 指南/ARCHITECTURE 代理章节同步新模型
+- 验证：pytest 147 全绿（test_netproxy 按总开关契约重写+新增系统探测用例，删账号开关用例）、ruff 通过、npm build 通过、openapi 快照再生；真实账号（清华邮箱）同步回归 ok；8720 常驻进程已重启加载新代码
+- 遗留：总开关默认关（升级不改变现网行为），代理工具运行时开启即可；代理端口无监听时开启会致连接失败——设置页探测提示已引导
+
 ## 6fbbd12 — 每日摘要「重要邮件」可清除（✕）
 - 用户反馈：重要邮件通知「查看」完还在列表里，要求加小 ✕ 清除——根因是摘要是当日快照（digest_history JSON，生成时落库），「查看」只是跳转定位邮件，本就不改动快照，属快照语义的自然结果而非 bug
 - 后端：新增 `POST /api/digest/important/{email_id}/dismiss`——在最新摘要快照 JSON 落 `dismissed_important` 记录（不在列表内 404）；GET 时按记录过滤展示；同日「重新生成」经 build_digest 沿袭已清除清单不让条目复活，跨天随新摘要自然重置（次日仍重要的邮件重新露出属预期）

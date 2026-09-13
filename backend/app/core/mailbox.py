@@ -44,11 +44,6 @@ def _is_oauth(row: sqlite3.Row) -> bool:
     return bool(row["auth_type"] and row["auth_type"] == "oauth2")
 
 
-def _row_use_proxy(row: sqlite3.Row) -> bool:
-    # v14 之前的库未迁移时该列不存在（测试直接建行的场景），缺省不代理
-    return bool(row["use_proxy"]) if "use_proxy" in row.keys() else False  # noqa: SIM118 — sqlite3.Row 的 in 语义是值不是键
-
-
 def load_account(account_id: int) -> AccountHandle:
     """查账号 + 凭据（密码或 OAuth 令牌），缺一即抛 MailError。全项目唯一的 MailConfig 构造点。"""
     row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
@@ -66,7 +61,6 @@ def load_account(account_id: int) -> AccountHandle:
             smtp_server=row["smtp_server"] or "",
             smtp_port=int(row["smtp_port"] or 465),
             access_token=access_token,
-            use_proxy=_row_use_proxy(row),
         )
         return AccountHandle(row=row, cfg=cfg)
     password = get_secret(f"account_pwd:{account_id}")
@@ -77,7 +71,6 @@ def load_account(account_id: int) -> AccountHandle:
         imap_server=row["imap_server"], imap_port=int(row["imap_port"]),
         smtp_server=row["smtp_server"] or "",
         smtp_port=int(row["smtp_port"] or 465),
-        use_proxy=_row_use_proxy(row),
     )
     return AccountHandle(row=row, cfg=cfg)
 

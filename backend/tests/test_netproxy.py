@@ -1,4 +1,4 @@
-"""网络代理（Gmail/Outlook 被墙场景）：URL 解析 / 直连豁免 / 套接字注入 / 设置与账号开关契约。
+"""网络代理（Gmail/Outlook 被墙场景）：URL 解析 / 直连豁免 / 套接字注入 / 总开关契约。
 
 不建真实网络连接；建连行为以「传给 connect_socket 的配置」断言。
 """
@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 from app.core import imap_client, netproxy, oauth
 from app.db import database
 from app.main import app
-from app.security import set_secret
 
 client = TestClient(app, base_url="http://127.0.0.1")
 
@@ -50,31 +49,53 @@ def test_is_local_host_never_proxied():
     assert not netproxy.is_local_host("imap.gmail.com")
 
 
-# ── resolve：账号开关 × 全局地址 ─────────────────────────────
+# ── resolve：总开关 ×（手动地址 → 系统探测）──────────────────
 
-def test_resolve_requires_both_toggle_and_setting():
+def test_resolve_proxy_by_enabled_and_url(monkeypatch):
     try:
         database.set_setting(netproxy.PROXY_SETTING_KEY, "socks5://127.0.0.1:7890")
-        assert netproxy.resolve_proxy(False) is None  # 未勾选账号 → 直连
-        assert netproxy.resolve_proxy(True)["port"] == 7890
+        database.set_setting(netproxy.PROXY_ENABLED_KEY, False)
+        assert netproxy.resolve_proxy() is None  # 开关未开 → 直连（地址存着也不走）
+
+        database.set_setting(netproxy.PROXY_ENABLED_KEY, True)
+        assert netproxy.resolve_proxy()["port"] == 7890
 
         database.set_setting(netproxy.PROXY_SETTING_KEY, "")
-        assert netproxy.resolve_proxy(True) is None  # 无全局地址 → 直连
+        monkeypatch.setattr(netproxy, "detect_system_proxy", lambda: "http://192.168.1.1:8888")
+        assert netproxy.resolve_proxy()["port"] == 8888  # 手动留空 → 系统探测兜底
+        monkeypatch.setattr(netproxy, "detect_system_proxy", lambda: None)
+        assert netproxy.resolve_proxy() is None          # 手动/探测都没有 → 直连
 
         database.set_setting(netproxy.PROXY_SETTING_KEY, "broken-url")
-        assert netproxy.resolve_proxy(True) is None  # 坏配置 → 静默直连，不炸同步
+        monkeypatch.setattr(netproxy, "detect_system_proxy", lambda: "http://x:1")
+        assert netproxy.resolve_proxy() is None  # 手动地址损坏 → 静默直连，不炸同步
     finally:
         database.set_setting(netproxy.PROXY_SETTING_KEY, "")
+        database.set_setting(netproxy.PROXY_ENABLED_KEY, False)
+
+
+def test_detect_system_proxy(monkeypatch):
+    import urllib.request
+
+    monkeypatch.setattr(urllib.request, "getproxies",
+                        lambda: {"http": "http://127.0.0.1:7890", "https": "http://127.0.0.1:7890"})
+    assert netproxy.detect_system_proxy() == "http://127.0.0.1:7890"
+    monkeypatch.setattr(urllib.request, "getproxies", lambda: {"socks": "socks://127.0.0.1:1080"})
+    assert netproxy.detect_system_proxy() == "socks5://127.0.0.1:1080"  # socks:// 归一为 socks5
+    monkeypatch.setattr(urllib.request, "getproxies", lambda: {})
+    assert netproxy.detect_system_proxy() is None
 
 
 def test_httpx_proxy_arg_follows_setting():
     try:
         database.set_setting(netproxy.PROXY_SETTING_KEY, "socks5://127.0.0.1:7890")
+        database.set_setting(netproxy.PROXY_ENABLED_KEY, True)
         assert netproxy.httpx_proxy_arg() == "socks5://127.0.0.1:7890"
-        database.set_setting(netproxy.PROXY_SETTING_KEY, "bad://")
-        assert netproxy.httpx_proxy_arg() is None
+        database.set_setting(netproxy.PROXY_ENABLED_KEY, False)
+        assert netproxy.httpx_proxy_arg() is None  # 关=直连
     finally:
         database.set_setting(netproxy.PROXY_SETTING_KEY, "")
+        database.set_setting(netproxy.PROXY_ENABLED_KEY, False)
 
 
 # ── 建连注入：IMAP/SMTP 客户端类选择与 PySocks 套接字 ────────
@@ -133,18 +154,18 @@ def smtp_plain():
     return smtplib.SMTP
 
 
-def test_connect_imap_uses_proxied_class_when_flagged(monkeypatch):
-    """connect_imap 按 use_proxy 选代理客户端类并完成装配（FakeIMAP4 拦截真连）。"""
+def test_connect_imap_uses_proxied_class_when_enabled(monkeypatch):
+    """connect_imap 按总开关选代理客户端类并完成装配（FakeIMAP4 拦截真连）。"""
     calls: list[tuple] = []
 
     class FakeIMAP4:
         def __init__(self, host, port, ssl_context=None, timeout=None):  # noqa: ANN001
             calls.append((host, port, timeout))
 
-    monkeypatch.setattr(netproxy, "resolve_proxy", lambda flag: {"t": 1} if flag else None)
+    monkeypatch.setattr(netproxy, "resolve_proxy", lambda: {"t": 1})
     monkeypatch.setattr(netproxy, "imap4_ssl_class", lambda proxy: FakeIMAP4)
     cfg = imap_client.MailConfig(email="x@gmail.com", password="p",
-                                 imap_server="imap.gmail.com", use_proxy=True)
+                                 imap_server="imap.gmail.com")
     with suppress(Exception):  # 登录在假客户端上必然报错，只验建连装配
         imap_client.connect_imap(cfg)
     assert calls == [("imap.gmail.com", 993, 60)]
@@ -171,6 +192,7 @@ def test_token_exchange_proxy_dead_falls_back_to_direct(monkeypatch):
 
     monkeypatch.setattr(oauth.httpx, "post", fake_post)
     database.set_setting(netproxy.PROXY_SETTING_KEY, "socks5://127.0.0.1:7890")
+    database.set_setting(netproxy.PROXY_ENABLED_KEY, True)
     try:
         tokens = oauth.exchange_code(oauth.PROVIDERS["outlook"], client_id="c", code="x",
                                      code_verifier="v", redirect_uri="http://localhost/cb")
@@ -179,6 +201,7 @@ def test_token_exchange_proxy_dead_falls_back_to_direct(monkeypatch):
         assert calls[1] is None                        # 代理拒绝后直连兜底
     finally:
         database.set_setting(netproxy.PROXY_SETTING_KEY, "")
+        database.set_setting(netproxy.PROXY_ENABLED_KEY, False)
 
 
 def test_token_exchange_business_error_no_direct_retry(monkeypatch):
@@ -191,6 +214,7 @@ def test_token_exchange_business_error_no_direct_retry(monkeypatch):
 
     monkeypatch.setattr(oauth.httpx, "post", fake_post)
     database.set_setting(netproxy.PROXY_SETTING_KEY, "socks5://127.0.0.1:7890")
+    database.set_setting(netproxy.PROXY_ENABLED_KEY, True)
     try:
         import pytest
         # invalid_client 被翻译为人话提示，见 _translate_token_error
@@ -200,6 +224,7 @@ def test_token_exchange_business_error_no_direct_retry(monkeypatch):
         assert calls == ["socks5://127.0.0.1:7890"]  # 只试了代理一次
     finally:
         database.set_setting(netproxy.PROXY_SETTING_KEY, "")
+        database.set_setting(netproxy.PROXY_ENABLED_KEY, False)
 
 
 def test_token_exchange_no_proxy_stays_direct(monkeypatch):
@@ -238,35 +263,21 @@ def test_smtp_auth_callback_accepts_initial_and_challenge():
     assert captured["challenge"] == ""
 
 
-# ── 设置 API 与账号开关 API ──────────────────────────────────
+# ── 设置 API ─────────────────────────────────────────────────
 
 def test_settings_network_proxy_roundtrip():
     try:
-        resp = client.put("/api/settings", json={"network_proxy": "socks5://127.0.0.1:7890"},
+        resp = client.put("/api/settings", json={"network_proxy": "socks5://127.0.0.1:7890",
+                                                 "network_proxy_enabled": True},
                           headers={"Origin": "http://127.0.0.1"})
         assert resp.status_code == 200
-        assert resp.json()["network_proxy"] == "socks5://127.0.0.1:7890"
+        body = resp.json()
+        assert body["network_proxy"] == "socks5://127.0.0.1:7890"
+        assert body["network_proxy_enabled"] is True
+        assert "detected_proxy" in body  # 系统探测结果只读回传（供设置页展示）
         bad = client.put("/api/settings", json={"network_proxy": "ftp://x"},
                          headers={"Origin": "http://127.0.0.1"})
         assert bad.status_code == 422  # 非法协议即时拒绝（与 digest_time 等校验同型）
     finally:
-        client.put("/api/settings", json={"network_proxy": ""}, headers={"Origin": "http://127.0.0.1"})
-
-
-def test_account_use_proxy_toggle():
-    conn = database.get_conn()
-    conn.execute(
-        "INSERT INTO accounts (email, provider_name, imap_server, smtp_server)"
-        " VALUES ('proxytest@gmail.com', 'Gmail', 'imap.gmail.com', 'smtp.gmail.com')")
-    conn.commit()
-    aid = conn.execute(
-        "SELECT id FROM accounts WHERE email = 'proxytest@gmail.com'").fetchone()["id"]
-    try:
-        assert client.get("/api/accounts").json()["accounts"][0]["use_proxy"] is False
-        resp = client.patch(f"/api/accounts/{aid}", json={"use_proxy": True},
-                            headers={"Origin": "http://127.0.0.1"})
-        assert resp.status_code == 200
-        assert resp.json()["account"]["use_proxy"] is True
-    finally:
-        client.delete(f"/api/accounts/{aid}")
-        set_secret(f"account_pwd:{aid}", None)
+        client.put("/api/settings", json={"network_proxy": "", "network_proxy_enabled": False},
+                   headers={"Origin": "http://127.0.0.1"})

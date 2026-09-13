@@ -59,6 +59,7 @@ export default function SettingsPage() {
   const [uiFont, setUiFont] = useState<'compact' | 'standard' | 'large'>('compact')
   const [bodyFont, setBodyFont] = useState<'small' | 'standard' | 'large'>('standard')
   const [allowRemoteImages, setAllowRemoteImages] = useState(false)
+  const [proxyEnabled, setProxyEnabled] = useState(false)
   const [proxyUrl, setProxyUrl] = useState('')
 
   const [showAddAccount, setShowAddAccount] = useState(false)
@@ -76,6 +77,7 @@ export default function SettingsPage() {
     setUiFont(data.ui_font)
     setBodyFont(data.body_font)
     setAllowRemoteImages(data.allow_remote_images)
+    setProxyEnabled(data.network_proxy_enabled)
     setProxyUrl(data.network_proxy ?? '')
   }, [data])
 
@@ -83,29 +85,32 @@ export default function SettingsPage() {
   const guardVersion = (saved: Settings) => {
     queryClient.setQueryData(['settings'], saved)
     if (saved.ui_font === undefined || saved.poll_interval_minutes === undefined
-        || saved.network_proxy === undefined) {
+        || saved.network_proxy === undefined || saved.network_proxy_enabled === undefined) {
       setSettingsError('后端版本较旧，设置未能真正保存——请重启 python run.py 后重试')
     } else {
       setSettingsError('')
     }
   }
 
-  // 通用表单（轮询/摘要时间/代理地址）：改动后由底部粘性保存栏统一提交
+  // 通用表单（轮询/摘要时间/代理开关与地址）：改动后由底部粘性保存栏统一提交
   const saveMutation = useMutation({
     mutationFn: api.updateSettings,
     onSuccess: guardVersion,
   })
   const handleSave = () =>
-    saveMutation.mutate({ poll_interval_minutes: pollMinutes, digest_time: digestTime, network_proxy: proxyUrl.trim() })
+    saveMutation.mutate({ poll_interval_minutes: pollMinutes, digest_time: digestTime,
+      network_proxy_enabled: proxyEnabled, network_proxy: proxyUrl.trim() })
   const discardChanges = () => {
     if (!data) return
     setPollMinutes(data.poll_interval_minutes)
     setDigestTime(data.digest_time)
+    setProxyEnabled(data.network_proxy_enabled)
     setProxyUrl(data.network_proxy ?? '')
   }
   const dirty =
     !!data && (pollMinutes !== data.poll_interval_minutes || digestTime !== data.digest_time
-      || proxyUrl.trim() !== (data.network_proxy ?? ''))
+      || proxyEnabled !== data.network_proxy_enabled
+      || (proxyEnabled && proxyUrl.trim() !== (data.network_proxy ?? '')))
 
   // 字号：选择即保存、即时生效
   const fontMutation = useMutation({
@@ -125,14 +130,6 @@ export default function SettingsPage() {
     setAllowRemoteImages(v)
     fontMutation.mutate({ allow_remote_images: v })
   }
-
-  // 账号级代理开关：即时保存；仅影响该账号 IMAP/SMTP（Gmail/Outlook 授权令牌交换自动跟随全局代理）
-  const proxyToggleMutation = useMutation({
-    mutationFn: (args: { id: number; use_proxy: boolean }) =>
-      api.updateAccount(args.id, { use_proxy: args.use_proxy }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['accounts'] }),
-    onError: (err: Error) => setAccountMessage(`保存失败：${err.message}`),
-  })
 
   // 更新检查：开关即存；「检查更新」跳过 24h 缓存立即对比一次
   const updateCheckQuery = useQuery({
@@ -320,23 +317,41 @@ export default function SettingsPage() {
                 <option value="show">直接显示</option>
               </select>
             </label>
-            <label className="mt-4 block">
-              <span className="mb-1 block t-md text-gray-600">
-                网络代理<span className="ml-1 t-sm text-gray-400">给被墙服务商（Gmail/Outlook）用的本机代理；留空=直连</span>
-              </span>
-              <input
-                className={inputClass}
-                value={proxyUrl}
-                onChange={(e) => setProxyUrl(e.target.value)}
-                placeholder="socks5://127.0.0.1:7890（也支持 http://，可带账号密码）"
-                autoComplete="off"
-                spellCheck={false}
-              />
+            <div className="mt-4">
+              <div className="flex items-center justify-between">
+                <span className="t-md text-gray-600">网络代理</span>
+                <label className="flex cursor-pointer items-center gap-2 t-sm text-gray-500">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-indigo-600"
+                    checked={proxyEnabled}
+                    onChange={(e) => setProxyEnabled(e.target.checked)}
+                  />
+                  {proxyEnabled ? '已开启' : '已关闭'}
+                </label>
+              </div>
               <span className="mt-1 block t-sm leading-relaxed text-gray-400">
-                保存后在「邮箱账号」里给需要的账号点「代理」开启；Gmail/Outlook 授权登录优先走此代理、
-                代理不可达自动直连；本机地址（127.0.0.1 / localhost，如 Proton Bridge）始终直连。
+                开启后所有邮箱的收发与 Google/微软授权都通过代理（和浏览器一致，无需按账号设置）；
+                本机服务（如 Proton Bridge）不受影响。
               </span>
-            </label>
+              {proxyEnabled && (
+                <>
+                  <input
+                    className={`${inputClass} mt-2`}
+                    value={proxyUrl}
+                    onChange={(e) => setProxyUrl(e.target.value)}
+                    placeholder="socks5://127.0.0.1:7890（也支持 http://，可带账号密码）"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <span className="mt-1 block t-sm leading-relaxed text-gray-400">
+                    留空=自动检测系统代理。{data?.detected_proxy
+                      ? `当前检测到：${data.detected_proxy}`
+                      : '当前未检测到——让代理工具开启「系统代理」，或在上方手动填地址'}
+                  </span>
+                </>
+              )}
+            </div>
           </section>
         )}
 
@@ -399,20 +414,6 @@ export default function SettingsPage() {
                         onClick={() => setAiGrantsOpenId(aiGrantsOpenId === account.id ? null : account.id)}
                       >
                         AI 权限
-                      </button>
-                      <button
-                        className={`shrink-0 rounded-lg border px-2 py-1.5 t-sm ${
-                          account.use_proxy
-                            ? 'border-sky-200 bg-sky-50 text-sky-600'
-                            : 'border-gray-200 text-gray-500 hover:bg-white hover:text-sky-600'
-                        }`}
-                        title="网络代理：开启后该账号的收发邮件经 设置-通用 的代理地址连接（Gmail/Outlook 等被墙服务商使用）"
-                        onClick={() =>
-                          proxyToggleMutation.mutate({ id: account.id, use_proxy: !account.use_proxy })
-                        }
-                        disabled={proxyToggleMutation.isPending}
-                      >
-                        代理
                       </button>
                       <button
                         className={`shrink-0 rounded-lg border px-2 py-1.5 t-sm ${

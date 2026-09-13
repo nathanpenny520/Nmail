@@ -21,7 +21,8 @@ DEFAULT_SETTINGS: dict[str, object] = {
     "body_font": "standard",  # small | standard | large
     "allow_remote_images": False,  # 全局放行邮件远程图片（默认拦截防追踪）
     "update_check_enabled": True,  # 应用内更新检查（匿名版本对比，可关）
-    "network_proxy": "",       # 全局代理地址（socks5://127.0.0.1:7890），空=直连
+    "network_proxy": "",       # 手动代理地址（socks5://127.0.0.1:7890），空=自动检测系统代理
+    "network_proxy_enabled": False,  # 代理总开关：开=所有账号收发与 OAuth 一律走代理
     "contacts_auto_collect": True,  # 通讯录自动采集（收发往来地址自动入册；关=仅手动）
 }
 
@@ -34,6 +35,7 @@ class SettingsIn(BaseModel):
     allow_remote_images: bool | None = None
     update_check_enabled: bool | None = None
     network_proxy: str | None = Field(default=None, max_length=300)
+    network_proxy_enabled: bool | None = None
     contacts_auto_collect: bool | None = None
 
     @field_validator("network_proxy")
@@ -93,6 +95,11 @@ def read_settings() -> dict:
         "network_proxy": get_setting(
             "network_proxy", DEFAULT_SETTINGS["network_proxy"]
         ),
+        "network_proxy_enabled": get_setting(
+            "network_proxy_enabled", DEFAULT_SETTINGS["network_proxy_enabled"]
+        ),
+        # 系统代理探测结果（只读展示：设置页提示"检测到/未检测到"，不入库）
+        "detected_proxy": netproxy.detect_system_proxy(),
         "contacts_auto_collect": get_setting(
             "contacts_auto_collect", DEFAULT_SETTINGS["contacts_auto_collect"]
         ),
@@ -115,6 +122,8 @@ def update_settings(payload: SettingsIn) -> dict:
         set_setting("update_check_enabled", payload.update_check_enabled)
     if payload.network_proxy is not None:
         set_setting("network_proxy", payload.network_proxy.strip())
+    if payload.network_proxy_enabled is not None:
+        set_setting("network_proxy_enabled", payload.network_proxy_enabled)
     if payload.contacts_auto_collect is not None:
         set_setting("contacts_auto_collect", payload.contacts_auto_collect)
     return read_settings()

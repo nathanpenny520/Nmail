@@ -20,8 +20,12 @@ export interface Settings {
   body_font: 'small' | 'standard' | 'large'
   allow_remote_images: boolean
   update_check_enabled: boolean
-  /** 全局代理地址（socks5://127.0.0.1:7890 / http://...）；空=直连 */
+  /** 代理总开关：开=所有账号收发与 Google/微软授权一律走代理 */
+  network_proxy_enabled: boolean
+  /** 手动代理地址（socks5://127.0.0.1:7890 / http://...）；空=自动检测系统代理 */
   network_proxy: string
+  /** 系统代理探测结果（只读展示，不入库） */
+  detected_proxy: string | null
   /** 通讯录自动采集（收发往来地址自动入册）；关=仅手动增改 */
   contacts_auto_collect: boolean
 }
@@ -33,6 +37,7 @@ export interface SettingsPayload {
   body_font?: 'small' | 'standard' | 'large'
   allow_remote_images?: boolean
   update_check_enabled?: boolean
+  network_proxy_enabled?: boolean
   network_proxy?: string
   contacts_auto_collect?: boolean
 }
@@ -77,8 +82,6 @@ export interface Account {
   auth_type: 'password' | 'oauth2'
   /** OAuth 服务商标识：gmail | outlook | ''（密码账号） */
   oauth_provider: string
-  /** 该账号 IMAP/SMTP 是否经全局代理地址连接（被墙服务商用） */
-  use_proxy: boolean
   ai_permission: 'readonly' | 'draft_review'
   /** AI 细粒度授权（v0.4 P6）；null = 按旧 ai_permission 枚举映射 */
   ai_grants: { read: boolean; draft: boolean; organize: boolean; send: boolean; delete: boolean } | null

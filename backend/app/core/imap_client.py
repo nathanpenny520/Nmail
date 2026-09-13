@@ -38,8 +38,7 @@ class MailConfig:
     # OAuth2 账号（auth_type='oauth2'）：access_token 非空时走 XOAUTH2，
     # password 不参与认证（邮箱层已确保传入的是刚刷新过的有效令牌）
     access_token: str | None = None
-    # 账号级「走代理」：True 时 IMAP/SMTP 经全局代理地址（settings.network_proxy）建连
-    use_proxy: bool = False
+    # 代理：全局总开关（netproxy.resolve_proxy），无账号级字段
 
 
 @dataclass
@@ -84,7 +83,7 @@ class _MailBoxProxy(MailBox):
 def connect_imap(cfg: MailConfig) -> MailBox:
     """建立已登录的 IMAP 连接，返回可作上下文管理器使用的 MailBox。"""
     # timeout=60：连接与读写都有上限，避免僵死连接永远挂着
-    proxy = netproxy.resolve_proxy(cfg.use_proxy)
+    proxy = netproxy.resolve_proxy()
     imap4_cls = netproxy.imap4_ssl_class(proxy)
     mb = _MailBoxProxy(imap4_cls, cfg.imap_server, cfg.imap_port, 60)
     if cfg.access_token:
@@ -316,11 +315,11 @@ def send_email(
 
     if cfg.smtp_port == 465:
         server: smtplib.SMTP = netproxy.smtp_class(
-            netproxy.resolve_proxy(cfg.use_proxy), ssl=True)(
+            netproxy.resolve_proxy(), ssl=True)(
             cfg.smtp_server, cfg.smtp_port, timeout=30)
     else:
         server = netproxy.smtp_class(
-            netproxy.resolve_proxy(cfg.use_proxy), ssl=False)(
+            netproxy.resolve_proxy(), ssl=False)(
             cfg.smtp_server, cfg.smtp_port, timeout=30)
     try:
         server.ehlo()

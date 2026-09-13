@@ -40,7 +40,6 @@ class AccountPatchIn(BaseModel):
     smtp_port: int | None = None
     ai_permission: str | None = None  # readonly | draft_review
     style_prompt: str | None = Field(default=None, max_length=2000)  # None=不改；空串=清除
-    use_proxy: bool | None = None  # 该账号 IMAP/SMTP 是否经全局代理地址连接
 
 
 class ProbeIn(BaseModel):
@@ -83,7 +82,6 @@ def _account_dict(row) -> dict[str, Any]:  # noqa: ANN001
         "color": row["color"],
         "auth_type": row["auth_type"] if "auth_type" in row.keys() else "password",  # noqa: SIM118 — sqlite3.Row 的 in 语义是值不是键
         "oauth_provider": row["oauth_provider"] if "oauth_provider" in row.keys() else "",  # noqa: SIM118 — 同上
-        "use_proxy": bool(row["use_proxy"]) if "use_proxy" in row.keys() else False,  # noqa: SIM118 — 同上
         "ai_permission": row["ai_permission"] if "ai_permission" in row.keys() else "draft_review",  # noqa: SIM118 — 同上
         "ai_grants": _safe_grants(row["ai_grants"]) if "ai_grants" in row.keys() else None,  # noqa: SIM118 — 同上
         "is_ai_mailbox": bool(row["is_ai_mailbox"]) if "is_ai_mailbox" in row.keys() else False,  # noqa: SIM118 — 同上
@@ -243,13 +241,6 @@ def update_account(account_id: int, payload: AccountPatchIn) -> dict:
         conn.execute(
             "UPDATE accounts SET style_prompt = ? WHERE id = ?",
             (text or None, account_id),
-        )
-        conn.commit()
-
-    if payload.use_proxy is not None:
-        conn.execute(
-            "UPDATE accounts SET use_proxy = ? WHERE id = ?",
-            (int(payload.use_proxy), account_id),
         )
         conn.commit()
 

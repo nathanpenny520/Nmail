@@ -411,7 +411,6 @@ export const api = {
     smtp_port?: number
     ai_permission?: string
     style_prompt?: string | null
-    use_proxy?: boolean
   }) =>
     request<{ ok: boolean; account: Account }>(`/api/accounts/${id}`, {
       method: 'PATCH',
