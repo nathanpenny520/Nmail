@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 未读/星标与服务器 FLAGS 对账——外部客户端的已读变化不再丢失
+- 用户反馈：邮箱里邮件都看完了，INBOX 徽章仍显示 22——根因是已读状态「只出不进」：增量同步按 UID 水位只拉新邮件、从不回读服务器 FLAGS，新邮件入库（INSERT OR IGNORE）也不记录 FLAGS，Thunderbird/网页/手机上的已读变化永远到不了本地；徽章取自本地 `is_read=0` 计数（folders.cached_list），故与真实状态脱节。次因：在 Nmail 内读信后，合并的批量已读成功时不刷新 folder-cache，树徽章要等下次同步等事件才动
+- 后端（core/sync.py + core/imap_client.py）：①`_sync_folder` 增量拉取完成后加 FLAGS 对账——`UID SEARCH UNSEEN/FLAGGED` 各一条命令，与本地该文件夹全部行比对，只翻 is_read/starred 有差异的行；SEARCH 失败整段跳过，不影响同步主干 ②`ParsedMessage` 携带 flags，新邮件入库即按服务器 \Seen/\Flagged 初始化 is_read/starred（堵「别处已读后才同步到的新邮件仍显示未读」）
+- 前端（MailBrowser）：800ms 合并的批量已读成功后 invalidate `['folder-cache']`——在 Nmail 里读完徽章即时归零
+- 文档：ARCHITECTURE 同步管线与 core/sync 行同步新机制
+- 验证：pytest 147 全绿、ruff + npm build 通过；真实账号（清华邮箱）端到端——最新一封在 Nmail 标未读（徽章 1）→ 仅服务器侧 IMAP 标回已读（模拟 TB/网页读信）→ 触发同步后本地 is_read 翻正、徽章即时归零；8720 常驻进程已重启加载新代码
+
+
 ## 5c58628 — fix: 代理状态行实时化 + 彻底删除手动代理地址
 - 用户反馈：状态行「当前直连」疑似写死，要求开了代理能实时看到；「手动指定代理地址」折叠项仍会困惑人，彻底删除
 - 状态行实况：数据本就每次 GET 实时探测（urllib.getproxies），但页面不自动刷新——设置页加独立 3s 轮询查询（与主设置查询隔离，不重置表单），系统代理开关一变，状态行几秒内自动显示「当前经 … 连接 / 直连」

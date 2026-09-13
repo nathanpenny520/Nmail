@@ -18,6 +18,16 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1422-FLAGS对账 ✅
+- 目标: 用户反馈「邮件都看完了 INBOX 徽章仍 22」——根因是已读状态单向同步：增量同步只拉新 UID，从不回读服务器 FLAGS，外部（TB/网页/手机）的已读变化永远到不了本地，徽章=本地 is_read=0 计数故失真；次因是前端在 Nmail 内读信后不刷新 folder-cache 徽章。修复：①同步尾部 UID SEARCH UNSEEN/FLAGGED 对账本地 is_read/starred ②新邮件入库按服务器 FLAGS 初始化 ③前端已读批处理成功后 invalidate folder-cache
+- 范围: backend(core/sync.py, core/imap_client.py) + frontend(MailBrowser.tsx) + docs(ARCHITECTURE, CHANGELOG, SESSIONS)
+- 产出: 提交（待回填哈希，见 CHANGELOG「未读/星标与服务器 FLAGS 对账」条目）；pytest 147 全绿、ruff + npm build 通过；真实账号（清华邮箱）端到端——Nmail 标未读（徽章 1）→ 仅服务器侧 IMAP 标回已读 → 同步后本地翻正、徽章归零；8720 常驻进程已重启加载新代码
+- 关键决策: 对账=UID SEARCH ↔ 本地全行比对只翻差异行（本地行为主，服务器已删 UID 不凭空进本地）；SEARCH 失败整段跳过不阻塞同步；用户标记与对账的 ms 级竞态窗口由下一轮同步自愈（服务器为真）
+- 遗留: 无
+- 时间: 2026-09-13 14:22 开工，即日完成
+
+
+
 ### S-0913-1421-草稿页签化 ✅
 - 目标: 用户反馈两点——①树「草稿」点击不出页签不合理（同列的 AI 总管家/每日摘要都开页签）：草稿升级为页面页签（PAGE_TABS 机制，`/drafts` 真实路由，激活时树隐藏与其他页面一致，旧深链 `/?view=drafts` 兜底重定向）②页签 w-44 过宽放不下几个：w-44→w-36 + px/gap 收紧，长标题照常 truncate 不溢出
 - 范围: frontend(App, Layout, MailPage, FolderTree, NotificationBell, EmailReader) + docs(REDESIGN_PLAN §3.2–3.4/§5.1 修订, CHANGELOG, SESSIONS)
