@@ -21,7 +21,7 @@
 ### S-0913-1352-代理一律走代理 ✅
 - 目标: 用户反馈代理「全局地址×账号开关」两层模型太技术化——改正常软件思维：一个总开关，开=所有账号收发与 OAuth 一律走代理（本机回环仍直连），删账号级「代理」按钮；设置页开关+手动地址（空=自动检测系统代理 urllib.getproxies）
 - 范围: backend(core/netproxy.py, imap_client.py, mailbox.py, api/accounts.py, api/settings.py) + frontend(SettingsPage, types, client) + openapi 快照再生 + tests(test_netproxy 更新) + docs(ARCHITECTURE, 使用指南, FAQ, OAuth2 使用指南, CHANGELOG, SESSIONS)
-- 产出: 提交（待回填哈希）；pytest 147 全绿、ruff + npm build 通过、openapi 快照+schema.d.ts 再生；真实账号（清华邮箱）同步回归 ok；8720 常驻进程已重启加载新代码
+- 产出: 提交 182f934；pytest 147 全绿、ruff + npm build 通过、openapi 快照+schema.d.ts 再生；真实账号（清华邮箱）同步回归 ok；8720 常驻进程已重启加载新代码
 - 遗留: 总开关默认关（升级不改现网行为）——代理工具运行时开启即可；代理端口无监听时开启会致连接失败，设置页探测提示已引导；真实 Gmail 账号端到端待用户加号验证
 - 时间: 2026-09-13 13:52 开工，即日完成
 

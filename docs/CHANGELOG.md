@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — UX: 代理改全局总开关——开=一律走代理，删账号级开关
+## 182f934 — UX: 代理改全局总开关——开=一律走代理，删账号级开关
 - 用户反馈：代理「全局地址×账号开关」两层模型太技术化——设置页文案像说明书、账号行多一个按钮；期望和正常软件一样，开了代理一律走代理
 - 后端：netproxy 改总开关语义——`network_proxy_enabled`（开=所有账号 IMAP/SMTP 收发与 OAuth 令牌交换一律走代理；本机回环仍直连）；地址二级解析：手动地址（`network_proxy`）留空时自动检测系统代理（urllib.getproxies：macOS 系统代理/Windows 注册表/环境变量，每次连接现读，socks:// 归一 socks5），手动地址优先；`resolve_proxy/httpx_proxy_arg` 去账号开关参数；accounts API 移除 `use_proxy`（DB 列按迁移只追加原则保留不读）；settings GET 附带只读 `detected_proxy` 供设置页展示
 - 前端：设置页代理改「开关+地址」一组——开关开启才显示地址输入与探测状态（检测到/未检测到提示）；账号列表删「代理」按钮；types/client/openapi 快照与 schema.d.ts 同步再生
