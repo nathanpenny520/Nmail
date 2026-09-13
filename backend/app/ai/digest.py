@@ -153,14 +153,19 @@ def _ai_overview(stats: dict) -> str:
 def build_digest(force: bool = False) -> dict:
     today = date.today().isoformat()
     conn = get_conn()
-    if not force:
-        existing = conn.execute(
-            "SELECT content_json FROM digest_history WHERE date = ?", (today,)
-        ).fetchone()
-        if existing:
-            return json.loads(existing["content_json"])
+    existing = conn.execute(
+        "SELECT content_json FROM digest_history WHERE date = ?", (today,)
+    ).fetchone()
+    if not force and existing:
+        return json.loads(existing["content_json"])
 
     stats = _collect_stats()
+    # 同日重新生成时保留用户手动清除的重要邮件记录，不让 ✕ 掉的条目复活（跨天自然重置）
+    if existing:
+        dismissed = set(json.loads(existing["content_json"]).get("dismissed_important") or [])
+        if dismissed:
+            stats["important"] = [i for i in stats["important"] if i["email_id"] not in dismissed]
+            stats["dismissed_important"] = sorted(dismissed)
     stats["ai_overview"] = _ai_overview(stats)
     conn.execute(
         "INSERT INTO digest_history (date, content_json) VALUES (?, ?)"

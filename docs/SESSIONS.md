@@ -18,6 +18,18 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1352-代理一律走代理
+- 目标: 用户反馈代理「全局地址×账号开关」两层模型太技术化——改正常软件思维：一个总开关，开=所有账号收发与 OAuth 一律走代理（本机回环仍直连），删账号级「代理」按钮；设置页开关+手动地址（空=自动检测系统代理 urllib.getproxies）
+- 范围: backend(core/netproxy.py, imap_client.py, mailbox.py, api/accounts.py, api/settings.py) + frontend(SettingsPage, types, client) + openapi 快照再生 + tests(test_netproxy 更新) + docs(ARCHITECTURE, 使用指南, FAQ, OAuth2 使用指南, CHANGELOG, SESSIONS)
+- 时间: 2026-09-13 13:52 开工
+
+### S-0913-1345-摘要重要邮件可清除 ✅
+- 目标: 用户反馈「重要邮件通知查看完后还在」——根因是摘要为当日快照（digest_history JSON），查看跳转不改动快照；按用户要求给重要邮件条目加小 ✕ 清除按钮（后端落 dismissed_important 持久化，重新生成不复活；跨天随新摘要自然重置）
+- 范围: backend(api/digest.py, ai/digest.py) + frontend(DigestPage, client) + openapi 快照再生 + tests(test_digest 扩充) + docs(ARCHITECTURE, CHANGELOG, SESSIONS)
+- 产出: 提交（待回填哈希）；pytest 147 全绿（+2）、ruff + npm build 通过、openapi 快照+schema.d.ts 再生；隔离实例（8793，临时数据目录）curl 往返——生成→清除→重生成不复活→未知 id 404 全对，浏览器实测 ✕ 点击即消失
+- 遗留: 需重启 python run.py 生效；「需要回复」列表未加清除（用户未要求）
+- 时间: 2026-09-13 13:45 开工，即日完成
+
 ### S-0913-1347-版本号解析修复 ✅
 - 目标: 用户反馈 `.venv/bin/python run.py` 源码直跑，关于页仍显示「当前 v0.2.0」并提示升级 v0.3.0——排查版本号管理并修复
 - 范围: backend(app/config.py, tests/test_units.py) + nmail.spec + pyproject.toml/scripts/release.sh 注释 + docs(ARCHITECTURE, RELEASE, CHANGELOG, SESSIONS)

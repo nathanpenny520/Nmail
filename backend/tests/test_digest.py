@@ -6,8 +6,11 @@ from __future__ import annotations
 
 import uuid
 
+from fastapi.testclient import TestClient
+
 from app.ai import digest
 from app.db import database
+from app.main import app
 
 database.run_migrations()
 
@@ -75,3 +78,40 @@ def test_has_draft_flag_reflects_user_drafts():
     stats = digest._collect_stats()
     item = next(i for i in stats["need_reply"] if i["email_id"] == eid)
     assert item["has_draft"] is True  # 待审草稿保持「需要回复」但标记已有草稿
+
+
+# ── 重要邮件清除（✕ 按钮）─────────────────────────────────────
+
+client = TestClient(app, base_url="http://127.0.0.1")
+
+
+def _seed_important(aid: int, uid: int, subject: str) -> int:
+    conn = database.get_conn()
+    cur = conn.execute(
+        "INSERT INTO emails (account_id, folder, uid, subject, sender_email, body_text, importance)"
+        " VALUES (?, 'INBOX', ?, ?, 'security@google.com', '正文', 'critical')",
+        (aid, uid, subject),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def test_dismiss_important_persists_and_survives_rebuild():
+    """✕ 清除重要邮件：GET 即时消失，同日重新生成不复活（跨天随新摘要重置）。"""
+    aid = _aid()
+    eid = _seed_important(aid, 61, "Security alert")
+    digest.build_digest(force=True)
+    body = client.get("/api/digest").json()["digest"]
+    assert any(i["email_id"] == eid for i in body["important"])
+
+    assert client.post(f"/api/digest/important/{eid}/dismiss").json() == {"ok": True}
+    body = client.get("/api/digest").json()["digest"]
+    assert not any(i["email_id"] == eid for i in body["important"])
+
+    digest.build_digest(force=True)
+    body = client.get("/api/digest").json()["digest"]
+    assert not any(i["email_id"] == eid for i in body["important"])
+
+
+def test_dismiss_important_unknown_id_404():
+    assert client.post("/api/digest/important/99999999/dismiss").status_code == 404

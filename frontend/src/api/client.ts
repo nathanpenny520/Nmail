@@ -438,6 +438,9 @@ export const api = {
   getDigest: () => request<DigestResp>('/api/digest'),
   generateDigest: () =>
     request<DigestResp['digest']>('/api/digest/generate', { method: 'POST' }),
+  /** 从重要邮件列表清除一条（✕ 按钮；重新生成不复活，跨天随新摘要重置） */
+  dismissDigestImportant: (emailId: number) =>
+    request<{ ok: boolean }>(`/api/digest/important/${emailId}/dismiss`, { method: 'POST' }),
 
   // ── 对外 API 密钥管理（P7，REDESIGN_PLAN §7）──
   getExtKeys: () => request<ExtKeysResp>('/api/extkeys'),

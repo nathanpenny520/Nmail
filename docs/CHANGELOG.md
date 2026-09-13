@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 每日摘要「重要邮件」可清除（✕）
+- 用户反馈：重要邮件通知「查看」完还在列表里，要求加小 ✕ 清除——根因是摘要是当日快照（digest_history JSON，生成时落库），「查看」只是跳转定位邮件，本就不改动快照，属快照语义的自然结果而非 bug
+- 后端：新增 `POST /api/digest/important/{email_id}/dismiss`——在最新摘要快照 JSON 落 `dismissed_important` 记录（不在列表内 404）；GET 时按记录过滤展示；同日「重新生成」经 build_digest 沿袭已清除清单不让条目复活，跨天随新摘要自然重置（次日仍重要的邮件重新露出属预期）
+- 前端：DigestPage 重要邮件每条加 ✕ 按钮（lucide X，灰显 hover 加深，title「从列表清除」），mutation 成功后失效 digest 查询即见消失；清空后显示既有「近期没有重要邮件」空态
+- 验证：pytest 147 全绿（+2：清除持久化且重生成不复活 / 未知 id 404）、ruff 通过、npm build 通过、openapi 快照+schema.d.ts 再生
+- 遗留：需重启 python run.py 生效；「需要回复」列表未加清除（用户未要求，语义上也应由回复行为驱动）
+
 ## 3955a76 — fix: 版本号解析链——源码直跑不再依赖手工同步的回退常量
 - 用户反馈：`.venv/bin/python run.py` 源码直跑，关于页显示「当前 v0.2.0」并提示升级 v0.3.0——排查发现该 venv 从未 `pip install -e .`，`importlib.metadata` 读不到 `nmail-app` 元数据，回退到 config.py 硬编码常量 `APP_VERSION = "0.2.0"`（pyproject 已 0.3.0，注释要求「随动」但实际已漂移）；「单一来源」名存实亡
 - 同类隐患更重：release CI 用 `pip install -r requirements.txt + pyinstaller nmail.spec` 打包，冻结环境同样无包元数据 → **已发布的 v0.3.0 三平台二进制实际自报 v0.2.0**，会一直提示用户「升级到 0.3.0」（PyPI/uvx/wheel 用户不受影响）

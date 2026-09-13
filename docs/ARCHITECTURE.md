@@ -46,7 +46,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `api/sender_lists.py` | 白/黑名单（邮箱或 @域名） | 管线中零成本先过滤 |
 | `api/chats.py` | 总管家会话持久化（chat_sessions/messages）：列表/消息/置顶/重命名/删除 | 列表 置顶>updated_at 倒序；删除级联；`append_message` 供 ai.py 落库复用 |
 | `api/profiles.py` | AI 配置档案 CRUD/激活/模型列表代理（`POST /api/ai/models`，显式 URL/Key 优先、回退档案已存值）+ AI 总开关（`PUT /api/ai/enabled`） | 密钥语义：响应回显 `api_key` 明文（本地单用户应用，所见即所存，清空保存=清除）；`ai_enabled=false` 即传统邮件模式，档案保留（/models 属配置辅助不受开关限制） |
-| `api/digest.py` | 每日摘要查看/手动生成 | — |
+| `api/digest.py` | 每日摘要查看/手动生成/重要邮件清除（`POST /api/digest/important/{email_id}/dismiss`） | 清除=快照 JSON 落 `dismissed_important` 记录，GET 过滤展示；同日重新生成经 build_digest 沿袭不清单（不复活），跨天随新摘要自然重置 |
 | `api/ext.py` | **对外 API**（v0.4 P7，REDESIGN_PLAN §7）：`/api/ext/v1/*`——health（免认证）/accounts/emails（列表/详情/附件）/emails/actions（批量，慢动作返回 job_id 经 /jobs 轮询）/drafts（列表/创建/approve 发送）/folders（+/sync 按需同步）/contacts/digest/agent（chat 非流式+SSE/decide 审批） | `require_key(scope)` 依赖：api_enabled 总开关（403）→ X-Api-Key sha256 查表（401）→ scope 校验（403）→ 60 次/分钟内存滑动窗 + 每 Key 每日上限（429）；端点全部薄壳转调内部实现（emails/user_drafts/folders/contacts/digest/agent 零新邮件操作）；agent 调用 origin=api 全量进 ai_actions；指南见 docs/对外API使用指南.md |
 | `api/extkeys.py` | 对外 API 密钥管理（仅内部设置页，走常规来源校验） | 明文存 secrets.json（`ext_api_key:{id}`，所见即所存回显），表内只留 sha256 哈希；生成/改名/scope/每日上限（0=不限）/重置（旧串立即失效）/吊销（行保留供日志对账）；`/enabled` 总开关+日志开关；`/calls` 调用日志（30 天保留） |
 | `core/providers.py` | 20 个服务商预设（含中文授权码提示）+ 未收录域名自动探测 | 按域名自动匹配；`probe_server()`：autoconfig 标准接口 → 常见主机名 993/465 并发试连（只收加密端口） |

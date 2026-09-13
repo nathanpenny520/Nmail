@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, Loader2, RefreshCw, Sparkles } from 'lucide-react'
+import { Download, Loader2, RefreshCw, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import * as echarts from 'echarts/core'
@@ -50,6 +50,11 @@ export default function DigestPage() {
 
   const generateMutation = useMutation({
     mutationFn: api.generateDigest,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['digest'] }),
+  })
+
+  const dismissMutation = useMutation({
+    mutationFn: (emailId: number) => api.dismissDigestImportant(emailId),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['digest'] }),
   })
 
@@ -307,6 +312,15 @@ export default function DigestPage() {
                     >
                       查看
                     </Link>
+                    <button
+                      className="shrink-0 rounded p-0.5 text-gray-300 hover:bg-gray-100 hover:text-gray-600"
+                      title="从列表清除"
+                      aria-label="从列表清除"
+                      onClick={() => dismissMutation.mutate(item.email_id)}
+                      disabled={dismissMutation.isPending}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </li>
                 ))}
               </ul>

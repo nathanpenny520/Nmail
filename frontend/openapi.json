@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Nmail",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "paths": {
     "/api/health": {
@@ -4223,6 +4223,51 @@
                   "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Digest Api Digest Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/digest/important/{email_id}/dismiss": {
+      "post": {
+        "tags": [
+          "digest"
+        ],
+        "summary": "Dismiss Important",
+        "description": "从最新摘要的重要邮件列表清除一条（记录持久化，重新生成不复活；跨天随新摘要重置）。",
+        "operationId": "dismiss_important_api_digest_important__email_id__dismiss_post",
+        "parameters": [
+          {
+            "name": "email_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Email Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Dismiss Important Api Digest Important  Email Id  Dismiss Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
