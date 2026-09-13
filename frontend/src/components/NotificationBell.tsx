@@ -5,11 +5,20 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { NotificationItem } from '../types'
 
-type NotifyPermission = 'default' | 'granted' | 'denied' | 'unsupported'
+export type NotifyPermission = 'default' | 'granted' | 'denied' | 'unsupported'
 
-function notifyPermission(): NotifyPermission {
+export function notifyPermission(): NotifyPermission {
   if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported'
   return Notification.permission as NotifyPermission
+}
+
+/** 通知类型 → 设置页「桌面通知」细分开关键；不在表内的系统通知（更新/黑名单归档等）不受类型开关控制 */
+const NOTIFY_TYPE_GROUP: Record<string, 'new_mail' | 'ai_draft' | 'digest' | 'account_error'> = {
+  new_mail: 'new_mail',
+  account_error: 'account_error',
+  digest: 'digest',
+  ai_draft: 'ai_draft',
+  ai_draft_summary: 'ai_draft',
 }
 
 export default function NotificationBell() {
@@ -22,6 +31,8 @@ export default function NotificationBell() {
     queryFn: api.getNotifications,
     refetchInterval: 15000,
   })
+  // 通知开关在设置页「通用」：桌面通知总开关 + 按类型细分（应用内铃铛与角标不受影响）
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings })
   const unread = data?.unread ?? 0
 
   // 浏览器桌面通知：页面开着时，新通知到达即弹系统通知
@@ -30,12 +41,18 @@ export default function NotificationBell() {
     if (!data) return
     const ids = new Set(data.items.map((i) => i.id))
     let refreshMail = false
+    // 旧后端无这些字段 → 视为开（与后端读侧缺省合并语义一致）
+    const desktopOn = settings?.desktop_notifications_enabled !== false
+    const typeOn = (t: string) => {
+      const group = NOTIFY_TYPE_GROUP[t]
+      return !group || settings?.notify_types?.[group] !== false
+    }
     if (prevIds.current !== null) {
       for (const item of data.items) {
         if (prevIds.current.has(item.id) || item.is_read) continue
         // 新邮件/账号异常通知到达 → 刷新邮件列表与账号状态（后台同步完成的主要感知途径）
         if (item.type === 'new_mail' || item.type === 'account_error') refreshMail = true
-        if (notifyPermission() === 'granted') {
+        if (desktopOn && typeOn(item.type) && notifyPermission() === 'granted') {
           try {
             const n = new Notification(item.title, { body: item.body ?? '', tag: `nmail-${item.id}` })
             n.onclick = () => window.focus()
@@ -51,7 +68,7 @@ export default function NotificationBell() {
       void queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
     }
     prevIds.current = ids
-  }, [data, queryClient])
+  }, [data, queryClient, settings])
 
   const readAllMutation = useMutation({
     mutationFn: api.markNotificationsRead,

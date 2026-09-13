@@ -13,6 +13,9 @@ export interface AIProfilesResp {
   ai_enabled: boolean
 }
 
+/** 桌面通知的类型细分键；后端读侧与默认合并，缺省键视为开 */
+export type NotifyTypeKey = 'new_mail' | 'ai_draft' | 'digest' | 'account_error'
+
 export interface Settings {
   poll_interval_minutes: number
   digest_time: string
@@ -26,6 +29,12 @@ export interface Settings {
   effective_proxy: string | null
   /** 通讯录自动采集（收发往来地址自动入册）；关=仅手动增改 */
   contacts_auto_collect: boolean
+  /** 桌面通知总开关（应用内铃铛与未读角标不受影响） */
+  desktop_notifications_enabled: boolean
+  /** 桌面通知按类型细分 */
+  notify_types: Partial<Record<NotifyTypeKey, boolean>>
+  /** 写信/回复自动带该账号签名（设置页「写信」管理签名内容） */
+  auto_insert_signature: boolean
 }
 
 export interface SettingsPayload {
@@ -36,6 +45,16 @@ export interface SettingsPayload {
   allow_remote_images?: boolean
   update_check_enabled?: boolean
   contacts_auto_collect?: boolean
+  desktop_notifications_enabled?: boolean
+  notify_types?: Partial<Record<NotifyTypeKey, boolean>>
+  auto_insert_signature?: boolean
+}
+
+/** 本机路径（设置页「关于」展示软件本地性；均为运行进程实时解析的真实值） */
+export interface SystemPaths {
+  data_dir: string
+  install_dir: string
+  data_dir_overridden: boolean
 }
 
 export interface UpdateCheckResp {

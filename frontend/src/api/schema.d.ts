@@ -21,6 +21,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/system/paths": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * System Paths
+         * @description 本机路径（设置页「关于」展示软件本地性）：数据目录实时取（含 NMAIL_DATA_DIR 重定向），
+         *     安装目录按运行形态解析——均为当前进程的真实值，不硬编码。
+         */
+        get: operations["system_paths_api_system_paths_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/update-check": {
         parameters: {
             query?: never;
@@ -897,6 +918,47 @@ export interface paths {
          * @description Markdown → 消毒后的 HTML（编辑器/模板/签名插入用）。
          */
         post: operations["convert_markdown_api_compose_extras_markdown_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/compose-extras/sanitize-html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sanitize Html
+         * @description HTML → 白名单消毒（源码视图回填编辑器前清洗，与发送消毒同口径但不含发送专用放行）。
+         */
+        post: operations["sanitize_html_api_compose_extras_sanitize_html_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/compose-extras/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Html
+         * @description 收件人视角预览：sanitize → decorate（收件端兜底内联化）→ wrap，
+         *     与 outbox.send_user_draft 的发送管线同参——预览即收件人所见。
+         */
+        post: operations["preview_html_api_compose_extras_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2146,6 +2208,11 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HtmlIn */
+        HtmlIn: {
+            /** Html */
+            html: string;
+        };
         /** KeyCreateIn */
         KeyCreateIn: {
             /**
@@ -2326,6 +2393,14 @@ export interface components {
             update_check_enabled?: boolean | null;
             /** Contacts Auto Collect */
             contacts_auto_collect?: boolean | null;
+            /** Desktop Notifications Enabled */
+            desktop_notifications_enabled?: boolean | null;
+            /** Notify Types */
+            notify_types?: {
+                [key: string]: boolean;
+            } | null;
+            /** Auto Insert Signature */
+            auto_insert_signature?: boolean | null;
         };
         /** SignatureItem */
         SignatureItem: {
@@ -2413,6 +2488,28 @@ export interface components {
 export type $defs = Record<string, never>;
 export interface operations {
     health_api_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    system_paths_api_system_paths_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -4235,6 +4332,76 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["MarkdownIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sanitize_html_api_compose_extras_sanitize_html_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HtmlIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_html_api_compose_extras_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HtmlIn"];
             };
         };
         responses: {

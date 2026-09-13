@@ -1,8 +1,9 @@
+import os
 import subprocess
 
 from fastapi import APIRouter
 
-from app.config import APP_VERSION
+from app.config import APP_VERSION, get_data_dir, get_install_dir
 from app.core import update_check
 from app.db.database import get_conn
 
@@ -35,6 +36,17 @@ def health() -> dict:
     if COMMIT:
         info["commit"] = COMMIT
     return info
+
+
+@router.get("/api/system/paths")
+def system_paths() -> dict:
+    """本机路径（设置页「关于」展示软件本地性）：数据目录实时取（含 NMAIL_DATA_DIR 重定向），
+    安装目录按运行形态解析——均为当前进程的真实值，不硬编码。"""
+    return {
+        "data_dir": str(get_data_dir()),
+        "install_dir": str(get_install_dir()),
+        "data_dir_overridden": bool(os.environ.get("NMAIL_DATA_DIR")),
+    }
 
 
 @router.get("/api/update-check")

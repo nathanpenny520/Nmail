@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { api } from '../../api/client'
 import type { Account, EmailDetail, UserDraft } from '../../types'
 import { buildComposeInit } from './quote'
+import { EXTRAS_KEY } from './InsertDialogs'
 
 export interface ComposeTab {
   /** 标签稳定标识：懒持久化创建真实草稿后 tabId 不变、仅换绑 draftId，表单不重挂 */
@@ -94,6 +95,24 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   const accountsRef = useRef(accounts)
   accountsRef.current = accounts
 
+  // 自动签名（设置页「写信」开关）依赖的两份只读数据：缓存全局共享，这里只读
+  const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: api.getSettings })
+  const extrasQuery = useQuery({ queryKey: EXTRAS_KEY, queryFn: api.getComposeExtras })
+  const settingsRef = useRef(settingsQuery.data)
+  settingsRef.current = settingsQuery.data
+  const extrasRef = useRef(extrasQuery.data)
+  extrasRef.current = extrasQuery.data
+
+  /** 该账号的签名 HTML：开关关闭/未设签名返回空串；仅在开新写信标签时调用（注入一次），
+   *  草稿恢复与 AI 拟稿不走这里——签名已在正文里 / 由文风提示词负责。 */
+  const autoSignatureHtml = useCallback(async (accountId: number): Promise<string> => {
+    if (!settingsRef.current?.auto_insert_signature) return ''
+    const sig = (extrasRef.current?.signatures ?? []).find((s) => s.account_id === accountId)
+    if (!sig?.content.trim()) return ''
+    const { html } = await api.markdownToHtml(sig.content)
+    return html
+  }, [])
+
   // 应用启动恢复：editing/scheduled 的草稿都是未关完的标签（含用户显式保存的空稿）
   useEffect(() => {
     if (restoredRef.current) return
@@ -133,28 +152,37 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   const openNew = useCallback((opts?: { to?: string }) => {
     const account = accountsRef.current[0]
     if (!account) return
-    // 每次点击必新开一封（Gmail 心智）；空白标签懒持久化不落库，连点零成本
-    const temp: UserDraft = {
-      id: -Date.now(),
-      account_id: account.id,
-      mode: 'new',
-      in_reply_to: null,
-      to_addrs: opts?.to ?? '',
-      cc_addrs: '',
-      bcc_addrs: '',
-      subject: '',
-      body_html: '',
-      status: 'editing',
-      origin: 'human',
-      instruction: null,
-      email: null,
-      send_at: null,
-      attachments: [],
-      created_at: '',
-      updated_at: '',
-    }
-    addTab(temp, true)
-  }, [addTab])
+    // 每次点击必新开一封（Gmail 心智）；空白标签懒持久化不落库，连点零成本。
+    // 开关开启时正文预置该账号签名；签名转换失败不阻塞写信（回退空正文）
+    void (async () => {
+      let sigHtml = ''
+      try {
+        sigHtml = await autoSignatureHtml(account.id)
+      } catch {
+        sigHtml = ''
+      }
+      const temp: UserDraft = {
+        id: -Date.now(),
+        account_id: account.id,
+        mode: 'new',
+        in_reply_to: null,
+        to_addrs: opts?.to ?? '',
+        cc_addrs: '',
+        bcc_addrs: '',
+        subject: '',
+        body_html: sigHtml,
+        status: 'editing',
+        origin: 'human',
+        instruction: null,
+        email: null,
+        send_at: null,
+        attachments: [],
+        created_at: '',
+        updated_at: '',
+      }
+      addTab(temp, true)
+    })()
+  }, [addTab, autoSignatureHtml])
 
   // 防连点：创建请求在途时忽略再次点击
   const creatingRef = useRef(false)
@@ -166,6 +194,19 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
       creatingRef.current = true
       try {
         const prefill = buildComposeInit(mode, base)
+        // 自动签名：插在引用块之前（Gmail 惯例——落款在所写内容下方、引用历史上方）；失败不阻塞写信
+        try {
+          const sigHtml = await autoSignatureHtml(account.id)
+          if (sigHtml) {
+            const idx = prefill.body_html.indexOf('<blockquote>')
+            prefill.body_html =
+              idx >= 0
+                ? prefill.body_html.slice(0, idx) + sigHtml + prefill.body_html.slice(idx)
+                : sigHtml + prefill.body_html
+          }
+        } catch {
+          /* 签名注入失败按无签名继续 */
+        }
         const { draft } = await api.createUserDraft({
           account_id: account.id,
           mode,
@@ -177,7 +218,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
         creatingRef.current = false
       }
     },
-    [addTab],
+    [addTab, autoSignatureHtml],
   )
 
   const updateTab = useCallback((tabId: string, patch: Partial<Omit<ComposeTab, 'tabId'>>) => {

@@ -31,6 +31,7 @@ import type {
   SenderListEntry,
   Settings,
   SettingsPayload,
+  SystemPaths,
   UpdateCheckResp,
   UsageStats,
   UserDraft,
@@ -102,6 +103,7 @@ export const api = {
     request<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(payload) }),
   getUpdateCheck: (force: boolean = false) =>
     request<UpdateCheckResp>(`/api/update-check${force ? '?force=true' : ''}`),
+  getSystemPaths: () => request<SystemPaths>('/api/system/paths'),
   testAI: (payload: AITestPayload) =>
     request<AITestResult>('/api/ai/test', { method: 'POST', body: JSON.stringify(payload) }),
 

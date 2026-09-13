@@ -6,7 +6,7 @@ import { api } from '../../api/client'
 import type { Account, ComposeTemplate } from '../../types'
 import { Dropdown, Modal, menuItemCls } from './ui'
 
-const EXTRAS_KEY = ['compose-extras'] as const
+export const EXTRAS_KEY = ['compose-extras'] as const
 
 /** 在编辑器末尾追加转换后的 HTML（签名习惯放落款处）。 */
 async function insertHtml(editor: Editor, markdown: string, atEnd: boolean): Promise<void> {

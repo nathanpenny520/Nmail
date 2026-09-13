@@ -25,6 +25,15 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1634-设置页补全 ✅
+- 目标: 用户确认方案——①「通用」加通知块（桌面通知总开关 `desktop_notifications_enabled` + 按类型细分 `notify_types` + 浏览器权限状态常驻行）②新增「写信」分类（签名/模板管理复用写信台弹窗 + `auto_insert_signature` 自动签名，回复时插引用块之前）③黑白名单管理块（复用 sender-lists API，只补管理 UI）④「关于」显示数据目录与安装目录（运行时实时解析，不硬编码）
+- 范围: backend(api/settings.py, api/system.py, config.py) + frontend(types.ts, api/client.ts, pages/SettingsPage.tsx, components/NotificationBell.tsx, components/compose/ComposeContext.tsx + InsertDialogs.tsx〔export EXTRAS_KEY〕, openapi/schema 快照再生) + docs(ARCHITECTURE settings/system 两行, CHANGELOG, SESSIONS)
+- 产出: 提交（哈希见 CHANGELOG 回填）；ruff + pytest 164 全绿 + npm run build（tsc+字号门禁）通过；curl 实测 settings 三键读写往返/部分写合并/未知键过滤/空 dict 不落库、paths 返回真实目录（数据=`~/Library/Application Support/Nmail`、安装=仓库根）；独立 headless Chrome（/tmp 隔离 profile）对真实实例 18 项 UI 断言全过（开关联动禁用、API 落库即复原、名单增删复原、签名/模板弹窗复用可开关、路径展示与 API 一致）；真实数据自动签名——新邮件 e2e 3/3（预置签名+ephemeral 关闭零落库），回复拼接逻辑以真实签名数据验证 3/3（引用块前/引用完整/光标锚点最前）
+- 给草稿会话（S-0913-1623）的 bug 报告: HEAD dd8c0a9 上 POST /api/user-drafts mode=reply 500——`_draft_dict`（user_drafts.py:68）读 `row["email_subject"]`，但 `_get_draft`（:97）`SELECT * FROM user_drafts` 无 emails JOIN、无该列，in_reply_to 非空即 IndexError（mode=new 短路幸免）。已精确复现并清理全部测试数据；回复自动签名完整 UI e2e 等修好后补验
+- 协调: client.ts/openapi/schema/CHANGELOG/SESSIONS 与两会话重叠——CHANGELOG 构造 patch 只暂存本会话条目（写信保真会话的「待提交」编辑不卷入）；openapi/schema 整文件再生（其遗留①「随下一轮快照再生统一补」由本轮完成，含 sanitize-html/preview）；ARCHITECTURE 仅动 settings/system 两行（该文件另有他人未提交改动不卷入）；chrome-devtools MCP 被占，沿用 /tmp 独立 puppeteer-core 惯例
+- 遗留: ①回复签名 e2e 待上述 500 修复后补验 ②通知按类型细分的粒度待用户实际用一天感受
+- 时间: 2026-09-13 16:34 开工，即日完成
+
 ### S-0913-1623-草稿删除与清空 ✅
 - 目标: 用户反馈草稿页「已发送」不能删、历史堆积——已发送补删除入口（行尾+详情）、所有删除加 5 秒撤销浮条（Gmail 心智，替代确认弹窗）、已发送/已丢弃页签加「清空」（两击确认 + 新后端接口 DELETE /api/user-drafts?status=sent|discarded）；待审保持两步（丢弃→已丢弃→删，人在回路）
 - 范围: backend(api/user_drafts.py, tests/test_user_drafts.py) + frontend(pages/DraftsHubPage.tsx, api/client.ts, openapi.json, schema.d.ts) + docs(ARCHITECTURE, CHANGELOG, SESSIONS)

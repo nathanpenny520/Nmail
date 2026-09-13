@@ -63,6 +63,17 @@ def get_secrets_path() -> Path:
     return get_data_dir() / "secrets.json"
 
 
+def get_install_dir() -> Path:
+    """程序安装目录（按运行形态实时解析，不硬编码）：PyInstaller=可执行文件所在目录；
+    源码直跑=仓库根（pyproject.toml 所在，与 _app_version 同一判定）；wheel 安装=`app` 包所在目录。"""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    here = Path(__file__).resolve()
+    if (here.parents[2] / "pyproject.toml").is_file():
+        return here.parents[2]
+    return here.parents[1]
+
+
 def _find_dist_dir() -> Path | None:
     """前端静态目录按运行形态解析：wheel 安装（app/static）→ PyInstaller 冻结资源 → 源码开发（frontend/dist）。"""
     here = Path(__file__).resolve().parent  # .../app（源码或 site-packages）

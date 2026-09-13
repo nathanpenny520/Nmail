@@ -23,7 +23,13 @@ DEFAULT_SETTINGS: dict[str, object] = {
     "allow_remote_images": False,  # 全局放行邮件远程图片（默认拦截防追踪）
     "update_check_enabled": True,  # 应用内更新检查（匿名版本对比，可关）
     "contacts_auto_collect": False,  # 通讯录自动采集（收发往来地址自动入册；关=仅手动）
+    "desktop_notifications_enabled": True,  # 桌面通知总开关（应用内铃铛与角标不受影响）
+    # 桌面通知按类型细分（读侧与默认合并，缺省键视为开）；其余系统通知（更新/黑名单归档）不受控
+    "notify_types": {"new_mail": True, "ai_draft": True, "digest": True, "account_error": True},
+    "auto_insert_signature": False,  # 写信/回复自动带该账号签名（设置页「写信」管理签名内容）
 }
+
+NOTIFY_TYPE_KEYS = ("new_mail", "ai_draft", "digest", "account_error")
 
 
 class SettingsIn(BaseModel):
@@ -34,6 +40,9 @@ class SettingsIn(BaseModel):
     allow_remote_images: bool | None = None
     update_check_enabled: bool | None = None
     contacts_auto_collect: bool | None = None
+    desktop_notifications_enabled: bool | None = None
+    notify_types: dict[str, bool] | None = None
+    auto_insert_signature: bool | None = None
 
     @field_validator("digest_time")
     @classmethod
@@ -62,6 +71,14 @@ class SettingsIn(BaseModel):
             raise ValueError("body_font 需为 small/standard/large")
         return v
 
+    @field_validator("notify_types")
+    @classmethod
+    def _validate_notify_types(cls, v: dict[str, bool] | None) -> dict[str, bool] | None:
+        if v is None:
+            return v
+        out = {k: bool(v[k]) for k in NOTIFY_TYPE_KEYS if k in v}
+        return out or None  # 全空=无有效改动；关闭全部类型应传四个 false（非空 dict 不受影响）
+
 
 @router.get("/settings")
 def read_settings() -> dict:
@@ -84,6 +101,17 @@ def read_settings() -> dict:
         "contacts_auto_collect": get_setting(
             "contacts_auto_collect", DEFAULT_SETTINGS["contacts_auto_collect"]
         ),
+        "desktop_notifications_enabled": get_setting(
+            "desktop_notifications_enabled", DEFAULT_SETTINGS["desktop_notifications_enabled"]
+        ),
+        # 与默认合并：老用户 KV 里缺新键时回退 True（缺省视为开）
+        "notify_types": {
+            **DEFAULT_SETTINGS["notify_types"],
+            **get_setting("notify_types", {}),
+        },
+        "auto_insert_signature": get_setting(
+            "auto_insert_signature", DEFAULT_SETTINGS["auto_insert_signature"]
+        ),
     }
 
 
@@ -103,6 +131,12 @@ def update_settings(payload: SettingsIn) -> dict:
         set_setting("update_check_enabled", payload.update_check_enabled)
     if payload.contacts_auto_collect is not None:
         set_setting("contacts_auto_collect", payload.contacts_auto_collect)
+    if payload.desktop_notifications_enabled is not None:
+        set_setting("desktop_notifications_enabled", payload.desktop_notifications_enabled)
+    if payload.notify_types is not None:
+        set_setting("notify_types", payload.notify_types)
+    if payload.auto_insert_signature is not None:
+        set_setting("auto_insert_signature", payload.auto_insert_signature)
     return read_settings()
 
 

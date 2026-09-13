@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, BarChart3, BookUser, Bot, Check, ChevronLeft, Copy, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Pencil, Plug, Plus, RefreshCw, SlidersHorizontal, Trash2, UserPlus, UsersRound } from 'lucide-react'
+import { BadgeCheck, Ban, BarChart3, BookUser, Bot, Check, ChevronLeft, Copy, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Pencil, PenLine, Plug, Plus, RefreshCw, SlidersHorizontal, Trash2, UserCheck, UserPlus, UsersRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import ExtApiSection from '../components/ExtApiSection'
 import { OauthConfigCard, ReauthorizeButton } from '../components/OauthSettings'
+import { notifyPermission, type NotifyPermission } from '../components/NotificationBell'
 import { useCompose } from '../components/compose/ComposeContext'
+import { SignatureEditor, TemplateManager } from '../components/compose/InsertDialogs'
 import { backendLocalDate } from '../utils/format'
 import { ACCOUNT_COLOR_PALETTE } from '../utils/accountColor'
-import type { Account, AITestResult, AIProfile, ContactGroup, ContactItem, Settings } from '../types'
+import type { Account, AITestResult, AIProfile, ContactGroup, ContactItem, NotifyTypeKey, SenderListEntry, Settings } from '../types'
 
 const inputClass =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 t-md outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
@@ -35,6 +37,7 @@ const fmtTokens = (n: number) =>
 const SECTIONS = [
   { key: 'general', label: '通用', icon: SlidersHorizontal },
   { key: 'accounts', label: '邮箱账号', icon: Mail },
+  { key: 'compose', label: '写信', icon: PenLine },
   { key: 'contacts', label: '通讯录', icon: BookUser },
   { key: 'ai', label: 'AI 配置', icon: Bot },
   { key: 'usage', label: 'AI 用量', icon: BarChart3 },
@@ -42,6 +45,14 @@ const SECTIONS = [
   { key: 'about', label: '关于', icon: Info },
 ] as const
 type SectionKey = (typeof SECTIONS)[number]['key']
+
+// 桌面通知类型细分（NotifyTypeKey 顺序即 UI 呈现顺序）
+const NOTIFY_TYPE_LABELS: { key: NotifyTypeKey; label: string }[] = [
+  { key: 'new_mail', label: '新邮件' },
+  { key: 'ai_draft', label: 'AI 草稿' },
+  { key: 'digest', label: '每日摘要' },
+  { key: 'account_error', label: '账号异常' },
+]
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
@@ -68,6 +79,12 @@ export default function SettingsPage() {
   const [uiFont, setUiFont] = useState<'compact' | 'standard' | 'large'>('large')
   const [bodyFont, setBodyFont] = useState<'small' | 'standard' | 'large'>('standard')
   const [allowRemoteImages, setAllowRemoteImages] = useState(false)
+  const [desktopNotif, setDesktopNotif] = useState(true)
+  const [notifyTypes, setNotifyTypes] = useState<Record<NotifyTypeKey, boolean>>({
+    new_mail: true, ai_draft: true, digest: true, account_error: true,
+  })
+  const [autoSig, setAutoSig] = useState(false)
+  const [notifPerm, setNotifPerm] = useState<NotifyPermission>(() => notifyPermission())
 
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [accountMessage, setAccountMessage] = useState<string | null>(null)
@@ -105,6 +122,14 @@ export default function SettingsPage() {
     setUiFont(data.ui_font)
     setBodyFont(data.body_font)
     setAllowRemoteImages(data.allow_remote_images)
+    setDesktopNotif(data.desktop_notifications_enabled !== false)
+    setNotifyTypes((prev) => ({
+      ...prev,
+      ...Object.fromEntries(
+        NOTIFY_TYPE_LABELS.map(({ key }) => [key, data.notify_types?.[key] !== false]),
+      ),
+    }) as Record<NotifyTypeKey, boolean>)
+    setAutoSig(!!data.auto_insert_signature) // 旧后端无此字段 → undefined → 关
   }, [data])
 
   // 版本守护：响应缺新字段说明后端进程是旧版本（旧 Pydantic 会静默忽略未知字段）
@@ -133,24 +158,45 @@ export default function SettingsPage() {
   const dirty =
     !!data && (pollMinutes !== data.poll_interval_minutes || digestTime !== data.digest_time)
 
-  // 字号：选择即保存、即时生效
-  const fontMutation = useMutation({
+  // 选择即保存的即时项（字号/远程图片/通知/自动签名）共用一个 mutation
+  const instantMutation = useMutation({
     mutationFn: api.updateSettings,
     onSuccess: guardVersion,
     onError: (err: Error) => setSettingsError(`保存失败：${err.message}`),
   })
   const changeUiFont = (v: 'compact' | 'standard' | 'large') => {
     setUiFont(v)
-    fontMutation.mutate({ ui_font: v })
+    instantMutation.mutate({ ui_font: v })
   }
   const changeBodyFont = (v: 'small' | 'standard' | 'large') => {
     setBodyFont(v)
-    fontMutation.mutate({ body_font: v })
+    instantMutation.mutate({ body_font: v })
   }
   const changeRemoteImages = (v: boolean) => {
     setAllowRemoteImages(v)
-    fontMutation.mutate({ allow_remote_images: v })
+    instantMutation.mutate({ allow_remote_images: v })
   }
+  const changeDesktopNotif = (v: boolean) => {
+    setDesktopNotif(v)
+    instantMutation.mutate({ desktop_notifications_enabled: v })
+  }
+  const changeNotifyType = (key: NotifyTypeKey, v: boolean) => {
+    const next = { ...notifyTypes, [key]: v }
+    setNotifyTypes(next)
+    instantMutation.mutate({ notify_types: next })
+  }
+  const changeAutoSig = (v: boolean) => {
+    setAutoSig(v)
+    instantMutation.mutate({ auto_insert_signature: v })
+  }
+  // 浏览器通知权限：设置页里申请/重查（铃铛旁的快捷按钮同样可用）
+  const requestNotifPerm = () => {
+    if (!('Notification' in window)) return
+    void Notification.requestPermission().then((p) => setNotifPerm(p as NotifyPermission))
+  }
+
+  // 本机路径（关于页展示软件本地性；运行进程实时解析，不硬编码）
+  const pathsQuery = useQuery({ queryKey: ['system-paths'], queryFn: api.getSystemPaths })
 
   // 更新检查：开关即存；「检查更新」跳过 24h 缓存立即对比一次
   const updateCheckQuery = useQuery({
@@ -307,7 +353,7 @@ export default function SettingsPage() {
                 <span className="mb-1 block t-md text-gray-600">
                   界面字号
                   <span className="ml-1 t-sm text-gray-400">
-                    {fontMutation.isPending ? '保存中…' : '选择即生效'}
+                    {instantMutation.isPending ? '保存中…' : '选择即生效'}
                   </span>
                 </span>
                 <select
@@ -348,6 +394,67 @@ export default function SettingsPage() {
                 <option value="show">直接显示</option>
               </select>
             </label>
+
+            {/* 通知（桌面通知走浏览器 Notification API；应用内铃铛与角标不受开关影响） */}
+            <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+              <label className="flex items-center gap-2 t-md font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-indigo-600"
+                  checked={desktopNotif}
+                  disabled={instantMutation.isPending}
+                  onChange={(e) => changeDesktopNotif(e.target.checked)}
+                />
+                桌面通知
+              </label>
+              <p className="mt-1.5 t-sm leading-relaxed text-gray-400">
+                新通知到达时弹系统通知（选择即生效）；应用内铃铛与未读角标始终显示，不受影响。
+              </p>
+              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5">
+                {NOTIFY_TYPE_LABELS.map(({ key, label }) => (
+                  <label
+                    key={key}
+                    className={`flex items-center gap-1.5 t-sm ${desktopNotif ? 'text-gray-600' : 'text-gray-300'}`}
+                    title={desktopNotif ? undefined : '先开启桌面通知'}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 accent-indigo-600"
+                      checked={notifyTypes[key]}
+                      disabled={!desktopNotif || instantMutation.isPending}
+                      onChange={(e) => changeNotifyType(key, e.target.checked)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-2 t-xs leading-relaxed text-gray-400">
+                {notifPerm === 'granted' && (
+                  <span className="text-emerald-600">✓ 浏览器通知权限已授予</span>
+                )}
+                {notifPerm === 'default' && (
+                  <>
+                    浏览器通知权限还未申请
+                    <button
+                      className="ml-1.5 rounded border border-indigo-200 bg-white px-1.5 py-0.5 text-indigo-600 hover:bg-indigo-50"
+                      onClick={requestNotifPerm}
+                    >
+                      申请权限
+                    </button>
+                  </>
+                )}
+                {notifPerm === 'denied' && (
+                  <span className="text-amber-600">
+                    浏览器已拒绝通知权限——请点浏览器地址栏左侧的站点设置，把「通知」改为允许后刷新页面
+                  </span>
+                )}
+                {notifPerm === 'unsupported' && <span>当前环境不支持桌面通知（应用内铃铛不受影响）</span>}
+              </p>
+            </div>
+
+            {/* 发件人白/黑名单（零成本集合，先于 AI 生效） */}
+            <SenderListsPanel />
+
             <div className="mt-4">
               <span className="t-md text-gray-600">网络代理</span>
               <span className="mt-1 block t-sm leading-relaxed text-gray-400">
@@ -360,6 +467,11 @@ export default function SettingsPage() {
               </span>
             </div>
           </section>
+        )}
+
+        {/* ── 写信：自动签名 + 签名/模板管理 ── */}
+        {section === 'compose' && (
+          <ComposeSection accounts={accounts} autoSig={autoSig} onAutoSig={changeAutoSig} />
         )}
 
         {/* ── 邮箱账号 ── */}
@@ -705,6 +817,29 @@ export default function SettingsPage() {
                 <p className="mt-2 t-sm text-gray-400">上次检查：{backendLocalDate(updateState.checked_at)}</p>
               ) : null}
               {updateToggleMutation.isPending && <span className="t-sm text-gray-400">保存中…</span>}
+            </div>
+
+            {/* 本机路径：体现软件本地性——数据与程序都在这台电脑上，路径为运行进程实时解析的真实值 */}
+            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+              <div className="t-md font-medium text-gray-700">本机数据</div>
+              <p className="mt-1 t-sm leading-relaxed text-gray-400">
+                Nmail 是纯本地应用：邮件、附件、密钥与设置都只存在这台电脑上，不依赖任何云端账号。
+              </p>
+              <PathRow
+                label="数据目录"
+                path={pathsQuery.data?.data_dir}
+                hint="邮件、附件、AI 密钥与设置全在这里；备份此目录即备份全部数据"
+              />
+              <PathRow
+                label="安装目录"
+                path={pathsQuery.data?.install_dir}
+                hint="程序代码所在目录（源码运行=仓库根；wheel 安装=site-packages；打包版=可执行文件目录）"
+              />
+              {pathsQuery.data?.data_dir_overridden && (
+                <p className="mt-1 t-xs text-amber-600">
+                  数据目录已通过 NMAIL_DATA_DIR 环境变量重定向（当前显示即生效路径）
+                </p>
+              )}
             </div>
           </section>
         )}
@@ -2037,5 +2172,256 @@ function AgentActionsList() {
         ))}
       </div>
     </div>
+  )
+}
+
+// ── 本机路径行（关于页）：路径 select-all 可复制 ──
+function PathRow({ label, path, hint }: { label: string; path?: string; hint: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    if (!path) return
+    void navigator.clipboard.writeText(path).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <div className="mt-2.5 flex items-start gap-2" title={hint}>
+      <span className="w-16 shrink-0 t-sm text-gray-500">{label}</span>
+      <code className="min-w-0 flex-1 break-all rounded bg-white px-2 py-1 t-xs text-gray-700 select-all">
+        {path ?? '…'}
+      </code>
+      <button
+        className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-indigo-600"
+        title={copied ? '已复制' : `复制${label}路径`}
+        onClick={copy}
+        disabled={!path}
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </div>
+  )
+}
+
+// ── 发件人白/黑名单管理（通用页）：查看/添加/移除，与邮件右键菜单同一份 API ──
+const SENDER_LIST_COLUMNS: {
+  type: SenderListEntry['list_type']
+  label: string
+  icon: typeof UserCheck
+  chipCls: string
+  hint: string
+  placeholder: string
+}[] = [
+  {
+    type: 'whitelist',
+    label: '白名单',
+    icon: UserCheck,
+    chipCls: 'border-emerald-200 text-emerald-700',
+    hint: '永远留在收件箱并跳过 AI',
+    placeholder: '邮箱或 @域名，回车加入',
+  },
+  {
+    type: 'blacklist',
+    label: '黑名单',
+    icon: Ban,
+    chipCls: 'border-red-200 text-red-600',
+    hint: '直接归档并跳过 AI',
+    placeholder: '邮箱或 @域名，回车加入',
+  },
+  {
+    type: 'image_trust',
+    label: '图片信任',
+    icon: Eye,
+    chipCls: 'border-sky-200 text-sky-600',
+    hint: '始终显示该发件人的外部图片',
+    placeholder: '邮箱或 @域名，回车加入',
+  },
+]
+
+function SenderListsPanel() {
+  const queryClient = useQueryClient()
+  const listsQuery = useQuery({ queryKey: ['sender-lists'], queryFn: api.getSenderLists })
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [error, setError] = useState('')
+
+  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['sender-lists'] })
+  const addMutation = useMutation({
+    mutationFn: ({ pattern, list_type }: { pattern: string; list_type: SenderListEntry['list_type'] }) =>
+      api.addSenderList(pattern, list_type),
+    onSuccess: invalidate,
+    onError: (err: Error) => setError(err.message),
+  })
+  const removeMutation = useMutation({
+    mutationFn: (id: number) => api.removeSenderList(id),
+    onSuccess: invalidate,
+    onError: (err: Error) => setError(err.message),
+  })
+
+  const entries = listsQuery.data?.entries ?? []
+  const submit = (type: SenderListEntry['list_type']) => {
+    const pattern = (drafts[type] ?? '').trim()
+    if (!pattern) return
+    setError('')
+    addMutation.mutate({ pattern, list_type: type })
+    setDrafts((d) => ({ ...d, [type]: '' }))
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="t-md font-medium text-gray-700">发件人白/黑名单</span>
+        <span className="t-xs text-gray-400">
+          规则先于 AI 生效、零成本；也可在邮件列表右键发件人快速加入。条目为完整邮箱或以 @ 开头的域名。
+        </span>
+      </div>
+      <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
+        {SENDER_LIST_COLUMNS.map(({ type, label, icon: Icon, chipCls, hint, placeholder }) => {
+          const items = entries.filter((e) => e.list_type === type)
+          return (
+            <div key={type} className="rounded-lg border border-gray-100 bg-white px-3 py-2">
+              <div className="flex items-center gap-1.5">
+                <Icon className="h-3.5 w-3.5 text-gray-400" />
+                <span className="t-sm font-medium text-gray-700">{label}</span>
+                <span className="t-xs text-gray-300">{items.length}</span>
+              </div>
+              <p className="mt-0.5 t-xs text-gray-400">{hint}</p>
+              <div className="mt-1.5 flex max-h-28 flex-wrap gap-1 overflow-y-auto">
+                {items.length === 0 && <span className="t-xs text-gray-300">暂无条目</span>}
+                {items.map((e) => (
+                  <span
+                    key={e.id}
+                    className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 t-xs ${chipCls}`}
+                  >
+                    <span className="truncate" title={e.pattern}>{e.pattern}</span>
+                    <button
+                      className="shrink-0 text-gray-300 hover:text-red-500"
+                      title={`从${label}移除 ${e.pattern}`}
+                      onClick={() => removeMutation.mutate(e.id)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <input
+                className="mt-1.5 w-full rounded-lg border border-gray-200 px-2 py-1 t-xs outline-none focus:border-indigo-400"
+                placeholder={placeholder}
+                value={drafts[type] ?? ''}
+                onChange={(e) => setDrafts((d) => ({ ...d, [type]: e.target.value }))}
+                onKeyDown={(e) => e.key === 'Enter' && submit(type)}
+              />
+            </div>
+          )
+        })}
+      </div>
+      {(error || addMutation.isError) && (
+        <p className="mt-1.5 t-xs text-red-500">{error || (addMutation.error as Error).message}</p>
+      )}
+    </div>
+  )
+}
+
+// ── 写信（设置页）：自动签名开关 + 签名/模板管理入口（复用写信台的管理弹窗，数据同源）──
+function ComposeSection({
+  accounts,
+  autoSig,
+  onAutoSig,
+}: {
+  accounts: Account[]
+  autoSig: boolean
+  onAutoSig: (v: boolean) => void
+}) {
+  const { data: extras } = useQuery({ queryKey: ['compose-extras'], queryFn: api.getComposeExtras })
+  const [tplOpen, setTplOpen] = useState(false)
+  const [sigOpen, setSigOpen] = useState(false)
+  const sigMap = new Map((extras?.signatures ?? []).map((s) => [s.account_id, s.content]))
+  const templates = extras?.templates ?? []
+
+  return (
+    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 className="t-lg font-semibold">写信</h2>
+
+      <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+        <label className="flex items-center gap-2 t-md font-medium text-gray-700">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-indigo-600"
+            checked={autoSig}
+            disabled={accounts.length === 0}
+            onChange={(e) => onAutoSig(e.target.checked)}
+          />
+          自动插入签名
+        </label>
+        <p className="mt-1.5 t-sm leading-relaxed text-gray-400">
+          开启后，新邮件与回复/转发自动带上发件账号的签名（回复时插在引用块之前）；
+          仅在打开写信标签时注入一次，草稿恢复不会重复添加，AI 拟稿由「文风提示词」负责。
+        </p>
+      </div>
+
+      <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="t-md font-medium text-gray-700">签名</span>
+          <span className="t-xs text-gray-400">按账号各存一段 Markdown，写信工具栏「签名」可手动插入</span>
+          <span className="flex-1" />
+          <button
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            onClick={() => setSigOpen(true)}
+            disabled={accounts.length === 0}
+          >
+            <PenLine className="mr-1 inline h-3.5 w-3.5" />
+            编辑签名…
+          </button>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {accounts.length === 0 && <span className="t-xs text-gray-300">先在「邮箱账号」添加账号</span>}
+          {accounts.map((a) => (
+            <span
+              key={a.id}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 t-xs ${
+                sigMap.get(a.id)?.trim()
+                  ? 'border-emerald-200 text-emerald-700'
+                  : 'border-gray-200 text-gray-400'
+              }`}
+            >
+              {a.email}
+              {sigMap.get(a.id)?.trim() ? '✓' : '（未设置）'}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="t-md font-medium text-gray-700">模板</span>
+          <span className="t-xs text-gray-400">
+            {templates.length > 0 ? `已存 ${templates.length} 个常用文案模板` : '还没有模板'}
+            ，写信工具栏「插入模板」选择即插入光标处
+          </span>
+          <span className="flex-1" />
+          <button
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50"
+            onClick={() => setTplOpen(true)}
+          >
+            管理模板…
+          </button>
+        </div>
+        {templates.length > 0 && (
+          <div className="mt-2 flex max-h-24 flex-wrap gap-1 overflow-y-auto">
+            {templates.map((t) => (
+              <span
+                key={t.id}
+                className="max-w-72 truncate rounded-full border border-gray-200 bg-white px-2 py-0.5 t-xs text-gray-500"
+                title={t.content.slice(0, 120)}
+              >
+                {t.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {tplOpen && <TemplateManager onClose={() => setTplOpen(false)} />}
+      {sigOpen && <SignatureEditor accounts={accounts} onClose={() => setSigOpen(false)} />}
+    </section>
   )
 }

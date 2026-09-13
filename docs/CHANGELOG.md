@@ -3,6 +3,16 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 设置页补全：通知开关/写信分类/黑白名单管理/本机路径
+- 用户确认方案：通知开关收进「通用」，新增「写信」分类，黑白名单管理做，暗色/免打扰不做，「关于」显示数据与安装目录（不硬编码、符合实际运行环境）
+- 通知（api/settings.py + NotificationBell.tsx + SettingsPage 通用页）：新增 `desktop_notifications_enabled`（默认开）与 `notify_types`（new_mail/ai_draft/digest/account_error 四类，读侧与默认合并缺省视为开，未知键过滤、空 dict 不落库）；铃铛弹系统通知前按总开关+类型过滤（应用内铃铛与角标不受影响），设置页常驻浏览器权限状态行（未授权可申请/被拒绝给浏览器设置指引——替代原授权后无处可管的琥珀色一次性按钮）
+- 写信分类（SettingsPage 新组件 + ComposeContext）：签名/模板管理复用写信台弹窗（同源 compose-extras，签名卡按账号显示已设/未设）；新增 `auto_insert_signature`（默认关）——开新写信标签时注入该账号签名一次（openNew 预置正文、openReply 插引用块之前 Gmail 惯例、转换失败回退空正文），草稿恢复/AI 拟稿不重复注入
+- 黑白名单管理（SettingsPage `SenderListsPanel`，通用页）：白/黑/图片信任三列 chip 管理——查看/回车添加/× 移除，复用既有 sender-lists API 与邮件右键菜单同一数据源（此前误拉黑无处解除）
+- 本机路径（api/system.py `/api/system/paths` + config.py `get_install_dir` + 关于页）：数据目录（get_data_dir 实时取，含 NMAIL_DATA_DIR 重定向提示）与安装目录（冻结=可执行目录/源码=仓库根与版本号同判定/wheel=app 包目录）均运行时解析零硬编码；展示「纯本地应用」说明与复制按钮
+- 验证：ruff 通过、pytest 164 全绿、npm run build（tsc+字号门禁）通过；8720 重启后 curl 实测——settings 三键读写往返/部分合并/未知键过滤/空 dict 语义、paths 返回真实目录、sender-lists 增删往返；独立 headless Chrome 对真实实例 18 项 UI 断言全过（开关联动禁用、API 落库复原、名单增删复原、弹窗复用、路径与 API 一致）；真实数据自动签名——新邮件 e2e 3/3（预置签名+ephemeral 关闭零落库），回复 e2e 被并行会话 user_drafts WIP 500 阻塞（见下），拼接逻辑以真实签名数据单测 3/3（引用块前/完整/光标锚点）
+- 遗留：①回复自动签名完整 UI e2e 待草稿会话修好 create_draft 响应序列化（`_get_draft` SELECT 无 JOIN 而 `_draft_dict` 读 `row["email_subject"]`，in_reply_to 非空即 IndexError 500，HEAD dd8c0a9 可复现：POST /api/user-drafts mode=reply）后补验；②桌面通知按类型细分待用户真实开一天感受粒度；③openapi 快照已随本轮再生，含写信保真会话 sanitize-html/preview（其遗留第③项一并清）
+- 并行协调：client.ts/openapi/schema/CHANGELOG/SESSIONS 与草稿删除、写信保真两会话重叠——构造 patch 只暂存本会话 hunks；ARCHITECTURE 仅更新 settings/system 两行（该文件另有他人未提交改动，不卷入）
+
 ## 137d448 — UI: 写信表格编辑补全——列宽拖拽+右键行列增删/合并拆分/表头/底色，链接弹窗与跨平台字体栈
 - 用户确认方案 P1：表格此前只能插 3×3 和整表删除（resizable:false），行列增删/合并/宽度全没有，写错只能删表重来
 - 表格编辑（RichEditor.tsx）：resizable:true 列宽拖拽（TipTap 原生以 colgroup/col width 落盘，发送白名单已在 c053662 预放行，拖拽手柄 CSS 既有）；表格区域右键菜单（复用 ContextMenu 组件）——上/下插行、左/右插列、切换表头行、合并/拆分单元格（当前选区不可用时置灰）、单元格底色（6 浅色+清除，经 TableCell 扩展的 backgroundColor 属性以内联 style 落盘，收件端可见、草稿往返保真）、删除行/列/表格（红色危险项）；右键先以 posAtCoords 把光标落进所点单元格再弹菜单，表格外区域保留原生菜单（复制粘贴不受影响）
