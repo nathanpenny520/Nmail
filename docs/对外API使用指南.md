@@ -1,6 +1,6 @@
 # Nmail 对外 API 使用指南（docs/对外API使用指南.md）
 
-> v0.4 P7（REDESIGN_PLAN §7）。Nmail 的对外 API 由**本机进程**提供（`http://127.0.0.1:8720/api/ext/v1/*`），
+> v0.3.0 起提供（REDESIGN_PLAN §7）。Nmail 的对外 API 由**本机进程**提供（`http://127.0.0.1:8720/api/ext/v1/*`），
 > 供你自己的脚本、自动化（iOS 快捷指令、Raycast、n8n、curl 等）调用；服务始终只绑定 127.0.0.1，
 > 其他设备经**你自建的隧道**到达（下文给三种最小配置）。Nmail 不提供任何云端托管服务。
 
