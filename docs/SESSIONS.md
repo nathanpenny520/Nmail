@@ -19,7 +19,9 @@
 ### S-0913-1632-写信保真与编辑增强
 - 目标: 用户确认的写信区三段方案——P0 发送保真（mark 高亮被 nh3 白名单剥掉的实证 bug、表格/段落/引用/代码块样式内联化、纯文本表格分隔符）、P1 编辑能力（表格可调宽+右键行列增删/合并拆分/表头切换/底色、链接弹窗、跨平台字体栈）、P2 输入增强（粘贴 Markdown 自动转换、粘贴截图插入、HTML 源码视图、收件人视角预览）
 - 范围: backend(app/core/mail_html.py, app/core/outbox.py, app/api/compose_extras.py〔P2〕, tests) + frontend(components/compose/*, index.css, api/client.ts+openapi/schema 快照〔P2 再生成〕) + docs(CHANGELOG, SESSIONS, ARCHITECTURE)；共享文档与并行会话重叠处按惯例构造 patch 暂存
-- 状态: 进行中
+- 产出: 三段全部提交——P0 发送保真 c053662（mark 白名单 + decorate_outgoing_html 内联化 + 纯文本表格分隔，pytest +7）、P1 表格编辑 137d448（列宽拖拽 + 右键行列增删/合并拆分/表头/单元格底色 + 链接弹窗 + 跨平台字体栈）、P2 输入增强 61af1e2（粘贴 Markdown/截图 + HTML 源码视图 + 收件人视角预览端点与按钮，隔离实例 8794 curl 往返验证）；8720 已重启，preview 端点实测在线；共享文件 staging 用 git hash-object+update-index --cacheinfo 从 HEAD 基线构造（比 patch 法稳，不受他人 WIP 漂移影响）
+- 遗留: ①openapi.json/schema.d.ts 快照未再生（S-0913-1634 的 settings/system API WIP 在途，避免卷入其端点）——随下一轮 API 快照再生统一补 ②主树 npm build 被并行 WIP 暂阻断（SettingsPage/NotificationBell 非本会话文件）——P1/P2 前端尚未进 dist，待并行会话完成后任一会话整体构建+强刷即见 ③真实账号发信目检（高亮/表格/预览一致性）待用户
+- 状态: 代码全部入库；收尾项均依赖并行会话/用户验证
 
 <!-- 有新会话开工时按下方模板登记 -->
 
