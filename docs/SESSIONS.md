@@ -23,6 +23,15 @@
 
 <!-- 有新会话开工时按下方模板登记 -->
 
+### S-0913-1623-草稿删除与清空 ✅
+- 目标: 用户反馈草稿页「已发送」不能删、历史堆积——已发送补删除入口（行尾+详情）、所有删除加 5 秒撤销浮条（Gmail 心智，替代确认弹窗）、已发送/已丢弃页签加「清空」（两击确认 + 新后端接口 DELETE /api/user-drafts?status=sent|discarded）；待审保持两步（丢弃→已丢弃→删，人在回路）
+- 范围: backend(api/user_drafts.py, tests/test_user_drafts.py) + frontend(pages/DraftsHubPage.tsx, api/client.ts, openapi.json, schema.d.ts) + docs(ARCHITECTURE, CHANGELOG, SESSIONS)
+- 产出: 提交 dd8c0a9；后端 pytest 全绿（+1 批量清空用例）、ruff + tsc/vite build 通过；openapi 快照语义 diff 干净（仅 /api/user-drafts 增 DELETE 方法）；8720 重启加载新代码，chrome-devtools 真实实例实测——已发送行尾悬停「删除记录（不影响已发出的邮件）」+详情删除、删除后行乐观消失+撤销浮条、点撤销行恢复、超时自动落定、清空两击确认全链路 in-page 断言通过；批量清空另在隔离数据目录实例（8799+临时 NMAIL_DATA_DIR）验证 sent 删 2/editing 400/其余不动
+- 关键决策: 已发送删除语义=只删本地发送历史，真实邮件在服务器 Sent 文件夹不受影响（tooltip 明示），故低风险高频操作用撤销浮条而非确认弹窗；批量清空只开放 sent/discarded 终态（在途数据无一键删）；待审保持两步符合人在回路；撤销窗口离页即落定（unmount 提交）避免「删除从未发生」；连续删除时上一条立即落定，窗口恒单条
+- 遗留: 无（写自建测试记录 5 条全程即建即删，用户 3 条真实已发送未动）
+- 并行协调: 开工时分栏/账号色会话 WIP 与本会话同文件，收工前均已提交故正常暂存；CHANGELOG 与写信保真会话（进行中）同文件——其「待提交」条目在工作树保留，暂存区仅含本会话 hunk（构造 patch）；重启时发现端口漂移（8720 空、旧实例 8722），已收敛为 8720 单实例（当前 HEAD）
+- 时间: 2026-09-13 16:23 开工，即日完成
+
 <!-- 有新会话开工时按下方模板登记 -->
 
 
