@@ -321,6 +321,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ text }),
     }),
+  sanitizeComposeHtml: (html: string) =>
+    request<{ html: string }>('/api/compose-extras/sanitize-html', {
+      method: 'POST',
+      body: JSON.stringify({ html }),
+    }),
+  composePreview: (html: string) =>
+    request<{ html: string }>('/api/compose-extras/preview', {
+      method: 'POST',
+      body: JSON.stringify({ html }),
+    }),
 
   // ── 通知 ──
   getNotifications: () => request<NotificationsResp>('/api/notifications'),

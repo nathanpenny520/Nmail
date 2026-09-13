@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import {
-  AlarmClock, Loader2, Paperclip, Send, Sparkles, X,
+  AlarmClock, Eye, Loader2, Paperclip, Send, Sparkles, X,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
@@ -55,6 +55,7 @@ export default function ComposeForm({
   const [tplOpen, setTplOpen] = useState(false)
   const [sigOpen, setSigOpen] = useState(false)
   const [schedOpen, setSchedOpen] = useState(false)
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [schedAt, setSchedAt] = useState(toLocalInput(new Date(Date.now() + 30 * 60 * 1000)))
   const [savedAt, setSavedAt] = useState('')
   const [saveError, setSaveError] = useState(false)
@@ -431,6 +432,17 @@ export default function ComposeForm({
           <AlarmClock className="h-3.5 w-3.5" />
           定时
         </button>
+        <button
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-50"
+          onClick={() => {
+            void api.composePreview(bodyHtml).then((r) => setPreviewHtml(r.html))
+          }}
+          disabled={!bodyHtml.trim() || sendMutation.isPending}
+          title="以收件人视角预览最终排版（与发送管线同参）"
+        >
+          <Eye className="h-3.5 w-3.5" />
+          预览
+        </button>
         <span className="flex-1" />
         {saveError ? (
           <span className="t-xs text-red-500">自动保存失败，请检查后端服务</span>
@@ -460,6 +472,21 @@ export default function ComposeForm({
       {aiOpen && editor && <AiWriteDialog editor={editor} onClose={() => setAiOpen(false)} />}
       {tplOpen && <TemplateManager onClose={() => setTplOpen(false)} />}
       {sigOpen && <SignatureEditor accounts={accounts} onClose={() => setSigOpen(false)} />}
+
+      {/* 收件人视角预览：与发送管线同参（消毒+内联化+wrap），沙箱 iframe 渲染 */}
+      {previewHtml && (
+        <Modal title="收件人视角预览" onClose={() => setPreviewHtml(null)} width="max-w-2xl">
+          <iframe
+            title="收件人视角预览"
+            sandbox=""
+            srcDoc={previewHtml}
+            className="h-[60vh] w-full rounded-lg border border-gray-200 bg-white"
+          />
+          <p className="mt-2 t-xs text-gray-400">
+            与发出内容同一处理管线（消毒 → 收件端样式内联化 → 基础样式外层）——这就是收件人看到的排版。
+          </p>
+        </Modal>
+      )}
 
       {/* 定时发送对话框 */}
       {schedOpen && (

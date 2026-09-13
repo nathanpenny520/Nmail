@@ -11,6 +11,15 @@
 - 验证：主树 npm build 因并行会话 SettingsPage/NotificationBell WIP 暂不可用（非本会话文件）——隔离 worktree（HEAD dd8c0a9 + 本改动）lint:font + tsc --noEmit + vite 全绿；后端零改动
 - 遗留：用户真机走查右键菜单与列宽拖拽；主树待并行 WIP 完成后补一次整体构建
 
+## 待提交 — feat: 写信输入增强——粘贴 Markdown/截图自动处理、HTML 源码视图、收件人视角预览
+- 用户确认方案 P2 收尾段
+- 粘贴增强（RichEditor.tsx）：①剪贴板截图→内嵌 base64 图（超 1.5MB 提示改附件，与图片按钮同参）②无富文本版的纯文本若命中 Markdown 结构特征（标题/列表/引用/围栏/表格/加粗/分隔线，≥2 处且占非空行多数——单行与普通段落不误转）→ 走既有 /markdown 接口转换插入，失败回退普通文本；富文本 HTML 粘贴不受影响
+- HTML 源码视图：工具栏 FileCode 按钮，查看/贴入源码，应用前经新端点 POST /api/compose-extras/sanitize-html 白名单消毒（与发送消毒同口径，脚本/事件属性/javascript: 进不来）
+- 收件人视角预览：写信台底部「预览」按钮 → 新端点 POST /api/compose-extras/preview（sanitize → decorate → wrap，与 outbox.send_user_draft 发送管线完全同参）→ 沙箱 iframe 渲染——发送前即见收件人所见，是 c053662 内联化的长期保险
+- client.ts 增 sanitizeComposeHtml / composePreview 两方法（手写 REST，无 schema 类型依赖）
+- 验证：pytest 164 全绿、ruff 通过；隔离实例（8794）curl 往返——preview 输出含内联化表格样式、sanitize-html 剥 script/onclick；主树 npm build 因并行会话 SettingsPage/NotificationBell WIP 暂不可用（非本会话文件）——隔离 worktree（HEAD e7283ef + 本改动）lint:font + tsc + vite 全绿
+- 遗留：openapi.json/schema.d.ts 快照未再生（并行会话 settings/system API WIP 在途，避免卷入其端点）——随下一轮 API 快照再生统一补；后端需重启进程生效；真实账号发信目检预览一致性待用户
+
 ## c680a72 — fix: 取色 popover 点外/Esc 关闭
 - 用户反馈：取色浮层点空白处无法取消，不是基本 UX
 - 修复（SettingsPage）：打开期间 document 级 mousedown 监听——点击 popover 容器外即关（先于其他元素的 click 生效，不影响他处交互）；另加 Escape 关闭；触发按钮在容器内不受影响

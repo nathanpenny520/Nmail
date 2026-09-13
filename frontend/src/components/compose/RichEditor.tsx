@@ -10,13 +10,14 @@ import TableHeader from '@tiptap/extension-table-header'
 import TableRow from '@tiptap/extension-table-row'
 import { Color, FontFamily, FontSize, TextStyle } from '@tiptap/extension-text-style'
 import {
-  AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Code2, Highlighter, ImagePlus,
+  AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Code2, FileCode, Highlighter, ImagePlus,
   IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Quote,
   Redo2, RemoveFormatting, Strikethrough, Table as TableIcon, Trash2, Underline, Undo2,
 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import ContextMenu, { type ContextMenuItem } from '../ContextMenu'
 import { Modal } from './ui'
+import { api } from '../../api/client'
 
 /** 编辑器内嵌图上限（base64 直发，超过提示改用附件） */
 const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024
@@ -64,14 +65,36 @@ const CELL_COLORS: { label: string; value: string | null }[] = [
 
 const FONT_SIZES = ['12px', '13px', '14px', '15px', '16px', '18px', '20px', '24px', '32px']
 
+/** 纯文本是否按 Markdown 处理：结构特征（标题/列表/引用/围栏/表格/加粗/分隔线）
+    需命中 ≥2 处且占非空行多数——单行与普通段落文本不误转（与打字时的
+    input rules 同口径：单个 `- ` 或 `**` 不会触发转换）。 */
+function looksLikeMarkdown(text: string): boolean {
+  const lines = text.split('\n').filter((l) => l.trim())
+  if (lines.length < 2) return false
+  const hit = lines.filter((l) =>
+    /^\s{0,3}#{1,6}\s+\S/.test(l) ||
+    /^\s{0,3}[-*+]\s+\S/.test(l) ||
+    /^\s{0,3}\d+[.)]\s+\S/.test(l) ||
+    /^\s{0,3}>\s?/.test(l) ||
+    /^```/.test(l) ||
+    /^\|.+\|\s*$/.test(l) ||
+    /\*\*[^*\s][^*]*\*\*/.test(l) ||
+    /^[-*_]{3,}\s*$/.test(l)
+  ).length
+  return hit >= 2 && hit / lines.length >= 0.5
+}
+
 /**
  * 创建写信编辑器实例。onChange/onCtrlEnter 经 ref 转发，避免闭包过期。
  * StarterKit v3 已含 Underline/Link/History，链接点击在编辑器内不跳转。
+ * 粘贴：截图文件→内嵌 base64 图（超限提示走附件）；无 HTML 版的纯文本若
+ * 命中 Markdown 特征→走既有 Markdown→HTML 转换插入（富文本粘贴不受影响）。
  */
 export function useMailEditor(initialHtml: string, onChange: (html: string) => void, onCtrlEnter: () => void) {
   const cbRef = useRef({ onChange, onCtrlEnter })
   cbRef.current = { onChange, onCtrlEnter }
-  return useEditor({
+  const editorRef = useRef<Editor | null>(null)
+  const editor = useEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
@@ -100,9 +123,46 @@ export function useMailEditor(initialHtml: string, onChange: (html: string) => v
         }
         return false
       },
+      handlePaste: (view, event) => {
+        const files = Array.from(event.clipboardData?.files ?? [])
+        const img = files.find((f) => f.type.startsWith('image/'))
+        if (img) {
+          event.preventDefault()
+          if (img.size > MAX_IMAGE_BYTES) {
+            window.alert('图片超过 1.5MB，建议以附件形式添加')
+            return true
+          }
+          const reader = new FileReader()
+          reader.onload = () => {
+            const node = view.state.schema.nodes.image?.create({ src: String(reader.result) })
+            if (node) view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView())
+          }
+          reader.readAsDataURL(img)
+          return true
+        }
+        if (!event.clipboardData?.getData('text/html')) {
+          const text = event.clipboardData?.getData('text/plain') ?? ''
+          if (text && looksLikeMarkdown(text)) {
+            event.preventDefault()
+            void api
+              .markdownToHtml(text)
+              .then(({ html }) => {
+                editorRef.current?.chain().focus().insertContent(html).run()
+              })
+              .catch(() => {
+                // 转换失败退回普通文本粘贴
+                editorRef.current?.chain().focus().insertContent(text).run()
+              })
+            return true
+          }
+        }
+        return false
+      },
     },
     onUpdate: ({ editor }) => cbRef.current.onChange(editor.getHTML()),
   })
+  editorRef.current = editor
+  return editor
 }
 
 function Sep() {
@@ -175,6 +235,7 @@ export function EditorToolbar({ editor, extra }: { editor: Editor | null; extra?
         : null,
   })
   const [linkOpen, setLinkOpen] = useState(false)
+  const [srcOpen, setSrcOpen] = useState(false)
   if (!editor || !state) return null
   const chain = () => editor.chain().focus()
 
@@ -292,6 +353,9 @@ export function EditorToolbar({ editor, extra }: { editor: Editor | null; extra?
           <Trash2 className="h-4 w-4" />
         </TBtn>
       )}
+      <TBtn title="HTML 源码（应用时自动消毒）" onClick={() => setSrcOpen(true)}>
+        <FileCode className="h-4 w-4" />
+      </TBtn>
       {extra && (
         <>
           <Sep />
@@ -301,7 +365,50 @@ export function EditorToolbar({ editor, extra }: { editor: Editor | null; extra?
       )}
     </div>
       {linkOpen && <LinkDialog editor={editor} onClose={() => setLinkOpen(false)} />}
+      {srcOpen && <SourceDialog editor={editor} onClose={() => setSrcOpen(false)} />}
     </>
+  )
+}
+
+/** HTML 源码视图：查看/贴入源码，应用前经后端白名单消毒（与发送消毒同口径，脚本类内容进不来）。 */
+function SourceDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+  const [html, setHtml] = useState(editor.getHTML())
+  const [error, setError] = useState('')
+  const apply = async () => {
+    try {
+      const { html: clean } = await api.sanitizeComposeHtml(html)
+      editor.commands.setContent(clean || '<p></p>')
+      onClose()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  return (
+    <Modal title="HTML 源码" onClose={onClose} width="max-w-2xl">
+      <textarea
+        className="h-72 w-full resize-y rounded-lg border border-gray-300 p-3 font-mono t-xs leading-relaxed outline-none focus:border-indigo-500"
+        value={html}
+        onChange={(e) => setHtml(e.target.value)}
+      />
+      {error && <div className="mt-2 t-sm text-red-500">{error}</div>}
+      <p className="mt-2 t-xs text-gray-400">
+        应用时自动经白名单消毒（脚本/事件属性/javascript: 等被剔除）；取消即丢弃修改。
+      </p>
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          className="rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50"
+          onClick={onClose}
+        >
+          取消
+        </button>
+        <button
+          className="rounded-lg bg-indigo-600 px-4 py-1.5 t-sm font-medium text-white hover:bg-indigo-700"
+          onClick={() => void apply()}
+        >
+          应用
+        </button>
+      </div>
+    </Modal>
   )
 }
 
