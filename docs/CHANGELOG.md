@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — UI: 写信表格编辑补全——列宽拖拽+右键行列增删/合并拆分/表头/底色，链接弹窗与跨平台字体栈
+- 用户确认方案 P1：表格此前只能插 3×3 和整表删除（resizable:false），行列增删/合并/宽度全没有，写错只能删表重来
+- 表格编辑（RichEditor.tsx）：resizable:true 列宽拖拽（TipTap 原生以 colgroup/col width 落盘，发送白名单已在 c053662 预放行，拖拽手柄 CSS 既有）；表格区域右键菜单（复用 ContextMenu 组件）——上/下插行、左/右插列、切换表头行、合并/拆分单元格（当前选区不可用时置灰）、单元格底色（6 浅色+清除，经 TableCell 扩展的 backgroundColor 属性以内联 style 落盘，收件端可见、草稿往返保真）、删除行/列/表格（红色危险项）；右键先以 posAtCoords 把光标落进所点单元格再弹菜单，表格外区域保留原生菜单（复制粘贴不受影响）
+- 链接：window.prompt 升级为弹窗——地址规范化（缺协议补 https、mailto 保留）、Enter 提交、编辑态含「移除链接」
+- 字体栈跨平台：苹方与微软雅黑互为回退，宋体+Songti SC、黑体+Heiti SC、楷体+Kaiti SC——macOS 侧写作不再整体回退默认字体，收件端同理
+- 验证：主树 npm build 因并行会话 SettingsPage/NotificationBell WIP 暂不可用（非本会话文件）——隔离 worktree（HEAD dd8c0a9 + 本改动）lint:font + tsc --noEmit + vite 全绿；后端零改动
+- 遗留：用户真机走查右键菜单与列宽拖拽；主树待并行 WIP 完成后补一次整体构建
+
 ## c680a72 — fix: 取色 popover 点外/Esc 关闭
 - 用户反馈：取色浮层点空白处无法取消，不是基本 UX
 - 修复（SettingsPage）：打开期间 document 级 mousedown 监听——点击 popover 容器外即关（先于其他元素的 click 生效，不影响他处交互）；另加 Escape 关闭；触发按钮在容器内不受影响

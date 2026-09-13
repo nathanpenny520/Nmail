@@ -14,20 +14,52 @@ import {
   IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Quote,
   Redo2, RemoveFormatting, Strikethrough, Table as TableIcon, Trash2, Underline, Undo2,
 } from 'lucide-react'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
+import ContextMenu, { type ContextMenuItem } from '../ContextMenu'
+import { Modal } from './ui'
 
 /** 编辑器内嵌图上限（base64 直发，超过提示改用附件） */
 const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024
 
+/** 字体带跨平台回退：macOS/Windows 各有原生中文黑体类字体，收发两端都落到最接近的 */
 const FONT_FAMILIES: { label: string; value: string }[] = [
   { label: '默认字体', value: '' },
-  { label: '宋体', value: 'SimSun, serif' },
-  { label: '黑体', value: 'SimHei, sans-serif' },
-  { label: '微软雅黑', value: "'Microsoft YaHei', sans-serif" },
-  { label: '楷体', value: 'KaiTi, serif' },
+  { label: '苹方', value: "'PingFang SC', 'Microsoft YaHei', sans-serif" },
+  { label: '微软雅黑', value: "'Microsoft YaHei', 'PingFang SC', sans-serif" },
+  { label: '宋体', value: "'SimSun', 'Songti SC', serif" },
+  { label: '黑体', value: "'SimHei', 'Heiti SC', sans-serif" },
+  { label: '楷体', value: "'KaiTi', 'Kaiti SC', serif" },
   { label: 'Arial', value: 'Arial, sans-serif' },
   { label: 'Georgia', value: 'Georgia, serif' },
   { label: 'Courier New', value: "'Courier New', monospace" },
+]
+
+/** 单元格底色扩展：以内联 style 落盘（nh3 白名单放行 style，收件端可见） */
+const BgTableCell = TableCell.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      backgroundColor: {
+        default: null,
+        parseHTML: (el) => (el as HTMLElement).style?.backgroundColor || null,
+        renderHTML: (attrs) =>
+          (attrs as { backgroundColor?: string | null }).backgroundColor
+            ? { style: `background-color:${(attrs as { backgroundColor: string }).backgroundColor}` }
+            : {},
+      },
+    }
+  },
+})
+
+/** 单元格底色候选（浅色系，正文字色 #1f2937 下对比度足够） */
+const CELL_COLORS: { label: string; value: string | null }[] = [
+  { label: '清除底色', value: null },
+  { label: '浅黄', value: '#fef3c7' },
+  { label: '浅蓝', value: '#dbeafe' },
+  { label: '浅绿', value: '#dcfce7' },
+  { label: '浅红', value: '#fee2e2' },
+  { label: '浅紫', value: '#f3e8ff' },
+  { label: '浅灰', value: '#f3f4f6' },
 ]
 
 const FONT_SIZES = ['12px', '13px', '14px', '15px', '16px', '18px', '20px', '24px', '32px']
@@ -53,10 +85,10 @@ export function useMailEditor(initialHtml: string, onChange: (html: string) => v
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Image.configure({ allowBase64: true }),
       Placeholder.configure({ placeholder: '写信正文…' }),
-      Table.configure({ resizable: false }),
+      Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
-      TableCell,
+      BgTableCell,
     ],
     content: initialHtml || '<p></p>',
     editorProps: {
@@ -142,10 +174,12 @@ export function EditorToolbar({ editor, extra }: { editor: Editor | null; extra?
           }
         : null,
   })
+  const [linkOpen, setLinkOpen] = useState(false)
   if (!editor || !state) return null
   const chain = () => editor.chain().focus()
 
   return (
+    <>
     <div className="flex flex-wrap items-center gap-0.5 border-b border-gray-100 px-2 py-1">
       <TBtn title="撤销" disabled={!state.canUndo} onClick={() => chain().undo().run()}>
         <Undo2 className="h-4 w-4" />
@@ -240,19 +274,9 @@ export function EditorToolbar({ editor, extra }: { editor: Editor | null; extra?
       </TBtn>
       <Sep />
       <TBtn
-        title={state.link ? '编辑链接（留空移除）' : '插入链接'}
+        title={state.link ? '编辑链接' : '插入链接'}
         active={state.link}
-        onClick={() => {
-          const existing = (editor.getAttributes('link').href as string | undefined) ?? ''
-          const url = window.prompt('链接地址（留空移除）', existing)?.trim()
-          if (url == null) return
-          if (!url) {
-            chain().unsetLink().run()
-            return
-          }
-          const href = /^(https?:\/\/|mailto:)/i.test(url) ? url : `https://${url}`
-          chain().extendMarkRange('link').setLink({ href }).run()
-        }}
+        onClick={() => setLinkOpen(true)}
       >
         <Link2 className="h-4 w-4" />
       </TBtn>
@@ -276,6 +300,65 @@ export function EditorToolbar({ editor, extra }: { editor: Editor | null; extra?
         </>
       )}
     </div>
+      {linkOpen && <LinkDialog editor={editor} onClose={() => setLinkOpen(false)} />}
+    </>
+  )
+}
+
+/** 链接插入/编辑弹窗（替代 window.prompt）：地址规范化，清空保存=移除链接 */
+function LinkDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+  const [url, setUrl] = useState((editor.getAttributes('link').href as string | undefined) ?? '')
+  const isLink = editor.isActive('link')
+  const apply = () => {
+    const trimmed = url.trim()
+    if (!trimmed) {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+    } else {
+      const href = /^(https?:\/\/|mailto:)/i.test(trimmed) ? trimmed : `https://${trimmed}`
+      editor.chain().focus().extendMarkRange('link').setLink({ href }).run()
+    }
+    onClose()
+  }
+  return (
+    <Modal title={isLink ? '编辑链接' : '插入链接'} onClose={onClose} width="max-w-md">
+      <div className="space-y-3">
+        <input
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 t-sm outline-none focus:border-indigo-500"
+          placeholder="链接地址，如 example.com 或 https://…"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') apply()
+          }}
+          autoFocus
+        />
+        <div className="flex items-center justify-end gap-2">
+          {isLink && (
+            <button
+              className="mr-auto rounded-lg px-3 py-1.5 t-sm text-red-500 hover:bg-red-50"
+              onClick={() => {
+                editor.chain().focus().extendMarkRange('link').unsetLink().run()
+                onClose()
+              }}
+            >
+              移除链接
+            </button>
+          )}
+          <button
+            className="rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50"
+            onClick={onClose}
+          >
+            取消
+          </button>
+          <button
+            className="rounded-lg bg-indigo-600 px-4 py-1.5 t-sm font-medium text-white hover:bg-indigo-700"
+            onClick={apply}
+          >
+            确定
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -311,11 +394,49 @@ function pickColorImg(editor: Editor) {
   )
 }
 
-/** 编辑器内容区（工具栏之下的正文画布） */
+/** 表格右键菜单条目：行列增删 / 表头切换 / 合并拆分 / 单元格底色 / 危险删除项 */
+function tableMenuItems(editor: Editor): ContextMenuItem[] {
+  const run = (fn: (c: ReturnType<Editor['chain']>) => void) => () =>
+    fn(editor.chain().focus())
+  const canDo = (fn: (c: ReturnType<Editor['can']>) => boolean) =>
+    fn(editor.can())
+  return [
+    { label: '上方插入行', onSelect: run((c) => c.addRowBefore().run()) },
+    { label: '下方插入行', onSelect: run((c) => c.addRowAfter().run()) },
+    { label: '左侧插入列', onSelect: run((c) => c.addColumnBefore().run()) },
+    { label: '右侧插入列', onSelect: run((c) => c.addColumnAfter().run()) },
+    { label: '切换表头行', onSelect: run((c) => c.toggleHeaderRow().run()) },
+    {
+      label: '单元格底色',
+      children: CELL_COLORS.map((c) => ({
+        label: c.label,
+        onSelect: () => editor.chain().focus().setCellAttribute('backgroundColor', c.value).run(),
+      })),
+    },
+    { label: '合并单元格', disabled: !canDo((c) => c.mergeCells()), onSelect: run((c) => c.mergeCells().run()) },
+    { label: '拆分单元格', disabled: !canDo((c) => c.splitCell()), onSelect: run((c) => c.splitCell().run()) },
+    { label: '删除行', danger: true, onSelect: run((c) => c.deleteRow().run()) },
+    { label: '删除列', danger: true, onSelect: run((c) => c.deleteColumn().run()) },
+    { label: '删除表格', danger: true, onSelect: run((c) => c.deleteTable().run()) },
+  ]
+}
+
+/** 编辑器内容区（工具栏之下的正文画布）。表格上右键出编辑菜单，其余区域保留原生菜单（复制粘贴）。 */
 export function EditorSurface({ editor }: { editor: Editor | null }) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const onContextMenu = (e: React.MouseEvent) => {
+    if (!editor || !editor.isActive('table')) return
+    e.preventDefault()
+    const pos = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })
+    if (pos) editor.commands.setTextSelection(pos.pos) // 光标落进所点单元格，菜单操作以它为基准
+    setMenu({ x: e.clientX, y: e.clientY })
+  }
   return (
-    <div className="mail-editor min-h-0 flex-1 overflow-y-auto">
+    <div className="mail-editor min-h-0 flex-1 overflow-y-auto" onContextMenu={onContextMenu}>
       <EditorContent editor={editor} />
+      {menu && editor && (
+        <ContextMenu x={menu.x} y={menu.y} items={tableMenuItems(editor)} onClose={() => setMenu(null)} />
+      )}
     </div>
   )
 }
