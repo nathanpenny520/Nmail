@@ -120,15 +120,22 @@ def update_key(key_id: int, payload: KeyUpdateIn) -> dict:
 
 
 @router.delete("/{key_id}")
-def revoke_key(key_id: int) -> dict:
+def delete_key(key_id: int) -> dict:
+    """两段语义：活跃行 DELETE=吊销（软删，行保留供调用日志对账）；已吊销行再删
+    =彻底删除记录（调用日志该 key 回退显示「已删」，行内不再占列表）。"""
     row = get_conn().execute("SELECT * FROM api_keys WHERE id = ?", (key_id,)).fetchone()
     if row is None:
         raise HTTPException(404, "Key 不存在")
     conn = get_conn()
-    conn.execute("UPDATE api_keys SET revoked = 1 WHERE id = ?", (key_id,))
+    if not row["revoked"]:
+        conn.execute("UPDATE api_keys SET revoked = 1 WHERE id = ?", (key_id,))
+        conn.commit()
+        set_secret(f"ext_api_key:{key_id}", None)
+        return {"ok": True, "purged": False}
+    conn.execute("DELETE FROM api_keys WHERE id = ?", (key_id,))
     conn.commit()
     set_secret(f"ext_api_key:{key_id}", None)
-    return {"ok": True}
+    return {"ok": True, "purged": True}
 
 
 @router.post("/enabled")

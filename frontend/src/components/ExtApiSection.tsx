@@ -83,6 +83,11 @@ export default function ExtApiSection() {
     onSuccess: invalidate,
     onError: (err: Error) => setMessage(`吊销失败：${err.message}`),
   })
+  const purgeMutation = useMutation({
+    mutationFn: (id: number) => api.revokeExtKey(id),
+    onSuccess: invalidate,
+    onError: (err: Error) => setMessage(`删除失败：${err.message}`),
+  })
 
   const activeCount = keys.filter((k) => !k.revoked).length
   const copyKey = (k: ExtApiKey) => {
@@ -275,7 +280,7 @@ export default function ExtApiSection() {
                 <td className="px-3 py-2 t-sm text-gray-500">{fmtLimit(k.daily_limit)}</td>
                 <td className="px-3 py-2 t-sm text-gray-400">{k.last_used_at || '从未'}</td>
                 <td className="px-3 py-2">
-                  {!k.revoked && (
+                  {!k.revoked ? (
                     <span className="flex justify-end gap-1">
                       <button
                         className="rounded p-1 text-gray-300 hover:bg-gray-50 hover:text-gray-500"
@@ -288,6 +293,16 @@ export default function ExtApiSection() {
                         className="rounded p-1 text-gray-300 hover:bg-red-50 hover:text-red-500"
                         title="吊销"
                         onClick={() => { if (confirm(`吊销「${k.name || k.id}」？该密钥将立即失效。`)) revokeMutation.mutate(k.id) }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="flex justify-end">
+                      <button
+                        className="rounded p-1 text-gray-300 hover:bg-red-50 hover:text-red-500"
+                        title="彻底删除记录"
+                        onClick={() => { if (confirm(`彻底删除「${k.name || k.id}」的吊销记录？该行从列表移除，调用日志中将显示为「已删」。`)) purgeMutation.mutate(k.id) }}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

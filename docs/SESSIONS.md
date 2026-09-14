@@ -16,7 +16,14 @@
 
 ## 进行中
 
-### S-0915-0713-收尾遗留
+### S-0915-0745-吊销密钥删除与站点重部署 ✅
+- 目标: 用户两条反馈——①已吊销 API 密钥永久滞留列表 → 加彻底删除（extkeys DELETE 两段语义+已吊销行删除按钮）②网站更新确认（/docs/agent/ 首次 CI 因主仓文档时序失败，重跑成功上线）
+- 范围: backend(api/extkeys.py, tests/test_ext_api.py) + frontend(ExtApiSection.tsx, api/client.ts) + docs(CHANGELOG, SESSIONS, ARCHITECTURE)
+- 产出: 提交（哈希见 CHANGELOG 回填）——后端 198 全绿、npm build 通过、8720 重启生效；真实实例两把残留已 purge，列表只剩一把 read；线上 /docs/agent/ 200
+- 遗留: 无
+- 状态: 已完成（2026-09-15 上午）
+
+### S-0915-0713-收尾遗留 ✅
 - 目标: P1-P3 四项遗留——①重启 8720 使新后端生效 ②PyPI 包名核查（nmail-cli 可用）+ release.yml 加 nmail-cli-package 发布 job + RELEASE.md 说明 ③skills/SKILL.md 装进本机 Claude Code 并对真实实例实测一轮 ④官网（nmail-site）补 Agent/Skill 页
 - 范围: .github/workflows/release.yml + docs(RELEASE.md, AGENT_SKILL_PLAN, REDESIGN_PLAN §19.3, PRODUCT_PLAN, CHANGELOG, SESSIONS) + nmail-site 仓（独立提交推送）+ 本机 ~/.claude/skills 安装
 - 产出: 提交 d2fd46c——①8720 重启生效 ②release.yml nmail-cli-package job+RELEASE.md ③skill 本机安装+真实实例实测（三把 Key 收敛为一把 read，测试草稿零残留）④docs/Agent接入指南.md+官网 /docs/agent/（nmail-site 5aaab26 已推送部署）

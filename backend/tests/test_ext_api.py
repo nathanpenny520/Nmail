@@ -255,6 +255,19 @@ def test_search_filters经ext透传():
     assert resp.json()["error"]["code"] == "bad_request"
 
 
+def test_吊销后彻底删除():
+    """活跃行 DELETE=吊销（行保留）；已吊销行再 DELETE=彻底删除（列表消失，404 兜底）。"""
+    key = _make_key(["read"])
+    kid = key["id"]
+    assert client.delete(f"/api/extkeys/{kid}").json() == {"ok": True, "purged": False}
+    listed = client.get("/api/extkeys").json()["keys"]
+    row = next(k for k in listed if k["id"] == kid)
+    assert row["revoked"] is True and "key" not in row
+    assert client.delete(f"/api/extkeys/{kid}").json() == {"ok": True, "purged": True}
+    assert all(k["id"] != kid for k in client.get("/api/extkeys").json()["keys"])
+    assert client.delete(f"/api/extkeys/{kid}").status_code == 404
+
+
 def test_单条草稿读取_CLi发送摘要用():
     client.post("/api/extkeys/enabled", json={"enabled": True})
     key = _make_key(["read"])

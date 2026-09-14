@@ -476,7 +476,7 @@ export const api = {
     id: number,
     payload: { name?: string; scopes?: ApiScope[]; daily_limit?: number | null; reset?: boolean },
   ) => request<{ key: ExtApiKey }>(`/api/extkeys/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
-  revokeExtKey: (id: number) => request<{ ok: boolean }>(`/api/extkeys/${id}`, { method: 'DELETE' }),
+  revokeExtKey: (id: number) => request<{ ok: boolean; purged?: boolean }>(`/api/extkeys/${id}`, { method: 'DELETE' }),
   setExtApiEnabled: (enabled: boolean, log_enabled?: boolean) =>
     request<{ ok: boolean }>('/api/extkeys/enabled', {
       method: 'POST',

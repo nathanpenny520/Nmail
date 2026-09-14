@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: API 密钥支持彻底删除（已吊销行不再永久滞留）+ 站点 /docs/agent/ 重部署成功
+- 用户反馈：已吊销密钥一直留在列表里（原设计只吊销不删——供调用日志对账）。extkeys DELETE 改两段语义：活跃行=吊销（行为不变），已吊销行再删=彻底删除记录（返回 {ok,purged}；调用日志该 key 回退显示「已删」，随 30 天保留期清走）
+- 前端 ExtApiSection：已吊销行新增「彻底删除记录」按钮（确认弹窗说明日志回退显示）；client.ts revokeExtKey 返回类型带 purged
+- 测试：+1 用例（吊销→列表在→再删→列表消失→404 兜底），后端 198 全绿；ruff、npm build 通过；8720 重启后实测——两把测试期残留已吊销 Key purge 成功，列表只剩一把 read
+- 站点：/docs/agent/ 首次 CI 失败（时序——站点构建先于主仓新文档推送，sync 拉不到 Agent接入指南.md）；主仓推送后 gh workflow run 重跑成功，线上 200、文档中心卡片可见
+
 ## d2fd46c — 收尾遗留：CLI 发包接 CI + Agent 接入指南与官网页 + skill 本机安装实测（AGENT_SKILL_PLAN 完成）
 - 8720 常驻实例重启至 64f24d8——P1 后端（搜索过滤/回复转发/ext envelope）正式生效
 - release CI 接入 nmail-cli 发包：release.yml 新增 nmail-cli-package job（构建 nmail-cli/ 并发布 PyPI 包名 nmail-cli——占用已核查可用；token 缺省回退主 PYPI_API_TOKEN，若为项目级则 repo secrets 配 PYPI_CLI_API_TOKEN 优先），实际发布随下一次发版触发；docs/RELEASE.md 补 nmail-cli 发包节与渠道速查行
