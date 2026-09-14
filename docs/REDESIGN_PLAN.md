@@ -642,3 +642,12 @@ Thunderbird 式双栏（用户 2026-09-12 指定形态，仍留在设置页）�
 3. 预算 180s / 步数 25 起步（暂不进设置页）。
 4. set_category 仅 AI 侧+审计，人工 UI 另行评估。
 5. 高危工具（delete_folder/trash）审批卡显示影响明细。
+
+### 17.7 落地状态（2026-09-14 当日完成）
+
+✅ 全部落地（提交 3eefdb5 系列）：原生协议+探测降级、循环 v2（预算 180s/步数 25/审批续跑/agent_runs v22）、
+工具 15→26、搜索修复与增强、前端 segments+过程折叠+Stop/继续、ext 兼容（新增 /agent/resume）。
+追加修复（df9c86b）：用户提问随流落库（P6 起的老缺口，顺带会话标题自动生成）、过程展示极简化
+（Claude 式单行，点击展开明细）、提示词补「不猜测其他 account_id」。验收记录见 CHANGELOG 与
+tests/test_agent_loop.py（11 项循环专项用例）。后续：使用指南/FAQ/PRODUCT_PLAN §11（AI 强化路线）
+已随 9a391a9 同步更新，官网动态与首页文案随 nmail-site 88ef47b 发布。
