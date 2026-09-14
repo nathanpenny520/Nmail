@@ -19,7 +19,8 @@
 ### S-0914-2208-Agent可用性
 - 目标: 用户已拍板的「AI 总管家 Agent 化」方案（REDESIGN_PLAN §17）——原生 function calling+降级探测、循环 v2（时间预算 180s+步数 25 兜底+审批续跑不断链）、agent_runs 持久化（v22）、工具集对齐人人能力（搜索增强/set_category/文件夹改删/草稿全家桶/通讯录写/黑白名单）、前端 Claude Code 式 segments+过程折叠+流式+Stop/继续
 - 范围: backend(app/ai/llm.py, agent.py, tools.py, api/ai.py, api/chats.py, db/database.py v22, tests/test_agent_loop.py) + frontend(pages/ManagerPage.tsx, types.ts, api/stream.ts) + docs(ARCHITECTURE, REDESIGN_PLAN §17, CHANGELOG, SESSIONS)
-- 状态: 开工登记（2026-09-14 22:08）
+- 产出: 提交 3eefdb5——后端（llm 原生 tools+流式聚合/agent v2 可恢复循环/tools 26 个+Schema/api 段落持久化与 resume/ext 兼容/v22 迁移）+ 前端（segments 渲染/过程折叠/审批卡/Stop/继续/会话还原）+ 测试（+11 循环用例，176 全绿）+ 文档（REDESIGN_PLAN §17、ARCHITECTURE、CHANGELOG）；pytest/ruff/npm build 全过；真实数据 e2e——原生协议全程流式（call_id 原生格式）、审批 paused→reject→resume 改道、批准→自动续跑收尾、「漏回邮件」单轮结构化过滤 5 步完成、刷新后过程块完整还原；测试草稿已 discard 零残留
+- 状态: 已完成（2026-09-14）。遗留：①并行工具调用的前端逐步渲染（现顺序执行逐个回灌，已够用）②agent_runs 无清理任务（量小可观察）③超长任务的中期 LLM 压缩未做（确定性截断已覆盖当前场景）
 
 <!-- 有新会话开工时按下方模板登记 -->
 

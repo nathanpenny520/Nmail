@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — AI 总管家 Agent 化：原生工具调用+可恢复长链+人人对齐工具集+Claude Code 式过程展示（REDESIGN_PLAN §17，2026-09-14 拍板）
+## 3eefdb5 — AI 总管家 Agent 化：原生工具调用+可恢复长链+人人对齐工具集+Claude Code 式过程展示（REDESIGN_PLAN §17，2026-09-14 拍板）
 - 背景：P6 的 Agent 实测不可用——提示词约定 JSON 文本作工具协议（裸 JSON/DSML 标记泄漏给用户、`_extract_json` 首尾跨度被幻觉文本搅坏）、MAX_STEPS=8 且审批即断链、search_emails 锁死 INBOX 与描述不符、过程平铺无折叠
 - 原生 function calling（ai/llm.py `chat_step`/`iter_chat_step` + ai/tools.py 每 tool JSON Schema）：tools 参数+tool_calls 解析，流式分片按 index 聚合；端点不认 tools（400/404/422）自动探测降级 JSON 协议并按 base_url+model 落 KV 缓存（`_parse_model_action`/DSML 兜底保留），原生模式下模型输出裸 JSON 也兜底解析；`_extract_json` 改首个平衡对象截取（止血）
 - 循环 v2（ai/agent.py）：时间预算优先（180s，超限 tool_choice=none 强制文本收尾，仍调工具则 paused_budget），MAX_STEPS=25 兜底；**审批不断链**——写类出卡后 agent_runs（v22）持久化 messages/步数/预算置 waiting_approval，批准/拒绝经 decide 后 `POST /api/ai/agent/resume` 续跑（拒绝同样回灌让模型改道），步数/预算触顶前端「继续」=新的一段预算；工具结果紧凑回灌 ≤1200 字符（邮件列表转行格式），>12 步早期结果确定性截断；最终回答也回写 run messages；事件 run_started/text_delta/text/tool_call/tool_result/approval_required/paused/error/done（ext 非流式过滤 text_delta 并新增 /agent/resume）
