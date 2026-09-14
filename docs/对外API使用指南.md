@@ -51,9 +51,10 @@ curl "http://127.0.0.1:8720/api/ext/v1/emails?limit=5" \
 | `/folders/sync?account_id=&name=` | POST | write | 按需同步指定文件夹（名字走查询参数，IMAP 名含分隔符） |
 | `/contacts?q=&limit=` | GET | read | 通讯录搜索 |
 | `/digest` | GET | read | 最新每日摘要 |
-| `/agent/chat` | POST | agent | 总管家对话（非流式）：`{"question","account_ids?","mode?":"approval\|auto"}` → `{answer, approvals, events}` |
-| `/agent/chat/stream` | POST | agent | 同上，SSE 流式（事件：text/tool_call/tool_result/approval_required/error/done） |
-| `/agent/actions/{id}/decide` | POST | agent | 批准/拒绝 Agent 待审批动作 `{"decision":"approve\|reject","args"?}` |
+| `/agent/chat` | POST | agent | 总管家对话（非流式）：`{"question","account_ids?","mode?":"approval\|auto"}` → `{answer, approvals, events}`。approvals 各项带 `run_id`；`text_delta` 增量事件已过滤，回答以 `text` 事件为准 |
+| `/agent/chat/stream` | POST | agent | 同上，SSE 流式（事件：run_started/text_delta/text/tool_call/tool_result/approval_required/paused/error/done） |
+| `/agent/resume` | POST | agent | 续跑运行 `{"run_id"}`：审批决定后 / 步数预算触顶后调用（事件结构同 `/agent/chat`） |
+| `/agent/actions/{id}/decide` | POST | agent | 批准/拒绝 Agent 待审批动作 `{"decision":"approve\|reject","args"?}`（批准/拒绝后再调 `/agent/resume` 续跑，拒绝同样回灌让模型改道） |
 
 错误语义：`401` 缺少/无效密钥 · `403` 未启用或 scope 不足 · `404` 资源不存在 · `429` 限流/超每日上限 · `502` 上游（IMAP/SMTP/AI）失败。完整字段定义见 `http://127.0.0.1:8720/openapi.json`（`/api/ext/v1` tag）。
 
