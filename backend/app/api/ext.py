@@ -224,6 +224,12 @@ def ext_list_drafts(status: str = "pending_review", _: Any = READ_KEY) -> dict:
     return user_drafts.list_drafts(status=status)
 
 
+@router.get("/drafts/{draft_id}")
+def ext_get_draft(draft_id: int, _: Any = READ_KEY) -> dict:
+    """单条草稿（CLI 发送前摘要用）。"""
+    return user_drafts.get_draft(draft_id)
+
+
 @router.get("/folders")
 def ext_folders(account_id: int, _: Any = READ_KEY) -> dict:
     """账号文件夹缓存列表（不触发服务器 LIST；先经 POST /folders/sync 按需同步）。"""

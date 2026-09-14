@@ -46,7 +46,7 @@ nmail-cli（CLI，uvx 零安装）        ← 技能的「手」：配置管理 
 
 实现全部为既有能力薄壳（T4 分层规则：新逻辑落 core/既有模块，api 层不写业务）。
 
-## 4. P2：`nmail-cli`（独立小包，1 个会话）
+## 4. P2：`nmail-cli`（独立小包，1 个会话）✅ 已落地（2026-09-15，`nmail-cli/` 包 + 9 契约测试 + 隔离实例真实子进程 e2e；PyPI 发布随发版流程，包名占用待查）
 
 - **语言/分发**：Python（与后端同栈、复用类型），PyPI 包 `nmail-cli`（release.sh 加一条；发布前查 PyPI 占用），agent 零安装调用 `uvx nmail-cli@latest …`。npm 非必须——skills.sh 装的是 markdown，不绑包管理器。
 - **配置**：`~/.config/nmail-cli/config.json`（0600）存 base_url + key；环境变量 `NMAIL_BASE_URL`/`NMAIL_API_KEY` 可覆盖（CI/一次性场景）。
@@ -84,7 +84,7 @@ nmail-cli watch                                      # 轮询 /emails/recent，N
 - **两阶段确认**：发送类命令不带 `--confirmed` 时打印 summary（收件人/主题/正文前 200 字/附件清单）并以 exit 8 退出；用户许可后**原参数 + `--confirmed`** 重发。服务端不加 ctk——Nmail「建草稿 → approve」天然两阶段，CLI 层确认即可，零服务端状态；裸 HTTP 用户走两步调用同样是两段。
 - 任何非 0 退出，agent 不得在同轮宣称「已发送/已完成」（写进 SKILL.md）。
 
-## 5. P3：SKILL.md 与分发
+## 5. P3：SKILL.md 与分发 ✅ 已落地（2026-09-15，`skills/SKILL.md`；官网补页待随 nmail-site 更新）
 
 - **位置**：GitHub 仓根 `skills/SKILL.md`（即本仓根），`npx skills add nathanpenny520/Nmail -g` 一键安装（skills.sh 约定识别 `skills/` 目录）。
 - **frontmatter**：`name: nmail` / `description` 含触发词（收发/搜索/整理邮件、Nmail）/ `version`。
@@ -109,8 +109,8 @@ nmail-cli watch                                      # 轮询 /emails/recent，N
 | 阶段 | 内容 | 验证 |
 |---|---|---|
 | P1 | API 补全（§3，1~2 会话）✅ 已落地（2026-09-15） | ruff + pytest 196 全绿 + openapi 快照 + 真库副本隔离实例 curl 全往返（真实发件人/日期过滤、回复/转发草稿，测试草稿零残留） |
-| P2 | nmail-cli（§4，1 会话） | CLI 与 curl 对照测试；`watch` 用真实账号收一封信验证；PyPI 发包 |
-| P3 | SKILL.md + 分发（§5） | 装进本机 Claude Code 实测全链路：看最近 10 封 → 搜索 → 回复其一（两阶段）→ 归档；官网补页 |
+| P2 | nmail-cli（§4，1 会话）✅ 已落地（2026-09-15） | pytest 9 契约用例（ASGI 传输打真实 app）+ 隔离实例真实子进程 e2e（auth login 自动配对/权限门禁 exit 3/reply --body-file/两阶段 exit 8/--confirmed 到达 outbox）；`watch` 收信验证待用户真实新邮件；PyPI 发包随发版流程 |
+| P3 | SKILL.md + 分发（§5）✅ 已落地（2026-09-15） | `skills/SKILL.md`（仓根，`npx skills add nathanpenny520/Nmail -g` 可装）；装进本机 Claude Code 实测全链路与官网补页待用户/后续会话 |
 
 - 文档同提交：CHANGELOG、ARCHITECTURE §7 扩写、PRODUCT_PLAN P7 状态；实施开工时本方案并入 REDESIGN_PLAN §18、`对外API使用指南.md` 补 CLI 章节。
 - 开工时按规范 8 在 `docs/SESSIONS.md` 登记会话；与在途会话的共享文档（CHANGELOG/SESSIONS/openapi 快照）按惯例构造 patch 暂存。

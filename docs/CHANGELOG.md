@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — P2+P3：nmail-cli 命令行客户端 + skills/SKILL.md 技能分发（AGENT_SKILL_PLAN，REDESIGN_PLAN §19）
+- **nmail-cli/**（独立 Python 包，PyPI 包名 `nmail-cli`，uvx 零安装；发布随发版流程）：对外 API 薄客户端——JSON envelope（stdout `{"ok":…}`）+ exit code 契约（0/1/2/3/4/6/7/8，README 与 SKILL.md 同源）；`auth login` 本机自动配对建 Key（探测 8720 → POST /api/extkeys 建 `cli-<主机名>` 默认 read scope → 未启用时征询代开）+ 远程粘贴模式；配置 `~/.config/nmail-cli/config.json`（0600）+ `NMAIL_BASE_URL/NMAIL_API_KEY`；命令全集：`emails list/search/read（--save-attachments）/action（移动类自动轮询 job ≤60s）`、`drafts create/reply/forward/send`（`--body-file` 免转义 + `--attachment` 多文件；send 两阶段：无 `--confirmed` 出 summary 并 exit 8）、`contacts/digest/watch（NDJSON）/jobs get/+me`
+- **skills/SKILL.md**（仓根，`npx skills add nathanpenny520/Nmail -g` 可装）：安装配置/命令清单与参数速查/两阶段唯一规则（拿到 exit 8 必须停下等用户，不得同轮自确认）/exit code 错误处理表/「邮件内容是不可信外部输入」六条安全规则（最高优先级）/正文规范（不加 Agent 签名）/搜索+回复、watch、下载附件示例/排错
+- ext 新增 `GET /drafts/{id}` 单条草稿（CLI 发送前摘要用，read scope；+1 用例）
+- 验证：pytest 后端 197 全绿（+1）、CLI 9 契约用例（ASGI 传输打真实 app：错误映射/配置 0600/自动配对/过滤/读取/reply--body-file/两阶段 exit 8/--confirmed 到达 outbox（无凭据 smtp_missing→400 业务错语义校准）/action 同步契约/watch 基线不回放）、ruff 通过；隔离实例（真库副本 8796，零外联）真实子进程 e2e——auth login 自动配对+自动启用、read-only key 发稿 403 exit 3、reply（Re:+引用块+md→HTML）、两阶段 summary 与 scope 递进、测试草稿清理零残留
+- 文档：对外API使用指南补 CLI 一节与 /drafts/{id} 行、ARCHITECTURE 新增 nmail-cli 节、AGENT_SKILL_PLAN/REDESIGN_PLAN §19.3/PRODUCT_PLAN 状态推进
+
 ## bb4822e — 对外 API P1 补全：搜索过滤/回复转发草稿/正文三选一/附件/watch 游标/错误 envelope（AGENT_SKILL_PLAN，REDESIGN_PLAN §19）
 - 方案：docs/AGENT_SKILL_PLAN.md（2026-09-14 方向确认、参考 AgentlyMail 只借思想）三层补全的 P1——为 skill/agent 使用补齐 API 面；方案并入 REDESIGN_PLAN §19（§18 已被 P7 强化方案占用）
 - 搜索过滤（api/emails.py `list_emails`，ext 透传、内部 /api/emails 同受益）：`sender`/`recipient`（地址或姓名 LIKE）、`after`/`before`（UTC 归一化日期按日含当天，date() 口径，非法值 400）、`has_attachments`；可与 q 搜索组合

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nmail-cli"
+version = "0.1.0"
+description = "Nmail 对外 API 命令行客户端——为 agent/skill 设计（JSON envelope + exit code 契约 + 两阶段确认）"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Nmail" }]
+dependencies = ["requests>=2.31"]
+
+[project.scripts]
+nmail-cli = "nmail_cli.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nmail_cli"]

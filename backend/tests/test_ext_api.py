@@ -255,6 +255,21 @@ def test_search_filters经ext透传():
     assert resp.json()["error"]["code"] == "bad_request"
 
 
+def test_单条草稿读取_CLi发送摘要用():
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    key = _make_key(["read"])
+    aid = _seed_account()
+    resp = client.post("/api/user-drafts", json={"account_id": aid, "to_addrs": "a@b.com",
+                                                 "subject": "s", "body_html": "<p>x</p>"})
+    assert resp.status_code == 200
+    did = resp.json()["draft"]["id"]
+    r = client.get(f"/api/ext/v1/drafts/{did}", headers=_headers(key["key"]))
+    assert r.status_code == 200
+    assert r.json()["draft"]["id"] == did
+    assert client.get("/api/ext/v1/drafts/999999", headers=_headers(key["key"])).status_code == 404
+    client.delete(f"/api/user-drafts/{did}")
+
+
 def test_recent游标轮询():
     aid = _seed_account()
     e1 = _seed_email(aid, 1, "第一封")

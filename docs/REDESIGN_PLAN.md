@@ -825,4 +825,15 @@ A（当天量级）→ C（记忆，体感最大）→ D（主动式）→ B（�
   内部 API 与 /api/extkeys 不受影响）+ 429 `Retry-After`。验证：pytest 196 全绿（+8）、ruff、
   npm build、真库副本隔离实例 curl 全往返（真实发件人/日期过滤、回复/转发草稿，测试草稿
   零残留）、openapi 快照与 schema.d.ts 同提交。
-- **P2 nmail-cli / P3 SKILL.md 分发：⬜ 未开始。**
+- **P2 nmail-cli ✅（2026-09-15）**：`nmail-cli/` 独立 Python 包（PyPI 包名 `nmail-cli`，
+  `uvx nmail-cli@latest` 零安装；发布随发版流程）。JSON envelope + exit code 契约（README/§4）；
+  命令：`auth login|status|logout`（本机自动配对建 Key，远程粘贴）、`+me`、`emails
+  list|search|read|action`（过滤 `--from/--to/--after/--before/--has-attachments/--folder/…`，
+  移动类自动轮询 job）、`drafts create|reply|forward|send`（`--body-file` 免转义 + `--attachment`
+  多文件；send 两阶段 exit 8 + summary）、`contacts search`/`digest`/`watch`（NDJSON）/`jobs get`。
+  配置 `~/.config/nmail-cli/config.json`（0600）+ `NMAIL_BASE_URL/NMAIL_API_KEY` 环境变量。
+  为其新增 ext 端点 `GET /drafts/{id}`（单条草稿，CLI 发送摘要用）。验证：pytest 9 契约用例
+  （ASGI 传输打真实 app）+ 隔离实例真实子进程 e2e（配对/权限门禁/reply/两阶段/到达 outbox）。
+- **P3 SKILL.md ✅（2026-09-15）**：仓根 `skills/SKILL.md`（`npx skills add nathanpenny520/Nmail
+  -g` 可装）——安装配置/命令清单/两阶段唯一规则/exit code 表/邮件内容不可信六条/正文规范/示例/
+  排错。装进本机 agent 实测与官网补页待后续。

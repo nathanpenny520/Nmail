@@ -33,6 +33,19 @@ curl "http://127.0.0.1:8720/api/ext/v1/emails?limit=5" \
   浏览器恶意网页无法伪造自定义请求头（预检不通），drive-by 风险由密钥兜住。
 - `/health` 免认证（仅返回 `{"ok":true}`），供隧道连通性自测。
 
+## 1.5 更省事：nmail-cli（2026-09-15 起）
+
+agent / 脚本不必裸 curl——`nmail-cli`（独立 PyPI 包，`uvx nmail-cli@latest` 零安装）封装了
+配对、envelope 输出与 exit code 契约、发送两阶段确认和 `watch` 新邮件流：
+
+```bash
+uvx nmail-cli@latest auth login --yes        # 本机自动配对建 Key（默认 read scope）
+uvx nmail-cli@latest emails search "报销" --after 2026-09-01
+```
+
+面向 agent 的技能说明在仓库 `skills/SKILL.md`（`npx skills add nathanpenny520/Nmail -g` 可装）；
+CLI 自身用法见 `nmail-cli/README.md`。下文 curl 用法与 CLI 并行有效。
+
 ## 2. 端点一览
 
 | 端点 | 方法 | Scope | 说明 |
@@ -49,6 +62,7 @@ curl "http://127.0.0.1:8720/api/ext/v1/emails?limit=5" \
 | `/drafts` | POST | write | 创建草稿 `{"account_id","to","cc","bcc","subject"}` + 正文三选一 `body_html`/`body_md`（Markdown）/`body_text`（纯文本，转义换行）——多选一给 400（地址为逗号分隔串；不会自动发送） |
 | `/drafts/reply` | POST | write | 回复草稿 `{"email_id","reply_all"?,"cc"?,"bcc"?}` + 正文三选一：自动带 `Re:` 主题、收件人=原发件人（reply_all 时原收件人并入 cc，剔除本账号地址）、`in_reply_to`（发送自动串线）与原文引用块 |
 | `/drafts/forward` | POST | write | 转发草稿 `{"email_id","to","include_attachments"?,"cc"?,"bcc"?}` + 正文三选一：自动带 `Fwd:` 主题与引用块；不设 `in_reply_to`（不串线、不回标原邮件已读）；`include_attachments=true` 复制原附件 |
+| `/drafts/{id}` | GET | read | 单条草稿（含正文与附件清单） |
 | `/drafts/{id}/attachments` | POST | write | 草稿附件上传（multipart，字段名 `files`，可多文件） |
 | `/drafts/{id}/approve` | POST | send | 发送草稿（In-Reply-To/消毒/Sent 归档与界面同通路） |
 | `/folders?account_id=` | GET | read | 文件夹缓存列表 |
