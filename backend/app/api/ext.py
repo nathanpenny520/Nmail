@@ -304,8 +304,9 @@ def _ext_agent_events(payload: ExtAgentIn) -> list[dict]:
 def ext_agent_chat(payload: ExtAgentIn, _: Any = AGENT_KEY) -> dict:
     """总管家对话（非流式）：返回最终回答 + 完整事件流 + 待审批动作清单。
 
-    审批模式下写动作会以 approval_required 结束本轮——拿 action_id 调
-    POST /agent/actions/{id}/decide 批准或拒绝。
+    审批模式下写动作会以 approval_required + paused 结束本轮——拿 action_id 调
+    POST /agent/actions/{id}/decide 批准或拒绝，再拿 run_id 调 POST /agent/resume
+    续跑（text_delta 增量事件不返回，回答以 text 全量事件为准）。
     """
     try:
         events = _ext_agent_events(payload)
@@ -315,13 +316,41 @@ def ext_agent_chat(payload: ExtAgentIn, _: Any = AGENT_KEY) -> dict:
         raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"Agent 执行失败：{exc}") from exc
+    events = [ev for ev in events if ev.get("type") != "text_delta"]  # 非流式调用方只需全量
     # 循环内以 error 事件收尾（如无可用账号）→ 非流式调用方拿到明确的 HTTP 错误
     err = next((ev["error"] for ev in events if ev.get("type") == "error" and ev.get("error")), None)
     if err:
         raise HTTPException(400, err)
     answer = "".join(ev.get("text", "") for ev in events if ev.get("type") == "text")
     approvals = [
-        {"action_id": ev["action_id"], "tool": ev["tool"], "args": ev["args"], "reason": ev["reason"]}
+        {"action_id": ev["action_id"], "tool": ev["tool"], "args": ev["args"],
+         "reason": ev["reason"], "run_id": ev.get("run_id"), "meta": ev.get("meta") or {}}
+        for ev in events if ev.get("type") == "approval_required"
+    ]
+    return {"answer": answer, "approvals": approvals, "events": events}
+
+
+class ExtAgentResumeIn(BaseModel):
+    run_id: int
+
+
+@router.post("/agent/resume")
+def ext_agent_resume(payload: ExtAgentResumeIn, _: Any = AGENT_KEY) -> dict:
+    """续跑 Agent 运行（审批决定后 / 步数预算触顶后），事件结构同 /agent/chat。"""
+    try:
+        events = list(agent.resume_stream(payload.run_id))
+    except tasks.AINotConfigured as exc:
+        raise HTTPException(400, str(exc)) from None
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"Agent 续跑失败：{exc}") from exc
+    events = [ev for ev in events if ev.get("type") != "text_delta"]
+    err = next((ev["error"] for ev in events if ev.get("type") == "error" and ev.get("error")), None)
+    if err:
+        raise HTTPException(400, err)
+    answer = "".join(ev.get("text", "") for ev in events if ev.get("type") == "text")
+    approvals = [
+        {"action_id": ev["action_id"], "tool": ev["tool"], "args": ev["args"],
+         "reason": ev["reason"], "run_id": ev.get("run_id"), "meta": ev.get("meta") or {}}
         for ev in events if ev.get("type") == "approval_required"
     ]
     return {"answer": answer, "approvals": approvals, "events": events}

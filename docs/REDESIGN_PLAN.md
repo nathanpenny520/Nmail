@@ -577,3 +577,68 @@ Thunderbird 式双栏（用户 2026-09-12 指定形态，仍留在设置页）�
 - **D7=A**：通讯录管理放设置页分类。
 
 全部决策点闭合，方案定稿，进入 §16 落地（提交本方案 → 同步 PRODUCT_PLAN/CLAUDE.md → 按 §13 P1–P8 开工）。
+
+---
+
+## 17. AI 总管家 Agent 化（v0.4.x，2026-09-14 用户拍板「按建议来」）
+
+> 背景：P6 落地的 Agent 实测不可用——工具协议靠提示词约定 JSON 文本（裸 JSON/DSML 标记泄漏给用户）、
+> MAX_STEPS=8 且审批即断链（长任务必失败）、search_emails 锁死 INBOX 与描述不符、
+> 过程平铺无折叠。方案对标 Claude Code 交互（过程可折叠、长链多轮、审批不断链、真实流式），
+> 参考 inbox-zero 机制（只借思想不抄代码，AGPL）。目标：**人在 Nmail 能做的，AI 都能做**（豁免清单除外）。
+
+### 17.1 协议：原生 function calling 优先
+
+- `llm.py` 新增 `chat_step` / `iter_chat_step`：OpenAI 兼容 `tools` 参数（JSON Schema），解析
+  `message.tool_calls`；流式聚合 `delta.tool_calls` 分片；回灌用 `role:"tool"` + `tool_call_id`。
+- 端点能力探测：API 状态错误（400/404/422）→ 按 `base_url+model` 记入 KV，回退 JSON 工具协议
+  （`_parse_model_action` 含 DSML 兜底保留为降级路径，降级时不流式）。`_extract_json` 补首个
+  平衡 JSON 对象截取（止血）。
+
+### 17.2 循环 v2：时间预算 + 步数兜底 + 审批续跑
+
+- **时间预算优先**（180s/段，借鉴 inbox-zero）：超预算后 `tool_choice="none"` 强制文本收尾，
+  不硬切；MAX_STEPS=25 兜底。步数/预算触顶 → `paused_max_steps` 事件 + 前端「继续」。
+- **审批不断链**：新表 `agent_runs`（v22）持久化每步后的 messages/步数/预算。`approval_required`
+  后 run 置 `waiting_approval`，SSE 以 `paused` 收尾；批准/拒绝经 decide 端点后由
+  `POST /api/ai/agent/resume` 续跑——批准=执行结果回灌继续；拒绝=拒绝原因回灌让模型改道
+  （Claude Code 同款）。刷新/重启后 run 仍可续。续跑=新的一段预算/步数（用户点继续=新授权段）。
+- **上下文管理**：工具结果紧凑回灌（≤1200 字符，邮件列表行格式）；>12 步后早期工具结果替换为
+  确定性摘要（不额外调 LLM）。
+- **全程流式**：原生协议下 `text_delta` 实时下发（模型叙述边想边显）；`text` 全量事件保留兼容
+  （对外 API / 旧前端）。
+
+### 17.3 工具集对齐（人人对等）
+
+| 类别 | 变化 |
+|---|---|
+| search_emails | 增强：`folder/category/sender/unread/needs_reply/date_from/date_to` 过滤；**修 folder=INBOX 硬编码**（默认全部文件夹含归档）；空结果返回结构化 hint（工具输出即「下一步建议」，借鉴 inbox-zero） |
+| 新增 set_category | 批量设置分类/重要性/需回复（write/organize，带 undo） |
+| 新增 rename_folder / delete_folder | write/organize；系统文件夹守卫沿用 core/folders |
+| 新增 update_draft / schedule_draft / discard_draft | 草稿链式操作（write/draft）；自动模式定时/附件降审批 |
+| 新增 upsert_contact / delete_contact | write/organize（通讯录本就自动采集，非 CRM） |
+| 新增 add_sender_list / remove_sender_list | write/organize |
+| **豁免（不给工具）** | 账号增删与 OAuth 凭据、ai_grants 授权位、API 密钥/secrets、AI 总开关——防注入自我扩权（工具不提供=从根上免疫） |
+| 附件 | AI 无文件来源，起草不带附件（与自动模式禁附件约束一致）；附件为人工专属 |
+
+### 17.4 前端：Claude Code 式过程展示
+
+- 消息改 **segments 模型**：`text（流式 Markdown）| steps（连续工具事件折叠块，每步=图标+中文
+  工具名+参数摘要+状态徽标，行可展开明细）| approval（审批卡，独立醒目不折叠）| error（内联红条）`。
+- 过程块：运行中当前步展开 + spinner，完成自动收起为一行摘要；`chat_messages` 加 `segments_json`
+  （v22），会话还原完整渲染，旧消息纯文本兼容。
+- Stop 按钮（中断 SSE，已完成部分落库）；步数/预算触顶「继续」按钮；批准/拒绝后自动续跑。
+
+### 17.5 安全边界（全部保留）
+
+授权位交集门控、审批模式写类出卡、自动模式收件人白名单+禁附件+每日 ≤20 封、每日动作 ≤200 次、
+全量 ai_actions 审计（undo_json）、prompt 注入防护提示词、工具白名单不含任意请求/文件/命令类。
+新增：`agent/resume` 复核 run 归属（会话范围内）、每日限额在续跑时按 DB 重读。
+
+### 17.6 拍板记录（2026-09-14）
+
+1. 豁免清单维持（账号/凭据/授权位/密钥/AI 总开关）。
+2. 自动模式附件/定时发送一律降审批。
+3. 预算 180s / 步数 25 起步（暂不进设置页）。
+4. set_category 仅 AI 侧+审计，人工 UI 另行评估。
+5. 高危工具（delete_folder/trash）审批卡显示影响明细。

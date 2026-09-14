@@ -86,14 +86,35 @@ def _extract_json(text: str) -> Any:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # 尝试截取第一个 [ 或 { 到最后一个 ] 或 }
+        # 首个平衡的 [ ] / { }（v0.4.x 止血：旧「首到尾」跨度会被混入的
+        # 幻觉 <result> 等文本搅坏，见 REDESIGN_PLAN §17.1）；数组优先保持
+        # 「分类结果：[{...}]」类输出的既有行为
         for start_ch, end_ch in (("[", "]"), ("{", "}")):
-            start, end = text.find(start_ch), text.rfind(end_ch)
-            if start != -1 and end > start:
-                try:
-                    return json.loads(text[start : end + 1])
-                except json.JSONDecodeError:
+            start = text.find(start_ch)
+            if start == -1:
+                continue
+            depth, in_str, esc = 0, False, False
+            for i in range(start, len(text)):
+                ch = text[i]
+                if in_str:
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == '"':
+                        in_str = False
                     continue
+                if ch == '"':
+                    in_str = True
+                elif ch == start_ch:
+                    depth += 1
+                elif ch == end_ch:
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            return json.loads(text[start : i + 1])
+                        except json.JSONDecodeError:
+                            break
         raise
 
 

@@ -1,12 +1,16 @@
-"""AI 总管家工具集（v0.4 P6，REDESIGN_PLAN §6.2/§6.3）。
+"""AI 总管家工具集（v0.4 P6 + §17.3 对齐扩充，REDESIGN_PLAN §6.2/§6.3/§17.3）。
 
 薄壳原则：全部转调既有能力（emails 查询、core/batch_ops、core/folders、
 core/outbox、core/contacts、jobs），agent 层不写新的邮件操作实现。
-工具白名单即安全边界——**明确不提供**任意 HTTP/文件系统/命令类工具（§6.3）。
+工具白名单即安全边界——**明确不提供**任意 HTTP/文件系统/命令类工具（§6.3），
+也不提供账号/凭据/授权位/密钥类工具（§17.3 豁免：防注入自我扩权）。
+
+每个工具带 OpenAI function calling 的 JSON Schema（native 协议用）；
+params 字符串保留（JSON 降级协议的系统提示词用）。附件为人工专属：AI 无
+文件来源，起草不带附件（与自动模式禁附件约束一致）。
 
 写类工具的权限门控在 agent 循环里做（grant 缺一拒绝）；此处只管执行与结果
-摘要（给模型回灌 + 给用户展示的中文一句话）。summarize/translate 不设工具：
-模型拿到 read_email 正文后自己完成（少一层无谓调用）。
+摘要（给模型回灌 + 给用户展示的中文一句话）。
 """
 from __future__ import annotations
 
@@ -16,6 +20,7 @@ from collections.abc import Callable
 from app.core import contacts as contacts_core
 from app.core import folders as folders_core
 from app.core import imap_client, jobs, mailbox
+from app.ai.categories import CATEGORY_KEYS
 from app.db.database import get_conn
 
 MAX_LIST = 20
@@ -27,8 +32,32 @@ class ToolSpec:
     kind: str            # read | write
     grant: str           # read | draft | organize | send | delete
     description: str     # 进系统提示词的一句话说明
-    params: str          # 参数说明（prompt 用）
+    params: str          # 参数说明（JSON 降级协议的 prompt 用）
+    schema: dict         # OpenAI function parameters（原生协议用）
     run: Callable[[dict, int, list[int]], dict]  # (args, 主账号 id, 会话范围账号) → 结果 dict
+
+
+_OBJ = {"type": "object", "properties": {}, "required": []}
+
+
+def _obj(props: dict, required: list[str] | None = None) -> dict:
+    return {"type": "object", "properties": props, "required": required or []}
+
+
+def _str(desc: str) -> dict:
+    return {"type": "string", "description": desc}
+
+
+def _int(desc: str) -> dict:
+    return {"type": "integer", "description": desc}
+
+
+def _bool(desc: str) -> dict:
+    return {"type": "boolean", "description": desc}
+
+
+def _ids(desc: str) -> dict:
+    return {"type": "array", "items": {"type": "integer"}, "description": desc}
 
 
 def _email_rows(ids: list[int]) -> list:
@@ -51,10 +80,18 @@ def _scope_guard(rows: list, account_ids: list[int]) -> None:
 
 # ── 读类工具 ────────────────────────────────────────────────────
 
+_SPECIAL_EXCLUDED = ("'Junk'", "'Trash'")  # 搜索默认不含垃圾/废纸
+
+
 def _t_search(args: dict, primary: int, scope: list[int]) -> dict:
+    """关键词 + 结构化过滤搜索；默认全部文件夹（含归档，不含垃圾/废纸）。
+
+    §17.3：修掉 v1「带 account_id 即锁死 INBOX」的硬编码（已归档邮件此前
+    永远搜不到）；空结果返回结构化 hint（工具输出即下一步建议）。
+    """
     q = str(args.get("q") or "").strip()
     account_id = args.get("account_id") or primary
-    limit = min(int(args.get("limit") or 10), MAX_LIST)
+    limit = min(int(args.get("limit") or 10), 50)
     where, params = ["e.archived_local = 0"], []
     if q:
         if len(q) >= 3:
@@ -64,16 +101,46 @@ def _t_search(args: dict, primary: int, scope: list[int]) -> dict:
             like = f"%{q}%"
             where.append("(e.subject LIKE ? OR e.body_text LIKE ? OR e.sender_email LIKE ?)")
             params += [like, like, like]
+    sender = str(args.get("sender") or "").strip()
+    if sender:
+        where.append("(e.sender_email LIKE ? OR e.sender_name LIKE ?)")
+        params += [f"%{sender}%", f"%{sender}%"]
+    category = str(args.get("category") or "").strip()
+    if category:
+        where.append("e.category = ?")
+        params.append(category)
+    if args.get("unread") is not None:
+        where.append("e.is_read = ?")
+        params.append(0 if args.get("unread") else 1)
+    if args.get("needs_reply"):
+        where.append("e.needs_reply = 1")
+    folder = str(args.get("folder") or "").strip()
     if account_id:
         where.append("e.account_id = ?")
         params.append(account_id)
-        where.append("e.folder = 'INBOX'")
+        if folder and folder.upper() != "ALL":
+            where.append("e.folder = ?")
+            params.append(folder)
+        else:
+            where.append(f"e.folder NOT IN ({', '.join(_SPECIAL_EXCLUDED)})")
+    date_from = str(args.get("date_from") or "").strip()
+    if date_from:
+        where.append("COALESCE(e.date_sort, e.date) >= ?")
+        params.append(date_from)
+    date_to = str(args.get("date_to") or "").strip()
+    if date_to:
+        # date_to 允许只给日期（当日全天）：按前 10 位比较
+        where.append("substr(COALESCE(e.date_sort, e.date), 1, 10) <= ?")
+        params.append(date_to[:10])
     rows = get_conn().execute(
         "SELECT e.id, e.subject, e.sender_name, e.sender_email, e.date, e.snippet, e.is_read"
         " FROM emails e WHERE " + " AND ".join(where) +
         " ORDER BY COALESCE(e.date_sort, e.date) IS NULL, COALESCE(e.date_sort, e.date) DESC"
         " LIMIT ?", [*params, limit],
     ).fetchall()
+    if not rows:
+        return {"count": 0, "hint": "未命中。0 结果是正常结论，请如实告知用户，不要编造。"
+                "可尝试：改用 category/sender/folder 过滤、放宽关键词，或先 digest_stats 看分类分布。"}
     return {"count": len(rows), "emails": [
         {"id": r["id"], "subject": r["subject"], "from": r["sender_name"] or r["sender_email"],
          "date": r["date"], "snippet": r["snippet"][:80], "unread": not r["is_read"]}
@@ -284,6 +351,67 @@ def _t_create_folder(args: dict, primary: int, scope: list[int]) -> dict:
     return {"created": name}
 
 
+def _t_rename_folder(args: dict, primary: int, scope: list[int]) -> dict:
+    account_id = int(args.get("account_id") or primary)
+    old = str(args.get("old") or "").strip()
+    new = str(args.get("new") or "").strip()
+    if not old or not new:
+        return {"error": "缺少原名称或新名称"}
+    folders_core.rename_folder(account_id, old, new)
+    return {"renamed": f"{old} → {new}",
+            "undo": {"tool": "rename_folder",
+                     "args": {"account_id": account_id, "old": new, "new": old}}}
+
+
+def _t_delete_folder(args: dict, primary: int, scope: list[int]) -> dict:
+    """高危：删除文件夹及其全部邮件（审批卡需显示邮件数明细，§17.6-5）。"""
+    account_id = int(args.get("account_id") or primary)
+    name = str(args.get("name") or "").strip()
+    if not name:
+        return {"error": "缺少文件夹名"}
+    n = get_conn().execute(
+        "SELECT COUNT(*) n FROM emails WHERE account_id = ? AND folder = ?",
+        (account_id, name),
+    ).fetchone()["n"]
+    folders_core.delete_folder(account_id, name)
+    return {"deleted": name, "emails_removed": n, "note": "文件夹及其邮件已从服务器删除，不可撤销"}
+
+
+def _t_set_category(args: dict, primary: int, scope: list[int]) -> dict:
+    """批量设置分类/重要性/需回复（§17.3；本地标记，带 undo）。"""
+    ids = [int(i) for i in (args.get("ids") or [])]
+    rows = _email_rows(ids)
+    _scope_guard(rows, scope)
+    if not rows:
+        return {"error": "邮件不存在"}
+    category = str(args.get("category") or "").strip()
+    if category and category not in CATEGORY_KEYS:
+        return {"error": f"未知分类 {category}（可选：{', '.join(sorted(CATEGORY_KEYS))} 或空=清除）"}
+    importance = str(args.get("importance") or "").strip()
+    if importance and importance not in ("critical", "high", "normal", "low"):
+        return {"error": "importance 需为 critical/high/normal/low"}
+    needs_reply = args.get("needs_reply")
+    full = get_conn().execute(
+        f"SELECT id, category, importance, needs_reply FROM emails WHERE id IN ({','.join('?' for _ in rows)})",
+        [r["id"] for r in rows],
+    ).fetchall()
+    undo = [{"id": r["id"], "category": r["category"], "importance": r["importance"],
+             "needs_reply": bool(r["needs_reply"])} for r in full]
+    sets, params = ["category = ?"], [category or None]
+    if importance:
+        sets.append("importance = ?")
+        params.append(importance)
+    if needs_reply is not None:
+        sets.append("needs_reply = ?")
+        params.append(1 if needs_reply else 0)
+    get_conn().execute(
+        f"UPDATE emails SET {', '.join(sets)} WHERE id IN ({','.join('?' for _ in rows)})",
+        [*params, *[r["id"] for r in rows]],
+    )
+    get_conn().commit()
+    return {"updated": len(rows), "category": category or "（清除）", "undo": undo}
+
+
 def _t_create_draft(args: dict, primary: int, scope: list[int]) -> dict:
     """起草回复/新邮件 → 统一草稿表 pending_review（审批后经 outbox 发送）。"""
     to = str(args.get("to") or "").strip()
@@ -314,7 +442,94 @@ def _t_create_draft(args: dict, primary: int, scope: list[int]) -> dict:
     )
     conn.commit()
     return {"draft_id": int(cur.lastrowid), "status": "pending_review",
-            "hint": "草稿已进入待审列表，用户批准后发送"}
+            "hint": "草稿已进入待审列表，用户批准后发送；可用 update_draft/schedule_draft 继续操作"}
+
+
+def _own_draft(draft_id: int, scope: list[int]):
+    return get_conn().execute(
+        "SELECT * FROM user_drafts WHERE id = ?", (draft_id,)
+    ).fetchone()
+
+
+def _t_update_draft(args: dict, primary: int, scope: list[int]) -> dict:
+    """修改待审/编辑中的草稿（收件人/主题/正文；正文 Markdown）。"""
+    from app.core.mail_html import markdown_to_email_html
+
+    draft_id = int(args.get("draft_id") or 0)
+    row = _own_draft(draft_id, scope)
+    if row is None:
+        return {"error": "草稿不存在"}
+    if row["account_id"] not in scope:
+        raise PermissionError("草稿不属于当前会话的账号范围")
+    if row["status"] not in ("pending_review", "editing", "scheduled"):
+        return {"error": f"草稿状态为 {row['status']}，不可修改"}
+    sets, params = [], []
+    to = str(args.get("to") or "").strip()
+    if to:
+        sets.append("to_addrs = ?")
+        params.append(to)
+    subject = str(args.get("subject") or "").strip()
+    if subject:
+        sets.append("subject = ?")
+        params.append(subject)
+    body = str(args.get("body") or "").strip()
+    if body:
+        sets.append("body_html = ?")
+        params.append(markdown_to_email_html(body))
+    if not sets:
+        return {"error": "未提供任何要修改的字段（to/subject/body）"}
+    params.append(draft_id)
+    get_conn().execute(
+        f"UPDATE user_drafts SET {', '.join(sets)}, updated_at = datetime('now') WHERE id = ?",
+        params,
+    )
+    get_conn().commit()
+    return {"draft_id": draft_id, "updated": [s.split(" =")[0] for s in sets]}
+
+
+def _t_schedule_draft(args: dict, primary: int, scope: list[int]) -> dict:
+    """定时发送待审草稿（自动模式降审批：agent 层按 §17.6-2 处理）。"""
+    draft_id = int(args.get("draft_id") or 0)
+    send_at = str(args.get("send_at") or "").strip()
+    row = _own_draft(draft_id, scope)
+    if row is None:
+        return {"error": "草稿不存在"}
+    if row["account_id"] not in scope:
+        raise PermissionError("草稿不属于当前会话的账号范围")
+    if row["status"] not in ("editing", "scheduled", "pending_review"):
+        return {"error": f"草稿状态为 {row['status']}，不可定时"}
+    from datetime import datetime
+
+    try:
+        when = datetime.fromisoformat(send_at)
+    except ValueError:
+        return {"error": "send_at 需为 ISO 时间（如 2026-09-15T09:00:00）"}
+    if when <= datetime.now():
+        return {"error": "定时时间必须晚于当前时间"}
+    get_conn().execute(
+        "UPDATE user_drafts SET status = 'scheduled', send_at = ?, updated_at = datetime('now')"
+        " WHERE id = ?",
+        (send_at, draft_id),
+    )
+    get_conn().commit()
+    return {"draft_id": draft_id, "scheduled_at": send_at}
+
+
+def _t_discard_draft(args: dict, primary: int, scope: list[int]) -> dict:
+    draft_id = int(args.get("draft_id") or 0)
+    row = _own_draft(draft_id, scope)
+    if row is None:
+        return {"error": "草稿不存在"}
+    if row["account_id"] not in scope:
+        raise PermissionError("草稿不属于当前会话的账号范围")
+    if row["status"] not in ("pending_review", "editing"):
+        return {"error": f"草稿状态为 {row['status']}，不可丢弃"}
+    get_conn().execute(
+        "UPDATE user_drafts SET status = 'discarded', updated_at = datetime('now') WHERE id = ?",
+        (draft_id,),
+    )
+    get_conn().commit()
+    return {"discarded": draft_id}
 
 
 def _t_send_draft(args: dict, primary: int, scope: list[int]) -> dict:
@@ -338,43 +553,209 @@ def _t_start_organize(args: dict, primary: int, scope: list[int]) -> dict:
     return {"job_id": job_id, "hint": "AI 整理已在后台开始，完成后通知"}
 
 
+def _t_upsert_contact(args: dict, primary: int, scope: list[int]) -> dict:
+    """新增/更新联系人（邮箱为键；改名后转 manual 不再被自动采集覆盖）。"""
+    email = contacts_core.norm_email(str(args.get("email") or ""))
+    if not contacts_core.EMAIL_RE.match(email):
+        return {"error": "邮箱地址不合法"}
+    name = str(args.get("name") or "").strip()
+    conn = get_conn()
+    row = conn.execute("SELECT id, name FROM contacts WHERE email = ?", (email,)).fetchone()
+    if row is None:
+        conn.execute(
+            "INSERT INTO contacts (account_id, email, name, source) VALUES (NULL, ?, ?, 'manual')",
+            (email, name or None),
+        )
+        conn.commit()
+        return {"created": email, "name": name}
+    if name:
+        conn.execute(
+            "UPDATE contacts SET name = ?, source = 'manual' WHERE email = ?",
+            (name, email),
+        )
+        conn.commit()
+        return {"updated": email, "name": name}
+    return {"exists": email, "name": row["name"]}
+
+
+def _t_delete_contact(args: dict, primary: int, scope: list[int]) -> dict:
+    email = contacts_core.norm_email(str(args.get("email") or ""))
+    conn = get_conn()
+    n = conn.execute("SELECT COUNT(*) n FROM contacts WHERE email = ?", (email,)).fetchone()["n"]
+    if not n:
+        return {"error": "联系人不存在"}
+    conn.execute("DELETE FROM contacts WHERE email = ?", (email,))
+    contacts_core.cleanup_members()
+    conn.commit()
+    return {"deleted": email, "rows": n}
+
+
+def _t_add_sender_list(args: dict, primary: int, scope: list[int]) -> dict:
+    list_type = str(args.get("list_type") or "").strip()
+    pattern = str(args.get("pattern") or "").strip().lower()
+    if list_type not in ("whitelist", "blacklist"):
+        return {"error": "list_type 需为 whitelist/blacklist"}
+    if not pattern or "@" not in pattern:
+        return {"error": "pattern 需为邮箱地址或以 @ 开头的域名"}
+    conn = get_conn()
+    existing = conn.execute(
+        "SELECT id, list_type FROM sender_lists WHERE pattern = ?", (pattern,)
+    ).fetchone()
+    if existing:
+        if existing["list_type"] == list_type:
+            return {"ok": True, "id": existing["id"], "pattern": pattern, "note": "已在名单中"}
+        conn.execute("UPDATE sender_lists SET list_type = ? WHERE id = ?",
+                     (list_type, existing["id"]))
+        conn.commit()
+        return {"ok": True, "id": existing["id"], "pattern": pattern, "moved": True}
+    cur = conn.execute(
+        "INSERT INTO sender_lists (pattern, list_type) VALUES (?, ?)", (pattern, list_type)
+    )
+    conn.commit()
+    return {"ok": True, "id": int(cur.lastrowid), "pattern": pattern, "list_type": list_type}
+
+
+def _t_remove_sender_list(args: dict, primary: int, scope: list[int]) -> dict:
+    conn = get_conn()
+    entry_id = args.get("entry_id")
+    pattern = str(args.get("pattern") or "").strip().lower()
+    if entry_id is not None:
+        row = conn.execute("SELECT id, pattern FROM sender_lists WHERE id = ?", (int(entry_id),)).fetchone()
+    elif pattern:
+        row = conn.execute("SELECT id, pattern FROM sender_lists WHERE pattern = ?", (pattern,)).fetchone()
+    else:
+        return {"error": "需要 entry_id 或 pattern"}
+    if row is None:
+        return {"error": "名单条目不存在"}
+    conn.execute("DELETE FROM sender_lists WHERE id = ?", (row["id"],))
+    conn.commit()
+    return {"removed": row["pattern"]}
+
+
+SEARCH_PROPS = {
+    "q": _str("关键词（标题/正文/发件人；可与下列过滤组合）"),
+    "account_id": _int("限定账号 id（缺省=主账号）"),
+    "folder": _str("限定文件夹名；缺省=全部文件夹（含归档，不含垃圾/废纸）"),
+    "category": _str("按分类过滤（work/personal/notification/verification/promo/social）"),
+    "sender": _str("按发件人邮箱或姓名过滤（模糊匹配）"),
+    "unread": _bool("true=只看未读，false=只看已读"),
+    "needs_reply": _bool("true=只看待回复"),
+    "date_from": _str("起始日期 YYYY-MM-DD（含）"),
+    "date_to": _str("结束日期 YYYY-MM-DD（含）"),
+    "limit": _int("返回条数上限（默认 10，最大 50）"),
+}
+
 TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
     ToolSpec("search_emails", "read", "read",
-             "按关键词搜索邮件（标题/正文/发件人，覆盖全部文件夹）",
-             '{"q": "关键词", "account_id?": "限定账号", "limit?": "条数≤20"}', _t_search),
+             "按关键词与条件搜索邮件（默认全部文件夹含归档；支持分类/发件人/未读/日期过滤）",
+             '{"q?": "关键词", "account_id?": "账号id", "folder?": "文件夹", "category?": "分类",'
+             ' "sender?": "发件人", "unread?": true|false, "needs_reply?": true|false,'
+             ' "date_from?": "YYYY-MM-DD", "date_to?": "YYYY-MM-DD", "limit?": "≤50"}',
+             _obj(SEARCH_PROPS), _t_search),
     ToolSpec("list_recent_emails", "read", "read",
              "列出某账号某文件夹最近的邮件",
-             '{"account_id?": "账号id", "folder?": "默认INBOX", "limit?": "≤20"}', _t_list_recent),
+             '{"account_id?": "账号id", "folder?": "默认INBOX", "limit?": "≤20"}',
+             _obj({"account_id": _int("账号 id"), "folder": _str("文件夹名，默认 INBOX"),
+                   "limit": _int("条数 ≤20")}), _t_list_recent),
     ToolSpec("read_email", "read", "read",
              "读取一封邮件的正文（截断 3000 字）",
-             '{"email_id": "邮件id"}', _t_read_email),
+             '{"email_id": "邮件id"}',
+             _obj({"email_id": _int("邮件 id")}, ["email_id"]), _t_read_email),
     ToolSpec("list_folders", "read", "read",
-             "列出账号的文件夹", '{"account_id?": "账号id"}', _t_list_folders),
+             "列出账号的文件夹", '{"account_id?": "账号id"}',
+             _obj({"account_id": _int("账号 id")}), _t_list_folders),
     ToolSpec("list_contacts", "read", "read",
-             "查通讯录（含往来次数）", '{"q?": "关键词", "limit?": "≤20"}', _t_list_contacts),
+             "查通讯录（含往来次数）", '{"q?": "关键词", "limit?": "≤20"}',
+             _obj({"q": _str("关键词"), "limit": _int("条数 ≤20")}), _t_list_contacts),
     ToolSpec("digest_stats", "read", "read",
-             "邮箱概况统计（收件箱/未读/待回复/待审草稿/分类分布）", "{}", _t_digest_stats),
+             "邮箱概况统计（收件箱/未读/待回复/待审草稿/分类分布）——面对笼统问题先调它",
+             "{}", _OBJ.copy(), _t_digest_stats),
     ToolSpec("mark_emails", "write", "organize",
-             "批量标记已读/未读", '{"ids": [邮件id], "read": true|false}', _t_mark_emails),
+             "批量标记已读/未读", '{"ids": [邮件id], "read": true|false}',
+             _obj({"ids": _ids("邮件 id 列表"), "read": _bool("true=已读，false=未读")}, ["ids"]),
+             _t_mark_emails),
     ToolSpec("star_emails", "write", "organize",
-             "批量加/去星标", '{"ids": [邮件id], "star": true|false}', _t_star_emails),
+             "批量加/去星标", '{"ids": [邮件id], "star": true|false}',
+             _obj({"ids": _ids("邮件 id 列表"), "star": _bool("true=加星")}, ["ids"]),
+             _t_star_emails),
     ToolSpec("archive_emails", "write", "organize",
-             "批量归档（移到该账号服务器端 Archived 文件夹）", '{"ids": [邮件id]}', _t_archive_emails),
+             "批量归档（移到该账号服务器端 Archived 文件夹）", '{"ids": [邮件id]}',
+             _obj({"ids": _ids("邮件 id 列表")}, ["ids"]), _t_archive_emails),
     ToolSpec("move_emails", "write", "organize",
-             "批量移动到指定文件夹", '{"ids": [邮件id], "folder": "目标文件夹名"}', _t_move_emails),
+             "批量移动到指定文件夹（移到 INBOX 即取消归档）",
+             '{"ids": [邮件id], "folder": "目标文件夹名"}',
+             _obj({"ids": _ids("邮件 id 列表"), "folder": _str("目标文件夹名")}, ["ids", "folder"]),
+             _t_move_emails),
     ToolSpec("trash_emails", "write", "delete",
-             "批量删除（移入废纸篓，高危）", '{"ids": [邮件id]}', _t_trash_emails),
+             "批量删除（移入废纸篓，高危）", '{"ids": [邮件id]}',
+             _obj({"ids": _ids("邮件 id 列表")}, ["ids"]), _t_trash_emails),
     ToolSpec("create_folder", "write", "organize",
-             "在服务器上新建文件夹", '{"account_id?": "账号id", "name": "文件夹名"}', _t_create_folder),
+             "在服务器上新建文件夹", '{"account_id?": "账号id", "name": "文件夹名"}',
+             _obj({"account_id": _int("账号 id"), "name": _str("文件夹名")}, ["name"]),
+             _t_create_folder),
+    ToolSpec("rename_folder", "write", "organize",
+             "重命名文件夹（系统文件夹不可改）",
+             '{"account_id?": "账号id", "old": "原名称", "new": "新名称"}',
+             _obj({"account_id": _int("账号 id"), "old": _str("原名称"), "new": _str("新名称")},
+                  ["old", "new"]),
+             _t_rename_folder),
+    ToolSpec("delete_folder", "write", "organize",
+             "删除文件夹及其全部邮件（高危；系统文件夹不可删）",
+             '{"account_id?": "账号id", "name": "文件夹名"}',
+             _obj({"account_id": _int("账号 id"), "name": _str("文件夹名")}, ["name"]),
+             _t_delete_folder),
+    ToolSpec("set_category", "write", "organize",
+             "批量设置邮件分类/重要性/需回复标记",
+             '{"ids": [邮件id], "category?": "work|personal|notification|verification|promo|social|空=清除",'
+             ' "importance?": "critical|high|normal|low", "needs_reply?": true|false}',
+             _obj({"ids": _ids("邮件 id 列表"), "category": _str("分类 key 或空"),
+                   "importance": _str("重要性"), "needs_reply": _bool("是否需回复")}, ["ids"]),
+             _t_set_category),
     ToolSpec("create_draft", "write", "draft",
-             "起草回复/新邮件（进入待审列表，不会直接发出）",
+             "起草回复/新邮件（进入待审列表，不会直接发出；不带附件）",
              '{"email_id?": "回复的邮件id", "to": "收件人", "subject?": "主题", "body": "Markdown 正文"}',
+             _obj({"email_id": _int("回复的邮件 id"), "to": _str("收件人"), "subject": _str("主题"),
+                   "body": _str("Markdown 正文")}, ["to", "body"]),
              _t_create_draft),
+    ToolSpec("update_draft", "write", "draft",
+             "修改待审/编辑中的草稿（收件人/主题/正文）",
+             '{"draft_id": "草稿id", "to?": "收件人", "subject?": "主题", "body?": "Markdown 正文"}',
+             _obj({"draft_id": _int("草稿 id"), "to": _str("收件人"), "subject": _str("主题"),
+                   "body": _str("Markdown 正文")}, ["draft_id"]),
+             _t_update_draft),
+    ToolSpec("schedule_draft", "write", "draft",
+             "定时发送草稿（自动模式会降级为审批）",
+             '{"draft_id": "草稿id", "send_at": "ISO 时间如 2026-09-15T09:00:00"}',
+             _obj({"draft_id": _int("草稿 id"), "send_at": _str("ISO 时间")}, ["draft_id", "send_at"]),
+             _t_schedule_draft),
+    ToolSpec("discard_draft", "write", "draft",
+             "丢弃待审/编辑中的草稿", '{"draft_id": "草稿id"}',
+             _obj({"draft_id": _int("草稿 id")}, ["draft_id"]), _t_discard_draft),
     ToolSpec("send_draft", "write", "send",
              "发送一条待审草稿（高危；自动模式受收件人白名单与每日限额约束）",
-             '{"draft_id": "草稿id"}', _t_send_draft),
+             '{"draft_id": "草稿id"}',
+             _obj({"draft_id": _int("草稿 id")}, ["draft_id"]), _t_send_draft),
     ToolSpec("start_organize", "write", "organize",
-             "后台跑一遍 AI 整理（为未分类邮件补分类）", '{"account_id?": "账号id"}', _t_start_organize),
+             "后台跑一遍 AI 整理（为未分类邮件补分类）", '{"account_id?": "账号id"}',
+             _obj({"account_id": _int("账号 id")}), _t_start_organize),
+    ToolSpec("upsert_contact", "write", "organize",
+             "新增/更新联系人（邮箱为键）",
+             '{"email": "邮箱地址", "name?": "姓名"}',
+             _obj({"email": _str("邮箱地址"), "name": _str("姓名")}, ["email"]), _t_upsert_contact),
+    ToolSpec("delete_contact", "write", "organize",
+             "删除联系人（该邮箱全部行+组成员清理）",
+             '{"email": "邮箱地址"}',
+             _obj({"email": _str("邮箱地址")}, ["email"]), _t_delete_contact),
+    ToolSpec("add_sender_list", "write", "organize",
+             "把发件人加入白名单（永远留在收件箱）或黑名单（直接归档）",
+             '{"pattern": "邮箱或@域名", "list_type": "whitelist|blacklist"}',
+             _obj({"pattern": _str("邮箱或 @域名"), "list_type": _str("whitelist|blacklist")},
+                  ["pattern", "list_type"]),
+             _t_add_sender_list),
+    ToolSpec("remove_sender_list", "write", "organize",
+             "从白/黑名单移除条目", '{"entry_id?": "条目id", "pattern?": "邮箱或@域名"}',
+             _obj({"entry_id": _int("条目 id"), "pattern": _str("邮箱或 @域名")}),
+             _t_remove_sender_list),
 ]}
 
 
@@ -382,7 +763,9 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
 # 模型输出与用户手改都可能给错型（如 read:"false" 会被 bool() 当真）。
 # 键为参数名，值为期望类型；未列出的参数不校验（工具实现自行忽略）。
 _PARAM_TYPES: dict[str, dict[str, str]] = {
-    "search_emails": {"q": "str", "limit": "int"},
+    "search_emails": {"q": "str", "limit": "int", "folder": "str", "category": "str",
+                      "sender": "str", "unread": "bool", "needs_reply": "bool",
+                      "date_from": "str", "date_to": "str"},
     "list_recent_emails": {"folder": "str", "limit": "int"},
     "read_email": {"email_id": "int"},
     "list_contacts": {"q": "str", "limit": "int"},
@@ -392,15 +775,34 @@ _PARAM_TYPES: dict[str, dict[str, str]] = {
     "move_emails": {"ids": "ints", "folder": "str"},
     "trash_emails": {"ids": "ints"},
     "create_folder": {"name": "str"},
+    "rename_folder": {"old": "str", "new": "str"},
+    "delete_folder": {"name": "str"},
+    "set_category": {"ids": "ints", "category": "str", "importance": "str", "needs_reply": "bool"},
     "create_draft": {"email_id": "int", "to": "str", "subject": "str", "body": "str"},
+    "update_draft": {"draft_id": "int", "to": "str", "subject": "str", "body": "str"},
+    "schedule_draft": {"draft_id": "int", "send_at": "str"},
+    "discard_draft": {"draft_id": "int"},
     "send_draft": {"draft_id": "int"},
+    "upsert_contact": {"email": "str", "name": "str"},
+    "delete_contact": {"email": "str"},
+    "add_sender_list": {"pattern": "str", "list_type": "str"},
+    "remove_sender_list": {"entry_id": "int", "pattern": "str"},
 }
 _REQUIRED_ARGS: dict[str, tuple[str, ...]] = {
     "read_email": ("email_id",),
     "move_emails": ("folder",),
     "create_folder": ("name",),
+    "rename_folder": ("old", "new"),
+    "delete_folder": ("name",),
+    "set_category": ("ids",),
     "create_draft": ("to", "body"),
+    "update_draft": ("draft_id",),
+    "schedule_draft": ("draft_id", "send_at"),
+    "discard_draft": ("draft_id",),
     "send_draft": ("draft_id",),
+    "upsert_contact": ("email",),
+    "delete_contact": ("email",),
+    "add_sender_list": ("pattern", "list_type"),
 }
 
 

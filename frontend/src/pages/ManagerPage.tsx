@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Check, Loader2, Pencil, Pin, PinOff, Plus, Send, ShieldAlert, Sparkles, Trash2, Undo2, Wrench, X,
+  Check, ChevronDown, Clock, Loader2, Pencil, Pin, PinOff, Plus, Send, ShieldAlert,
+  Sparkles, Square, Trash2, Undo2, X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
@@ -10,12 +11,25 @@ import { relativeTime } from '../utils/format'
 import Markdown from '../components/Markdown'
 import SplitDivider from '../components/SplitDivider'
 import { appZoom, usePanelWidth } from '../hooks/usePanelWidth'
-import type { Account, AgentEvent, ChatSession } from '../types'
+import type { Account, AgentEvent, AgentSegment, ChatSession } from '../types'
 
 interface ChatMsg {
   role: 'user' | 'assistant'
   content: string
-  events?: AgentEvent[] // v0.4 P6：工具调用/审批卡随消息展示
+  segments?: AgentSegment[] // v0.4.x §17.4：结构化分段（过程/审批/文本），旧消息回落纯文本
+}
+
+/** 工具中文名（过程块展示用，模型协议名不直接暴露给用户） */
+const TOOL_LABELS: Record<string, string> = {
+  search_emails: '搜索邮件', list_recent_emails: '最近邮件', read_email: '读取邮件',
+  list_folders: '查看文件夹', list_contacts: '查通讯录', digest_stats: '邮箱概况',
+  mark_emails: '标记已读', star_emails: '星标', archive_emails: '归档',
+  move_emails: '移动邮件', trash_emails: '删除邮件', create_folder: '新建文件夹',
+  rename_folder: '重命名文件夹', delete_folder: '删除文件夹', set_category: '设置分类',
+  create_draft: '起草邮件', update_draft: '修改草稿', schedule_draft: '定时发送',
+  discard_draft: '丢弃草稿', send_draft: '发送邮件', start_organize: 'AI 整理',
+  upsert_contact: '保存联系人', delete_contact: '删除联系人',
+  add_sender_list: '加入名单', remove_sender_list: '移出名单',
 }
 
 const QUICK_PROMPTS = [
@@ -25,8 +39,34 @@ const QUICK_PROMPTS = [
   '把收件箱里的营销邮件都归档',
 ]
 
-/** 「AI 总管家」2.0（v0.4 P6，REDESIGN_PLAN §6）：对话 Agent——工具调用 +
- * 审批/自动双模式 + 动作卡。会话持久化沿用原总管家。 */
+type RenderItem =
+  | { type: 'text'; content: string }
+  | { type: 'process'; steps: AgentSegment[] }
+  | { type: 'approval'; seg: AgentSegment }
+  | { type: 'error'; content: string }
+
+/** 分段 → 渲染项：连续 step 合并为一个可折叠过程块（Claude Code 式，§17.4） */
+function groupSegments(segs: AgentSegment[]): RenderItem[] {
+  const items: RenderItem[] = []
+  for (const seg of segs) {
+    if (seg.kind === 'step') {
+      if (seg.echo) continue // 续跑流回放的审批结果步（原消息已落定），不重复渲染
+      const last = items[items.length - 1]
+      if (last?.type === 'process') last.steps.push(seg)
+      else items.push({ type: 'process', steps: [seg] })
+    } else if (seg.kind === 'text') {
+      if (seg.content?.trim()) items.push({ type: 'text', content: seg.content })
+    } else if (seg.kind === 'approval') {
+      items.push({ type: 'approval', seg })
+    } else if (seg.kind === 'error') {
+      items.push({ type: 'error', content: seg.content || '执行出错' })
+    }
+  }
+  return items
+}
+
+/** 「AI 总管家」2.x（v0.4 P6 + §17 Agent 化）：对话 Agent——原生工具调用 +
+ * 流式过程折叠 + 审批续跑不断链 + Stop/继续。会话持久化沿用原总管家。 */
 export default function ManagerPage() {
   const [sessionId, setSessionId] = useState<number | null>(null)
   const [messages, setMessages] = useState<ChatMsg[]>([])
@@ -36,8 +76,12 @@ export default function ManagerPage() {
   const [mode, setMode] = useState<'approval' | 'auto'>(() =>
     localStorage.getItem('nmail_agent_mode') === 'auto' ? 'auto' : 'approval')
   const [pending, setPending] = useState(false)
+  const [pausedRun, setPausedRun] = useState<{ runId: number; reason: string } | null>(null)
   const [error, setError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
+  const runIdRef = useRef<number | null>(null) // 当前运行（审批决定后自动续跑）
+  const abortRef = useRef<AbortController | null>(null)
+  const seenActionIds = useRef<Set<number>>(new Set()) // 续跑回放去重
   const queryClient = useQueryClient()
 
   // 会话历史栏宽度可拖拽记忆（v0.4.x 浏览器式分栏），默认 224px = 原 w-56
@@ -66,6 +110,8 @@ export default function ManagerPage() {
     setSessionId(null)
     setMessages([])
     setError('')
+    setPausedRun(null)
+    runIdRef.current = null
   }
 
   const openSession = async (session: ChatSession) => {
@@ -73,7 +119,12 @@ export default function ManagerPage() {
     try {
       const data = await api.getChat(session.id)
       setSessionId(session.id)
-      setMessages(data.messages.map((m) => ({ role: m.role, content: m.content })))
+      setMessages(data.messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        segments: (m as { segments?: AgentSegment[] | null }).segments
+          ?? [{ kind: 'text', content: m.content }], // 旧消息回落纯文本渲染
+      })))
       setAccountId(data.session.account_id ?? null)
       setError('')
     } catch (err) {
@@ -81,29 +132,114 @@ export default function ManagerPage() {
     }
   }
 
-  const patchLastEvents = (fn: (events: AgentEvent[]) => AgentEvent[]) => {
+  const patchLastSegments = (fn: (segs: AgentSegment[]) => AgentSegment[]) => {
     setMessages((m) => {
       const next = [...m]
       const last = next[next.length - 1]
       if (last?.role === 'assistant') {
-        next[next.length - 1] = { ...last, events: fn(last.events ?? []) }
+        next[next.length - 1] = { ...last, segments: fn(last.segments ?? []) }
       }
       return next
     })
   }
 
+  /** 就地更新某条分段（审批卡/步骤状态，跨任意消息查找 action_id） */
+  const patchByActionId = (actionId: number, patch: (seg: AgentSegment) => AgentSegment) => {
+    setMessages((m) => m.map((msg) => {
+      if (msg.role !== 'assistant' || !msg.segments?.some((s) => s.action_id === actionId)) return msg
+      return { ...msg, segments: msg.segments.map((s) => (s.action_id === actionId ? patch(s) : s)) }
+    }))
+  }
+
   const handleAgentEvent = (ev: AgentEvent) => {
-    if (ev.type === 'text' && ev.text) {
-      setMessages((m) => {
-        const next = [...m]
-        const last = next[next.length - 1]
-        next[next.length - 1] = { ...last, content: last.content + ev.text }
+    if (ev.type === 'run_started') {
+      runIdRef.current = ev.run_id ?? null
+    } else if (ev.type === 'text_delta') {
+      patchLastSegments((segs) => {
+        const last = segs[segs.length - 1]
+        if (last?.kind === 'text') {
+          return [...segs.slice(0, -1), { ...last, content: last.content + (ev.delta || '') }]
+        }
+        return [...segs, { kind: 'text', content: ev.delta || '' }]
+      })
+    } else if (ev.type === 'text') {
+      // 全量事件：覆盖同轮流式累积（内容一致，幂等）
+      patchLastSegments((segs) => {
+        const last = segs[segs.length - 1]
+        if (last?.kind === 'text') {
+          return [...segs.slice(0, -1), { ...last, content: ev.text || last.content }]
+        }
+        return [...segs, { kind: 'text', content: ev.text || '' }]
+      })
+    } else if (ev.type === 'tool_call') {
+      patchLastSegments((segs) => [...segs, {
+        kind: 'step', tool: ev.tool, call_id: ev.call_id, args: ev.args, status: 'running',
+      }])
+    } else if (ev.type === 'tool_result') {
+      patchLastSegments((segs) => {
+        if (ev.action_id != null && seenActionIds.current.has(ev.action_id)) return segs
+        if (ev.action_id != null) seenActionIds.current.add(ev.action_id)
+        const next = [...segs]
+        for (let i = next.length - 1; i >= 0; i--) {
+          const s = next[i]
+          if (s.kind !== 'step' || s.status === 'ok' || s.status === 'fail') continue
+          const hit = ev.action_id != null ? s.action_id === ev.action_id : s.tool === ev.tool
+          if (hit) {
+            next[i] = { ...s, status: ev.ok ? 'ok' : 'fail', summary: ev.summary,
+              action_id: ev.action_id ?? s.action_id }
+            return next
+          }
+        }
+        return [...next, { kind: 'step', tool: ev.tool, call_id: ev.call_id, args: {},
+          status: ev.ok ? 'ok' : 'fail', summary: ev.summary, action_id: ev.action_id }]
+      })
+    } else if (ev.type === 'approval_required') {
+      patchLastSegments((segs) => {
+        const next = [...segs]
+        for (let i = next.length - 1; i >= 0; i--) {
+          const s = next[i]
+          if (s.kind === 'step' && s.status === 'running' && s.tool === ev.tool) {
+            next[i] = { ...s, status: 'waiting', action_id: ev.action_id }
+            break
+          }
+        }
+        next.push({ kind: 'approval', action_id: ev.action_id!, tool: ev.tool!,
+          args: ev.args, reason: ev.reason, meta: ev.meta, run_id: ev.run_id })
         return next
       })
-    } else if (ev.type === 'tool_call' || ev.type === 'tool_result' || ev.type === 'approval_required') {
-      patchLastEvents((events) => [...events, ev])
+    } else if (ev.type === 'paused') {
+      if (ev.reason === 'approval' && ev.run_id) runIdRef.current = ev.run_id
+      else if (ev.run_id) setPausedRun({ runId: ev.run_id, reason: ev.reason || '' })
     } else if (ev.type === 'error') {
-      setError(ev.error || 'Agent 出错')
+      patchLastSegments((segs) => [...segs, { kind: 'error', content: ev.error || '执行出错' }])
+    }
+  }
+
+  const invalidateAfter = () => {
+    queryClient.invalidateQueries({ queryKey: ['chats'] })
+    queryClient.invalidateQueries({ queryKey: ['emails'] })
+    queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
+    queryClient.invalidateQueries({ queryKey: ['accounts'] })
+  }
+
+  const runResume = async (runId: number) => {
+    if (pending) return
+    runIdRef.current = runId
+    setPausedRun(null)
+    setMessages((m) => [...m, { role: 'assistant', content: '', segments: [] }])
+    setPending(true)
+    abortRef.current = new AbortController()
+    try {
+      await streamAgentEvents('/api/ai/agent/resume', { run_id: runId },
+        (ev) => handleAgentEvent(ev as unknown as AgentEvent), abortRef.current.signal)
+      invalidateAfter()
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setError((err as Error).message || '续跑失败')
+      }
+      invalidateAfter()
+    } finally {
+      setPending(false)
     }
   }
 
@@ -112,6 +248,9 @@ export default function ManagerPage() {
     if (!q || pending) return
     setError('')
     setInput('')
+    setPausedRun(null)
+    seenActionIds.current = new Set()
+    runIdRef.current = null
     let sid = sessionId
     if (sid === null) {
       try {
@@ -127,8 +266,9 @@ export default function ManagerPage() {
       .filter((m) => m.content)
       .slice(-6)
       .map((m) => ({ role: m.role, content: m.content }))
-    setMessages((m) => [...m, { role: 'user', content: q }, { role: 'assistant', content: '', events: [] }])
+    setMessages((m) => [...m, { role: 'user', content: q }, { role: 'assistant', content: '', segments: [] }])
     setPending(true)
+    abortRef.current = new AbortController()
     let received = false
     try {
       await streamAgentEvents(
@@ -145,13 +285,13 @@ export default function ManagerPage() {
           received = true
           handleAgentEvent(ev as unknown as AgentEvent)
         },
+        abortRef.current.signal,
       )
-      queryClient.invalidateQueries({ queryKey: ['chats'] })
-      queryClient.invalidateQueries({ queryKey: ['emails'] })
-      queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
-      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      invalidateAfter()
     } catch (err) {
-      setError((err as Error).message || '请求失败')
+      if ((err as Error).name !== 'AbortError') {
+        setError((err as Error).message || '请求失败')
+      }
       if (!received) setMessages((m) => m.slice(0, -1))
       queryClient.invalidateQueries({ queryKey: ['chats'] })
     } finally {
@@ -159,34 +299,39 @@ export default function ManagerPage() {
     }
   }
 
-  const decide = async (actionId: number, decision: 'approve' | 'reject') => {
-    patchLastEvents((events) => events.map((e) =>
-      e.action_id === actionId ? { ...e, status: decision === 'approve' ? '执行中…' : '已拒绝' } : e))
+  const stop = () => {
+    abortRef.current?.abort()
+  }
+
+  const decide = async (actionId: number, decision: 'approve' | 'reject', runId?: number) => {
+    patchByActionId(actionId, (seg) => ({ ...seg, status: decision === 'approve' ? '执行中…' : '已拒绝' }))
     try {
       const result = await api.agentDecide(actionId, decision)
-      patchLastEvents((events) => events.map((e) =>
-        e.action_id === actionId
-          ? { ...e, status: (result.status ?? decision) as string, summary: result.summary ?? result.error }
-          : e))
-      queryClient.invalidateQueries({ queryKey: ['emails'] })
-      queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
-      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      const okRun = result.status === 'executed'
+      const statusWord = okRun ? '已执行' : result.status === 'failed' ? '失败' : '已拒绝'
+      patchByActionId(actionId, (seg) => seg.kind === 'approval'
+        ? { ...seg, status: result.error ?? statusWord }
+        : { ...seg, status: okRun ? 'ok' : 'fail', summary: result.summary ?? result.error })
+      invalidateAfter()
+      // 审批续跑（§17.2）：批准/拒绝都把结果回灌，Agent 自动继续，无需再发消息
+      // run_id 以审批卡自身携带的为准（流结束后 runIdRef 仍指向它）
+      const rid = runId ?? runIdRef.current
+      if (rid) {
+        await runResume(rid)
+      }
     } catch (err) {
       setError((err as Error).message || '审批请求失败')
-      patchLastEvents((events) => events.map((e) =>
-        e.action_id === actionId ? { ...e, status: '失败' } : e))
+      patchByActionId(actionId, (seg) => ({ ...seg, status: seg.kind === 'approval' ? '失败' : seg.status }))
     }
   }
 
   const undoAction = async (actionId: number) => {
     try {
       const result = await api.agentUndo(actionId)
-      patchLastEvents((events) => events.map((e) =>
-        e.action_id === actionId
-          ? { ...e, status: result.error ? e.status : '已撤销', summary: result.error ?? `已撤销（${result.undone} 项）` }
-          : e))
-      queryClient.invalidateQueries({ queryKey: ['emails'] })
-      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+      patchByActionId(actionId, (seg) => ({ ...seg,
+        status: result.error ? seg.status : 'ok',
+        summary: result.error ?? `已撤销（${result.undone} 项）` }))
+      invalidateAfter()
     } catch (err) {
       setError((err as Error).message || '撤销失败')
     }
@@ -222,7 +367,7 @@ export default function ManagerPage() {
         setMessages([])
       }
     } catch (err) {
-      setError((err as Error).message || '删除失败')
+      setError((err as Error).message || '删除会话失败')
     }
   }
 
@@ -374,7 +519,7 @@ export default function ManagerPage() {
           </div>
           <span className="t-xs text-gray-400">
             {mode === 'approval'
-              ? '读操作直接执行；移动/归档/发送等会先给你确认'
+              ? '读操作直接执行；移动/归档/发送等会先给你确认，批准后自动继续'
               : '写操作直接执行：收件人限通讯录与历史往来，每日发送 ≤20 封，全部留痕可撤销'}
           </span>
         </div>
@@ -400,7 +545,6 @@ export default function ManagerPage() {
             </div>
           )}
           {messages.map((m, i) => {
-            const isLast = i === messages.length - 1
             if (m.role === 'user') {
               return (
                 <div key={i} className="flex justify-end">
@@ -410,8 +554,10 @@ export default function ManagerPage() {
                 </div>
               )
             }
-            // 回复中且该条还没有内容 → 打字指示
-            if (isLast && pending && m.content === '' && !(m.events ?? []).length) {
+            const segs = m.segments ?? (m.content ? [{ kind: 'text' as const, content: m.content }] : [])
+            const items = groupSegments(segs)
+            const isLast = i === messages.length - 1
+            if (isLast && pending && items.length === 0) {
               return (
                 <div key={i} className="flex justify-start">
                   <div className="flex items-center gap-2 rounded-2xl bg-gray-100 px-3.5 py-2.5 t-sm text-gray-500">
@@ -423,14 +569,26 @@ export default function ManagerPage() {
             return (
               <div key={i} className="flex justify-start">
                 <div className="min-w-0 max-w-[90%] space-y-2">
-                  {(m.events ?? []).map((ev, j) => (
-                    <EventCard key={`${i}-${j}`} ev={ev as AgentEvent & { status?: string }} onDecide={decide} onUndo={undoAction} />
-                  ))}
-                  {m.content && (
-                    <div className="rounded-2xl bg-gray-100 px-3.5 py-2.5 t-md text-gray-800">
-                      <Markdown text={m.content} />
-                    </div>
-                  )}
+                  {items.map((item, j) => {
+                    if (item.type === 'text') {
+                      return (
+                        <div key={j} className="rounded-2xl bg-gray-100 px-3.5 py-2.5 t-md text-gray-800">
+                          <Markdown text={item.content} />
+                        </div>
+                      )
+                    }
+                    if (item.type === 'process') {
+                      return <ProcessBlock key={j} steps={item.steps} onUndo={undoAction} />
+                    }
+                    if (item.type === 'approval') {
+                      return <ApprovalCard key={j} seg={item.seg} onDecide={decide} runId={item.seg.run_id} />
+                    }
+                    return (
+                      <div key={j} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 t-sm text-red-600">
+                        {item.content}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -442,6 +600,18 @@ export default function ManagerPage() {
           )}
         </div>
 
+        {/* 步数/预算触顶：继续按钮（§17.2，用户点继续=新的一段预算） */}
+        {pausedRun && !pending && (
+          <div className="pb-2">
+            <button
+              className="w-full rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 t-sm text-violet-700 transition-colors hover:bg-violet-100"
+              onClick={() => runResume(pausedRun.runId)}
+            >
+              {pausedRun.reason === 'budget' ? '已到时间预算，任务未完成 — 点击继续执行' : '已达单轮步数上限，任务未完成 — 点击继续执行'}
+            </button>
+          </div>
+        )}
+
         <div className="border-t border-gray-100 py-3">
           <div className="flex items-center gap-2">
             <input
@@ -452,13 +622,23 @@ export default function ManagerPage() {
               onKeyDown={(e) => e.key === 'Enter' && ask(input)}
               disabled={pending}
             />
-            <button
-              className="rounded-lg bg-violet-600 p-2 text-white hover:bg-violet-700 disabled:opacity-50"
-              onClick={() => ask(input)}
-              disabled={pending || !input.trim()}
-            >
-              <Send className="h-4 w-4" />
-            </button>
+            {pending ? (
+              <button
+                className="rounded-lg border border-gray-300 bg-white p-2 text-gray-500 hover:border-red-200 hover:text-red-500"
+                title="停止执行（已完成部分保留）"
+                onClick={stop}
+              >
+                <Square className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                className="rounded-lg bg-violet-600 p-2 text-white hover:bg-violet-700 disabled:opacity-50"
+                onClick={() => ask(input)}
+                disabled={!input.trim()}
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -466,80 +646,167 @@ export default function ManagerPage() {
   )
 }
 
-/** 工具调用/结果/审批动作卡。 */
-function EventCard({ ev, onDecide, onUndo }: {
-  ev: AgentEvent & { status?: string }
-  onDecide: (id: number, d: 'approve' | 'reject') => void
+/** 可折叠执行过程块（Claude Code 式，§17.4）：运行中自动展开当前步、完成自动收起 */
+function ProcessBlock({ steps, onUndo }: {
+  steps: AgentSegment[]
   onUndo: (id: number) => void
 }) {
-  const argsBrief = Object.entries(ev.args ?? {})
+  const running = steps.some((s) => s.status === 'running')
+  const [open, setOpen] = useState(running)
+  const wasRunning = useRef(running)
+  useEffect(() => {
+    if (running) {
+      setOpen(true)
+    } else if (wasRunning.current) {
+      setOpen(false) // 完成自动收起
+    }
+    wasRunning.current = running
+  }, [running])
+  const doneCount = steps.filter((s) => s.status === 'ok' || s.status === 'fail').length
+  return (
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50/80">
+      <button
+        className="flex w-full items-center gap-2 px-3 py-2 t-xs text-gray-500"
+        onClick={() => setOpen(!open)}
+      >
+        {running
+          ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-500" />
+          : <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />}
+        <span className="shrink-0 font-medium text-gray-600">执行过程</span>
+        <span className="min-w-0 truncate">
+          · {doneCount}/{steps.length} 步{running
+            ? ' · 进行中'
+            : steps.some((s) => s.status === 'waiting')
+              ? ' · 待审批'
+              : doneCount === steps.length ? ' · 已完成' : ' · 已停止'}
+        </span>
+        <ChevronDown className={`ml-auto h-3.5 w-3.5 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+      </button>
+      {open && (
+        <div className="border-t border-gray-100 px-3 py-1">
+          {steps.map((s, i) => <StepRow key={s.call_id ?? i} step={s} onUndo={onUndo} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 过程块单步行：点击展开参数与结果明细 */
+function StepRow({ step, onUndo }: {
+  step: AgentSegment
+  onUndo: (id: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const argsBrief = Object.entries(step.args ?? {})
+    .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+    .slice(0, 3)
+    .map((s) => (s.length > 48 ? `${s.slice(0, 48)}…` : s))
+    .join('　')
+  const undone = step.summary?.startsWith('已撤销')
+  const statusIcon = step.status === 'running'
+    ? <Loader2 className="h-3 w-3 shrink-0 animate-spin text-violet-500" />
+    : step.status === 'waiting'
+      ? <Clock className="h-3 w-3 shrink-0 text-amber-500" />
+      : step.status === 'fail'
+        ? <X className="h-3 w-3 shrink-0 text-red-500" />
+        : <Check className="h-3 w-3 shrink-0 text-emerald-600" />
+  return (
+    <div className="py-1">
+      <button className="flex w-full items-center gap-2 t-xs" onClick={() => setOpen(!open)}>
+        {statusIcon}
+        <span className="shrink-0 font-medium text-gray-700">{TOOL_LABELS[step.tool ?? ''] ?? step.tool}</span>
+        {argsBrief && <span className="min-w-0 flex-1 truncate text-left text-gray-400">{argsBrief}</span>}
+        {step.summary && (
+          <span className={`max-w-[40%] shrink truncate text-right ${
+            step.status === 'fail' ? 'text-red-500' : undone ? 'text-gray-400' : 'text-gray-500'
+          }`}>
+            {step.summary}
+          </span>
+        )}
+        {step.status === 'ok' && step.action_id != null && !undone && (
+          <span
+            className="inline-flex shrink-0 items-center gap-0.5 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-gray-500 hover:text-indigo-600"
+            title="撤销该操作（发送不可撤销）"
+            onClick={(e) => { e.stopPropagation(); onUndo(step.action_id!) }}
+          >
+            <Undo2 className="h-3 w-3" /> 撤销
+          </span>
+        )}
+        {undone && <Undo2 className="h-3 w-3 shrink-0 text-gray-400" />}
+      </button>
+      {open && (
+        <div className="mt-1 ml-6 rounded-lg bg-white px-2.5 py-1.5 t-xs text-gray-500">
+          {Object.keys(step.args ?? {}).length > 0 && (
+            <pre className="max-h-40 overflow-auto wrap-anywhere whitespace-pre-wrap text-left leading-relaxed">
+              {JSON.stringify(step.args, null, 2)}
+            </pre>
+          )}
+          {step.summary && <div className="mt-1">{step.summary}</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 审批动作卡（§6.5 + §17.6-5 影响明细）：独立醒目、不折叠；决定后由 Agent 自动续跑 */
+function ApprovalCard({ seg, onDecide, runId }: {
+  seg: AgentSegment
+  onDecide: (id: number, d: 'approve' | 'reject', runId?: number) => void
+  runId?: number
+}) {
+  const st = seg.status
+  const meta = seg.meta ?? {}
+  const argsBrief = Object.entries(seg.args ?? {})
     .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
     .slice(0, 4)
     .join('　')
-
-  if (ev.type === 'approval_required') {
-    const st = ev.status
-    return (
-      <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="h-4 w-4 shrink-0 text-amber-600" />
-          <span className="t-sm font-medium text-amber-800">待批准：{ev.tool}</span>
-          {st && <span className={`ml-auto t-xs ${st === '已拒绝' || st === '失败' ? 'text-red-500' : 'text-gray-500'}`}>{st}</span>}
+  return (
+    <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <ShieldAlert className="h-4 w-4 shrink-0 text-amber-600" />
+        <span className="t-sm font-medium text-amber-800">
+          待批准：{TOOL_LABELS[seg.tool ?? ''] ?? seg.tool}
+        </span>
+        {st && (
+          <span className={`ml-auto t-xs ${st === '已拒绝' || st === '失败' ? 'text-red-500' : 'text-gray-500'}`}>
+            {st}
+          </span>
+        )}
+      </div>
+      {typeof meta.to === 'string' && (
+        <div className="mt-1 t-xs text-gray-700">
+          收件人 {meta.to}{typeof meta.subject === 'string' ? ` · 主题「${meta.subject}」` : ''}
         </div>
-        {argsBrief && <div className="mt-1 break-all t-xs text-gray-600">{argsBrief}</div>}
-        {ev.reason && <div className="mt-1 t-xs text-amber-700">原因：{ev.reason}</div>}
-        {!st && (
-          <div className="mt-2 flex gap-1.5">
-            <button
-              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 t-sm font-medium text-white hover:bg-emerald-700"
-              onClick={() => onDecide(ev.action_id!, 'approve')}
-            >
-              <Check className="h-3.5 w-3.5" /> 批准执行
-            </button>
-            <button
-              className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 t-sm text-gray-600 hover:text-red-600"
-              onClick={() => onDecide(ev.action_id!, 'reject')}
-            >
-              <X className="h-3.5 w-3.5" /> 拒绝
-            </button>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  if (ev.type === 'tool_call') {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 t-xs text-gray-500">
-        <Wrench className="h-3.5 w-3.5 shrink-0 text-violet-400" />
-        <span className="shrink-0 font-medium text-gray-700">{ev.tool}</span>
-        {argsBrief && <span className="min-w-0 truncate">{argsBrief}</span>}
-      </div>
-    )
-  }
-
-  if (ev.type === 'tool_result') {
-    const status = ev.status
-    const undone = status === '已撤销'
-    return (
-      <div className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 t-xs ${
-        ev.ok ? 'border-emerald-200 bg-emerald-50/60 text-emerald-700' : 'border-red-200 bg-red-50/60 text-red-600'
-      }`}>
-        {ev.ok ? <Check className="h-3.5 w-3.5 shrink-0" /> : <X className="h-3.5 w-3.5 shrink-0" />}
-        <span className="shrink-0 font-medium">{ev.tool}</span>
-        <span className="min-w-0 flex-1 truncate">{ev.summary || status}</span>
-        {ev.action_id != null && !undone && !status && (
+      )}
+      {argsBrief && <div className="mt-1 break-all t-xs text-gray-600">{argsBrief}</div>}
+      {typeof meta.affected_emails === 'number' && (
+        <div className="mt-1 t-xs font-medium text-amber-700">
+          影响 {meta.affected_emails} 封邮件
+        </div>
+      )}
+      {Array.isArray(meta.titles) && meta.titles.length > 0 && (
+        <div className="mt-1 max-h-28 space-y-0.5 overflow-y-auto rounded-lg bg-white/70 px-2 py-1.5 t-xs text-gray-500">
+          {meta.titles.map((t, i) => <div key={i} className="truncate">· {String(t)}</div>)}
+        </div>
+      )}
+      {typeof meta.warn === 'string' && <div className="mt-1 t-xs text-red-500">{meta.warn}</div>}
+      {seg.reason && <div className="mt-1 t-xs text-amber-700">原因：{seg.reason}</div>}
+      {!st && (
+        <div className="mt-2 flex gap-1.5">
           <button
-            className="inline-flex shrink-0 items-center gap-0.5 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-gray-500 hover:text-indigo-600"
-            title="撤销该操作（发送不可撤销）"
-            onClick={() => onUndo(ev.action_id!)}
+            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 t-sm font-medium text-white hover:bg-emerald-700"
+            onClick={() => onDecide(seg.action_id!, 'approve', runId)}
           >
-            <Undo2 className="h-3 w-3" /> 撤销
+            <Check className="h-3.5 w-3.5" /> 批准执行
           </button>
-        )}
-        {undone && <Undo2 className="h-3 w-3 shrink-0" />}
-      </div>
-    )
-  }
-  return null
+          <button
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 t-sm text-gray-600 hover:text-red-600"
+            onClick={() => onDecide(seg.action_id!, 'reject', runId)}
+          >
+            <X className="h-3.5 w-3.5" /> 拒绝
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }

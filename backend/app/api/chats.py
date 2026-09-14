@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -40,12 +42,19 @@ def require_session(session_id: int) -> None:
         raise HTTPException(404, "会话不存在")
 
 
-def append_message(session_id: int, role: str, content: str, model: str = "") -> None:
-    """落库一条消息并刷新会话 updated_at；首轮用户消息自动生成标题。"""
+def append_message(session_id: int, role: str, content: str, model: str = "",
+                   segments: list | None = None) -> None:
+    """落库一条消息并刷新会话 updated_at；首轮用户消息自动生成标题。
+
+    segments 为 Agent 消息的结构化分段（v22 segments_json，REDESIGN_PLAN §17.4）；
+    None=普通文本消息。
+    """
     conn = get_conn()
     conn.execute(
-        "INSERT INTO chat_messages (session_id, role, content, model) VALUES (?, ?, ?, ?)",
-        (session_id, role, content, model),
+        "INSERT INTO chat_messages (session_id, role, content, model, segments_json)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (session_id, role, content, model,
+         json.dumps(segments, ensure_ascii=False) if segments else None),
     )
     if role == "user":
         row = conn.execute(
@@ -106,22 +115,29 @@ def read_chat(session_id: int) -> dict:
     if row is None:
         raise HTTPException(404, "会话不存在")
     msgs = conn.execute(
-        "SELECT id, role, content, model, created_at"
+        "SELECT id, role, content, model, created_at, segments_json"
         " FROM chat_messages WHERE session_id = ? ORDER BY id",
         (session_id,),
     ).fetchall()
+    out = []
+    for m in msgs:
+        segments = None
+        if m["segments_json"]:
+            try:
+                segments = json.loads(m["segments_json"])
+            except ValueError:
+                segments = None
+        out.append({
+            "id": m["id"],
+            "role": m["role"],
+            "content": m["content"],
+            "model": m["model"],
+            "created_at": m["created_at"],
+            "segments": segments,
+        })
     return {
         "session": _session_dict(row),
-        "messages": [
-            {
-                "id": m["id"],
-                "role": m["role"],
-                "content": m["content"],
-                "model": m["model"],
-                "created_at": m["created_at"],
-            }
-            for m in msgs
-        ],
+        "messages": out,
     }
 
 

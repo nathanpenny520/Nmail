@@ -16,6 +16,13 @@
 
 ## 进行中
 
+### S-0914-2208-Agent可用性
+- 目标: 用户已拍板的「AI 总管家 Agent 化」方案（REDESIGN_PLAN §17）——原生 function calling+降级探测、循环 v2（时间预算 180s+步数 25 兜底+审批续跑不断链）、agent_runs 持久化（v22）、工具集对齐人人能力（搜索增强/set_category/文件夹改删/草稿全家桶/通讯录写/黑白名单）、前端 Claude Code 式 segments+过程折叠+流式+Stop/继续
+- 范围: backend(app/ai/llm.py, agent.py, tools.py, api/ai.py, api/chats.py, db/database.py v22, tests/test_agent_loop.py) + frontend(pages/ManagerPage.tsx, types.ts, api/stream.ts) + docs(ARCHITECTURE, REDESIGN_PLAN §17, CHANGELOG, SESSIONS)
+- 状态: 开工登记（2026-09-14 22:08）
+
+<!-- 有新会话开工时按下方模板登记 -->
+
 ### S-0913-1632-写信保真与编辑增强
 - 目标: 用户确认的写信区三段方案——P0 发送保真（mark 高亮被 nh3 白名单剥掉的实证 bug、表格/段落/引用/代码块样式内联化、纯文本表格分隔符）、P1 编辑能力（表格可调宽+右键行列增删/合并拆分/表头切换/底色、链接弹窗、跨平台字体栈）、P2 输入增强（粘贴 Markdown 自动转换、粘贴截图插入、HTML 源码视图、收件人视角预览）
 - 范围: backend(app/core/mail_html.py, app/core/outbox.py, app/api/compose_extras.py〔P2〕, tests) + frontend(components/compose/*, index.css, api/client.ts+openapi/schema 快照〔P2 再生成〕) + docs(CHANGELOG, SESSIONS, ARCHITECTURE)；共享文档与并行会话重叠处按惯例构造 patch 暂存

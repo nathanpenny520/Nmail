@@ -467,6 +467,33 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        22,
+        """
+        -- v0.4.x Agent 化（REDESIGN_PLAN §17，2026-09-14 拍板）：agent_runs 支撑
+        -- 可恢复循环（审批 waiting_approval / 步数预算触顶 paused_* 后续跑，刷新
+        -- 与重启不丢）；chat_messages.segments_json 存结构化过程（text/steps/
+        -- approval/error 分段），旧消息 NULL 走纯文本兼容渲染。
+        CREATE TABLE IF NOT EXISTS agent_runs (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id       INTEGER,
+            mode             TEXT NOT NULL,
+            origin           TEXT NOT NULL DEFAULT 'ui',
+            account_ids_json TEXT NOT NULL DEFAULT '[]',
+            profile_id       TEXT,
+            messages_json    TEXT NOT NULL DEFAULT '[]',
+            pending_json     TEXT,
+            status           TEXT NOT NULL DEFAULT 'running',
+            steps            INTEGER NOT NULL DEFAULT 0,
+            budget_used_ms   INTEGER NOT NULL DEFAULT 0,
+            native           INTEGER NOT NULL DEFAULT 1,
+            created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs(session_id);
+        ALTER TABLE chat_messages ADD COLUMN segments_json TEXT;
+        """,
+    ),
 ]
 
 

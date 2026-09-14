@@ -45,8 +45,10 @@ def _seed_email(aid: int, uid: int, subject: str, sender: str = "s@x.com") -> in
 
 
 def _script(monkeypatch, replies: list[str]) -> None:
-    """按序回放 LLM 输出（tools JSON 或纯文本）；AI 配置打桩（不出网）。"""
+    """按序回放 LLM 输出（tools JSON 或纯文本）；AI 配置打桩（不出网）。
+    v2 默认走原生 function calling——这里强制探测为不支持，走 JSON 降级路径。"""
     monkeypatch.setattr(agent.tasks, "_ai_config", lambda pid=None: ("http://x", "test-model", None))
+    monkeypatch.setattr(agent, "_native_supported", lambda *a, **k: False)
     calls = {"n": 0}
 
     def fake_chat(base_url, model, api_key, messages):

@@ -1,14 +1,23 @@
-/** SSE Agent 事件流客户端（v0.4 P6）：每个 data: 帧是一个 JSON 事件对象。 */
+/** SSE Agent 事件流客户端（v0.4 P6）：每个 data: 帧是一个 JSON 事件对象。
+ * signal 支持 Stop 中断（§17.4）：中止后已完成部分保留。 */
 export async function streamAgentEvents(
   url: string,
   body: unknown,
   onEvent: (event: Record<string, unknown>) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    })
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw err
+    throw new Error('连接失败')
+  }
   if (!res.ok || !res.body) {
     let detail = `HTTP ${res.status}`
     try {

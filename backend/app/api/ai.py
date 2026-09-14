@@ -254,53 +254,163 @@ def write(payload: WriteIn) -> dict:
     return resp
 
 
-# ── AI 总管家 Agent（v0.4 P6，REDESIGN_PLAN §6）─────────────────
+# ── AI 总管家 Agent（v0.4 P6；v0.4.x Agent 化 §17）────────────────
+
+def _build_segments(events: list[dict]) -> list[dict]:
+    """事件流 → 持久化分段（text / step / approval / error），与前端渲染同构。"""
+    segs: list[dict] = []
+
+    def last_text() -> dict | None:
+        return segs[-1] if segs and segs[-1]["kind"] == "text" else None
+
+    for ev in events:
+        t = ev.get("type")
+        if t == "text_delta":
+            seg = last_text()
+            if seg is None:
+                segs.append({"kind": "text", "content": ev.get("delta") or ""})
+            else:
+                seg["content"] += ev.get("delta") or ""
+        elif t == "text":
+            seg = last_text()
+            if seg is None:
+                segs.append({"kind": "text", "content": ev.get("text") or ""})
+            else:
+                seg["content"] = ev.get("text") or ""  # 全量事件覆盖同轮累积
+        elif t == "tool_call":
+            segs.append({"kind": "step", "tool": ev.get("tool"), "call_id": ev.get("call_id"),
+                         "args": ev.get("args") or {}, "status": "running"})
+        elif t == "tool_result":
+            matched = False
+            for seg in reversed(segs):
+                if seg["kind"] != "step" or seg.get("status") in ("ok", "fail"):
+                    continue
+                if ev.get("action_id") is not None:
+                    if seg.get("action_id") == ev["action_id"]:
+                        matched = True
+                elif seg.get("tool") == ev.get("tool"):
+                    matched = True
+                if matched:
+                    seg["status"] = "ok" if ev.get("ok") else "fail"
+                    seg["summary"] = ev.get("summary")
+                    if ev.get("action_id") is not None:
+                        seg["action_id"] = ev["action_id"]
+                    break
+            if not matched:
+                # 续跑流里回放审批结果的 tool_result（原 step 在前一条消息）→ 标记 echo，
+                # 前端不重复渲染（消息1 的 waiting step 已由 _patch_history_step 落定）
+                segs.append({"kind": "step", "tool": ev.get("tool"), "call_id": ev.get("call_id"),
+                             "args": {}, "status": "ok" if ev.get("ok") else "fail",
+                             "summary": ev.get("summary"),
+                             **({"echo": True} if ev.get("action_id") is not None else {})})
+        elif t == "approval_required":
+            # 前一个 running step 转入 waiting（决定后前端就地更新）
+            for seg in reversed(segs):
+                if seg["kind"] == "step" and seg.get("status") == "running" \
+                        and seg.get("tool") == ev.get("tool"):
+                    seg["status"] = "waiting"
+                    seg["action_id"] = ev.get("action_id")
+                    break
+            segs.append({"kind": "approval", "action_id": ev.get("action_id"),
+                         "tool": ev.get("tool"), "args": ev.get("args") or {},
+                         "reason": ev.get("reason"), "meta": ev.get("meta") or {},
+                         "run_id": ev.get("run_id")})
+        elif t == "error":
+            segs.append({"kind": "error", "content": ev.get("error") or "执行出错"})
+    return segs
+
+
+def _patch_history_step(session_id: int, action_id: int, ok: bool, summary: str) -> None:
+    """审批决定后把前一条助手消息里的 waiting step / 审批卡落定为最终状态（还原一致）。"""
+    rows = get_conn().execute(
+        "SELECT id, segments_json FROM chat_messages"
+        " WHERE session_id = ? AND role = 'assistant' AND segments_json IS NOT NULL"
+        " ORDER BY id DESC LIMIT 5", (session_id,)).fetchall()
+    for row in rows:
+        try:
+            segs = json.loads(row["segments_json"] or "[]")
+        except ValueError:
+            continue
+        hit = False
+        for seg in segs:
+            if seg.get("action_id") != action_id:
+                continue
+            if seg.get("kind") == "step" and seg.get("status") == "waiting":
+                seg["status"] = "ok" if ok else "fail"
+                seg["summary"] = summary
+                hit = True
+            elif seg.get("kind") == "approval" and not seg.get("status"):
+                seg["status"] = "已拒绝" if "拒绝" in summary else ("已执行" if ok else "失败")
+                hit = True
+        if hit:
+            get_conn().execute("UPDATE chat_messages SET segments_json = ? WHERE id = ?",
+                               (json.dumps(segs, ensure_ascii=False), row["id"]))
+            get_conn().commit()
+            return
+
 
 class _AgentSSE:
-    """把 agent 事件生成器包装为 SSE；结束后把对话轨迹落库（会话持久化复用）。
-    origin 随调用方区分（内部 ui / 对外 API api，审计字段 §6.8）。"""
+    """把 agent 事件生成器包装为 SSE；结束后把分段轨迹落库（会话持久化）。
+    origin 随调用方区分（内部 ui / 对外 API api，审计字段 §6.8）。
 
-    def __init__(self, payload: AgentStreamIn, origin: str = "ui"):
+    两种来源：新问题（run_stream）与续跑（resume_stream——决定回灌 + 继续
+    循环）。续跑前把审批决定回写进前一条消息的 waiting step（§17.4）。"""
+
+    def __init__(self, payload: AgentStreamIn | None = None, origin: str = "ui",
+                 resume_run_id: int | None = None):
         self.payload = payload
         self.origin = origin
-        self.trace: list[str] = []
+        self.resume_run_id = resume_run_id
+        self.events: list[dict] = []
 
     def stream(self):
         payload = self.payload
-        account_ids = payload.account_ids or [
-            int(r["id"]) for r in get_conn().execute("SELECT id FROM accounts").fetchall()
-        ]
-        if payload.mode not in ("approval", "auto"):
-            yield f"data: {json.dumps({'type': 'error', 'error': 'mode 需为 approval/auto'})}\n\n"
-            yield "data: [DONE]\n\n"
-            return
+        if self.resume_run_id is not None:
+            gen = agent.resume_stream(self.resume_run_id)
+        else:
+            account_ids = payload.account_ids or [
+                int(r["id"]) for r in get_conn().execute("SELECT id FROM accounts").fetchall()
+            ]
+            if payload.mode not in ("approval", "auto"):
+                yield f"data: {json.dumps({'type': 'error', 'error': 'mode 需为 approval/auto'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            gen = agent.run_stream(payload.question, payload.history, payload.session_id,
+                                   account_ids, payload.mode, payload.profile_id,
+                                   origin=self.origin)
         try:
-            for event in agent.run_stream(
-                payload.question, payload.history, payload.session_id,
-                account_ids, payload.mode, payload.profile_id, origin=self.origin,
-            ):
-                etype = event.get("type")
-                if etype == "text" and event.get("text"):
-                    self.trace.append(event["text"])
-                elif etype == "tool_call":
-                    args = event.get("args") or {}
-                    brief = ", ".join(f"{k}={str(v)[:40]}" for k, v in list(args.items())[:3])
-                    self.trace.append(f"[调用 {event.get('tool')} {brief}]")
-                elif etype == "tool_result":
-                    mark = "✓" if event.get("ok") else "✗"
-                    self.trace.append(f"[{mark} {event.get('summary', '')}]")
-                elif etype == "approval_required":
-                    self.trace.append(f"[待批准 {event.get('tool')}]")
+            for event in gen:
+                self.events.append(event)
                 yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
         except tasks.AINotConfigured:
-            yield "data: " + json.dumps({"type": "error", "error": "AI 未配置或已停用，请到 设置-AI 配置 检查"}, ensure_ascii=False) + "\n\n"
+            self.events.append({"type": "error", "error": "AI 未配置或已停用，请到 设置-AI 配置 检查"})
+            yield "data: " + json.dumps(self.events[-1], ensure_ascii=False) + "\n\n"
         except Exception as exc:  # noqa: BLE001
-            yield "data: " + json.dumps({"type": "error", "error": str(exc)[:300]}, ensure_ascii=False) + "\n\n"
+            self.events.append({"type": "error", "error": str(exc)[:300]})
+            yield "data: " + json.dumps(self.events[-1], ensure_ascii=False) + "\n\n"
         yield "data: [DONE]\n\n"
-        if payload.session_id is not None:
-            append_message(payload.session_id, "assistant",
-                           "\n".join(t for t in self.trace if t.strip()),
-                           model=_record_model(payload.profile_id))
+        self._persist()
+
+    def _persist(self) -> None:
+        payload = self.payload
+        session_id = payload.session_id if payload is not None else None
+        if self.resume_run_id is not None:
+            state = agent._load_run(self.resume_run_id)
+            session_id = state.session_id if state else None
+        if session_id is None:
+            return
+        # 审批决定的事件已在续跑流里回放（tool_result 带 action_id）——
+        # 同步落定前一条消息中的 waiting step，保证刷新后还原一致
+        for ev in self.events:
+            if ev.get("type") == "tool_result" and ev.get("action_id") is not None:
+                _patch_history_step(session_id, ev["action_id"],
+                                    bool(ev.get("ok")), ev.get("summary") or "")
+        segs = _build_segments(self.events)
+        text_parts = [s["content"] for s in segs if s["kind"] == "text" and s["content"].strip()]
+        content = "\n\n".join(text_parts) or "（已执行工具调用，见过程）"
+        append_message(session_id, "assistant", content,
+                       model=_record_model(payload.profile_id if payload else None),
+                       segments=segs)
 
     def response(self) -> StreamingResponse:
         return StreamingResponse(
@@ -311,8 +421,19 @@ class _AgentSSE:
 
 @router.post("/agent/stream")
 def agent_stream(payload: AgentStreamIn):
-    """总管家 Agent 对话（SSE）：text / tool_call / tool_result / approval_required / error / done。"""
+    """总管家 Agent 对话（SSE）：run_started / text_delta / text / tool_call /
+    tool_result / approval_required / paused / error / done。"""
     return _AgentSSE(payload).response()
+
+
+class AgentResumeIn(BaseModel):
+    run_id: int
+
+
+@router.post("/agent/resume")
+def agent_resume(payload: AgentResumeIn):
+    """续跑 Agent 运行（SSE）：审批决定后 / 步数预算触顶后由前端自动调用。"""
+    return _AgentSSE(resume_run_id=payload.run_id).response()
 
 
 @router.post("/agent/action/{action_id}/decide")

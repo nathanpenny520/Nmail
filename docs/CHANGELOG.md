@@ -3,6 +3,16 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — AI 总管家 Agent 化：原生工具调用+可恢复长链+人人对齐工具集+Claude Code 式过程展示（REDESIGN_PLAN §17，2026-09-14 拍板）
+- 背景：P6 的 Agent 实测不可用——提示词约定 JSON 文本作工具协议（裸 JSON/DSML 标记泄漏给用户、`_extract_json` 首尾跨度被幻觉文本搅坏）、MAX_STEPS=8 且审批即断链、search_emails 锁死 INBOX 与描述不符、过程平铺无折叠
+- 原生 function calling（ai/llm.py `chat_step`/`iter_chat_step` + ai/tools.py 每 tool JSON Schema）：tools 参数+tool_calls 解析，流式分片按 index 聚合；端点不认 tools（400/404/422）自动探测降级 JSON 协议并按 base_url+model 落 KV 缓存（`_parse_model_action`/DSML 兜底保留），原生模式下模型输出裸 JSON 也兜底解析；`_extract_json` 改首个平衡对象截取（止血）
+- 循环 v2（ai/agent.py）：时间预算优先（180s，超限 tool_choice=none 强制文本收尾，仍调工具则 paused_budget），MAX_STEPS=25 兜底；**审批不断链**——写类出卡后 agent_runs（v22）持久化 messages/步数/预算置 waiting_approval，批准/拒绝经 decide 后 `POST /api/ai/agent/resume` 续跑（拒绝同样回灌让模型改道），步数/预算触顶前端「继续」=新的一段预算；工具结果紧凑回灌 ≤1200 字符（邮件列表转行格式），>12 步早期结果确定性截断；最终回答也回写 run messages；事件 run_started/text_delta/text/tool_call/tool_result/approval_required/paused/error/done（ext 非流式过滤 text_delta 并新增 /agent/resume）
+- 工具集 15→26（ai/tools.py §17.3 人人对齐）：search_emails 增强（category/sender/unread/needs_reply/date_from/date_to/folder 过滤，修 folder=INBOX 硬编码默认全文件夹含归档，空结果带结构化 hint）+ set_category（带 undo）/rename_folder（带 undo）/delete_folder/update_draft/schedule_draft/discard_draft/upsert_contact/delete_contact/add_sender_list/remove_sender_list；豁免不给工具：账号/凭据/ai_grants/密钥/AI 总开关（防注入自我扩权）；自动模式 schedule_draft 一律降审批；undo_action 支持 set_category/rename_folder
+- 前端 Claude Code 式（ManagerPage 重写 + api/stream.ts AbortSignal）：消息按 segments 渲染——流式 Markdown 文本 + 连续步骤合并的可折叠「执行过程」块（运行中自动展开当前步、完成自动收起、行点开看参数明细、中文工具名映射、ok 步撤销钮）+ 审批卡独立醒目（delete_folder/trash 显示影响邮件数与清单）+ 错误内联红条；批准/拒绝后自动续跑；「继续」按钮（步数/预算触顶）；Stop 按钮（中断保留已完成部分）；会话还原走 chat_messages.segments_json（v22），旧消息回落纯文本
+- 数据库 v22：agent_runs 表 + chat_messages.segments_json 列
+- 验证：pytest 176 全绿（+11 循环用例：原生流式/审批续跑/拒绝改道/步数预算暂停继续/裸 JSON 兜底/segments 构建/归档搜索/set_category undo 往返）；ruff 通过；npm run build（tsc）通过；8720 重启迁移后 curl 实测——读类问题全程流式+工具调用正常（原生 call_id）、审批 paused→reject→resume 模型改道完成、重复 resume 正确拒绝；浏览器 e2e——「有没有我漏回的邮件」单轮 5 步结构化过滤（needs_reply=true）而非同义词乱搜、过程块折叠/展开/会话还原、审批卡批准→自动续跑收尾；ext 非流式 answer/approvals 兼容
+- 文档：REDESIGN_PLAN 新增 §17（方案全文+拍板记录）、ARCHITECTURE 相应条目更新
+
 ## 11f4be2 — 设置页补全：通知开关/写信分类/黑白名单管理/本机路径
 - 用户确认方案：通知开关收进「通用」，新增「写信」分类，黑白名单管理做，暗色/免打扰不做，「关于」显示数据与安装目录（不硬编码、符合实际运行环境）
 - 通知（api/settings.py + NotificationBell.tsx + SettingsPage 通用页）：新增 `desktop_notifications_enabled`（默认开）与 `notify_types`（new_mail/ai_draft/digest/account_error 四类，读侧与默认合并缺省视为开，未知键过滤、空 dict 不落库）；铃铛弹系统通知前按总开关+类型过滤（应用内铃铛与角标不受影响），设置页常驻浏览器权限状态行（未授权可申请/被拒绝给浏览器设置指引——替代原授权后无处可管的琥珀色一次性按钮）

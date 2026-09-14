@@ -1067,9 +1067,30 @@ export interface paths {
         put?: never;
         /**
          * Agent Stream
-         * @description 总管家 Agent 对话（SSE）：text / tool_call / tool_result / approval_required / error / done。
+         * @description 总管家 Agent 对话（SSE）：run_started / text_delta / text / tool_call /
+         *     tool_result / approval_required / paused / error / done。
          */
         post: operations["agent_stream_api_ai_agent_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/agent/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Agent Resume
+         * @description 续跑 Agent 运行（SSE）：审批决定后 / 步数预算触顶后由前端自动调用。
+         */
+        post: operations["agent_resume_api_ai_agent_resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1802,10 +1823,31 @@ export interface paths {
          * Ext Agent Chat
          * @description 总管家对话（非流式）：返回最终回答 + 完整事件流 + 待审批动作清单。
          *
-         *     审批模式下写动作会以 approval_required 结束本轮——拿 action_id 调
-         *     POST /agent/actions/{id}/decide 批准或拒绝。
+         *     审批模式下写动作会以 approval_required + paused 结束本轮——拿 action_id 调
+         *     POST /agent/actions/{id}/decide 批准或拒绝，再拿 run_id 调 POST /agent/resume
+         *     续跑（text_delta 增量事件不返回，回答以 text 全量事件为准）。
          */
         post: operations["ext_agent_chat_api_ext_v1_agent_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ext/v1/agent/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ext Agent Resume
+         * @description 续跑 Agent 运行（审批决定后 / 步数预算触顶后），事件结构同 /agent/chat。
+         */
+        post: operations["ext_agent_resume_api_ext_v1_agent_resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1985,6 +2027,11 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** AgentResumeIn */
+        AgentResumeIn: {
+            /** Run Id */
+            run_id: number;
+        };
         /** AgentStreamIn */
         AgentStreamIn: {
             /** Question */
@@ -2157,6 +2204,11 @@ export interface components {
             session_id?: number | null;
             /** Profile Id */
             profile_id?: string | null;
+        };
+        /** ExtAgentResumeIn */
+        ExtAgentResumeIn: {
+            /** Run Id */
+            run_id: number;
         };
         /** ExtDraftIn */
         ExtDraftIn: {
@@ -4631,6 +4683,39 @@ export interface operations {
             };
         };
     };
+    agent_resume_api_ai_agent_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentResumeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     agent_decide_api_ai_agent_action__action_id__decide_post: {
         parameters: {
             query?: never;
@@ -6210,6 +6295,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ExtAgentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ext_agent_resume_api_ext_v1_agent_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtAgentResumeIn"];
             };
         };
         responses: {
