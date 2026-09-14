@@ -39,13 +39,17 @@ curl "http://127.0.0.1:8720/api/ext/v1/emails?limit=5" \
 |------|------|-------|------|
 | `/health` | GET | — | 存活探测 |
 | `/accounts` | GET | read | 账号列表与健康状态 |
-| `/emails` | GET | read | 列表/搜索。参数：`account_id` `folder` `q`（≥3 字走全文检索）`is_read` `starred` `category` `limit`（≤200）`offset` |
+| `/emails` | GET | read | 列表/搜索。参数：`account_id` `folder` `q`（≥3 字走全文检索）`is_read` `starred` `category` `sender`/`recipient`（发件人/收件人，地址或姓名包含匹配）`after`/`before`（`YYYY-MM-DD`，起止均含当天，按 UTC 归一化日期）`has_attachments` `limit`（≤200）`offset` |
 | `/emails/{id}` | GET | read | 详情（HTML 正文已消毒，远程图片默认拦截） |
+| `/emails/recent` | GET | read | 新邮件游标轮询（watch）：`since_id`（默认 0）返回 id 更大的邮件（按 id 升序）+ `latest_id`；首呼拿 `latest_id` 作基线，此后带上次返回值轮询，空结果也推进游标。参数 `account_id` `limit`（≤200） |
 | `/emails/{id}/attachments/{aid}` | GET | read | 下载附件 |
 | `/emails/actions` | POST | write | 批量动作 `{"ids":[...],"action":"read\|unread\|star\|unstar\|move\|trash\|archive\|unarchive","folder":"目标"}`；打标类同步返回，移动类异步返回 `job_id` |
 | `/jobs/{job_id}` | GET | read | 轮询批量动作进度 |
 | `/drafts?status=` | GET | read | 草稿列表（默认 `pending_review` AI 待审） |
-| `/drafts` | POST | write | 创建草稿 `{"account_id","to","cc","bcc","subject","body_html"}`（地址为逗号分隔串；不会自动发送） |
+| `/drafts` | POST | write | 创建草稿 `{"account_id","to","cc","bcc","subject"}` + 正文三选一 `body_html`/`body_md`（Markdown）/`body_text`（纯文本，转义换行）——多选一给 400（地址为逗号分隔串；不会自动发送） |
+| `/drafts/reply` | POST | write | 回复草稿 `{"email_id","reply_all"?,"cc"?,"bcc"?}` + 正文三选一：自动带 `Re:` 主题、收件人=原发件人（reply_all 时原收件人并入 cc，剔除本账号地址）、`in_reply_to`（发送自动串线）与原文引用块 |
+| `/drafts/forward` | POST | write | 转发草稿 `{"email_id","to","include_attachments"?,"cc"?,"bcc"?}` + 正文三选一：自动带 `Fwd:` 主题与引用块；不设 `in_reply_to`（不串线、不回标原邮件已读）；`include_attachments=true` 复制原附件 |
+| `/drafts/{id}/attachments` | POST | write | 草稿附件上传（multipart，字段名 `files`，可多文件） |
 | `/drafts/{id}/approve` | POST | send | 发送草稿（In-Reply-To/消毒/Sent 归档与界面同通路） |
 | `/folders?account_id=` | GET | read | 文件夹缓存列表 |
 | `/folders/sync?account_id=&name=` | POST | write | 按需同步指定文件夹（名字走查询参数，IMAP 名含分隔符） |
@@ -56,13 +60,28 @@ curl "http://127.0.0.1:8720/api/ext/v1/emails?limit=5" \
 | `/agent/resume` | POST | agent | 续跑运行 `{"run_id"}`：审批决定后 / 步数预算触顶后调用（事件结构同 `/agent/chat`） |
 | `/agent/actions/{id}/decide` | POST | agent | 批准/拒绝 Agent 待审批动作 `{"decision":"approve\|reject","args"?}`（批准/拒绝后再调 `/agent/resume` 续跑，拒绝同样回灌让模型改道） |
 
-错误语义：`401` 缺少/无效密钥 · `403` 未启用或 scope 不足 · `404` 资源不存在 · `429` 限流/超每日上限 · `502` 上游（IMAP/SMTP/AI）失败。完整字段定义见 `http://127.0.0.1:8720/openapi.json`（`/api/ext/v1` tag）。
+错误语义（2026-09-15 起统一 envelope）：`/api/ext/*` 的失败响应一律
+`{"ok":false,"error":{"code","message"}}`——`code`：`invalid_key`(401) `forbidden`(403)
+`not_found`(404) `bad_request`(400) `invalid_params`(422) `rate_limited`(429) `upstream`(502/503/504)
+`server_error`(5xx 其他)；`429` 附 `Retry-After` 响应头（秒）。**成功体保持资源原形不变**。
+内部 API 与 `/api/extkeys` 管理面不受影响（仍 `{"detail"}`）。完整字段定义见
+`http://127.0.0.1:8720/openapi.json`（`/api/ext/v1` tag）。
 
 ### 调用示例
 
 ```bash
-# 搜最近 24h 内来自某人的邮件
+# 搜最近 24h 内来自某人的邮件（sender/after 组合；before 同理，起止均含当天）
 curl "http://127.0.0.1:8720/api/ext/v1/emails?q=报销&limit=10" -H "X-Api-Key: $KEY"
+curl "http://127.0.0.1:8720/api/ext/v1/emails?sender=boss@example.com&after=2026-09-01&has_attachments=true" -H "X-Api-Key: $KEY"
+
+# 回复某封邮件：只建草稿（自动带 Re: 主题/收件人/引用块），再 approve 发送
+curl -X POST "http://127.0.0.1:8720/api/ext/v1/drafts/reply" \
+  -H "X-Api-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{"email_id":254,"body_md":"**收到**，明天回复。"}'
+curl -X POST "http://127.0.0.1:8720/api/ext/v1/drafts/{id}/approve" -H "X-Api-Key: $KEY"
+
+# watch：轮询新邮件（脚本循环，空结果推进游标）
+curl "http://127.0.0.1:8720/api/ext/v1/emails/recent?since_id=$LATEST" -H "X-Api-Key: $KEY"
 
 # 把 12、13 号邮件归档（异步，返回 job_id）
 curl -X POST "http://127.0.0.1:8720/api/ext/v1/emails/actions" \

@@ -9,7 +9,8 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -56,6 +57,50 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
+
+
+# ── 对外 API 错误 envelope（AGENT_SKILL_PLAN P1）─────────────────────────
+# /api/ext/* 失败统一 {"ok":false,"error":{code,message}}（code 供 agent/CLI 按表
+# 决策重试或改参数），429 的 Retry-After 经 exc.headers 透传；成功体与内部 API
+# （/api/extkeys 管理面含内）保持 {"detail"} 原样，互不影响。
+_EXT_ERROR_CODES = {
+    400: "bad_request", 401: "invalid_key", 403: "forbidden", 404: "not_found",
+    422: "invalid_params", 429: "rate_limited", 502: "upstream", 503: "upstream", 504: "upstream",
+}
+
+
+def _ext_error_body(status_code: int, message: str) -> dict:
+    code = _EXT_ERROR_CODES.get(status_code, "server_error" if status_code >= 500 else "bad_request")
+    return {"ok": False, "error": {"code": code, "message": message}}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _api_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if not request.url.path.startswith("/api/ext/"):
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+    return JSONResponse(
+        _ext_error_body(exc.status_code, str(exc.detail)),
+        status_code=exc.status_code, headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _api_validation_exception_handler(request: Request, exc: RequestValidationError):
+    if not request.url.path.startswith("/api/ext/"):
+        return JSONResponse({"detail": exc.errors()}, status_code=422)
+    message = "；".join(
+        f"{'.'.join(str(loc) for loc in e['loc'][1:]) or 'body'}: {e['msg']}"
+        for e in exc.errors()[:5]
+    )
+    return JSONResponse(_ext_error_body(422, message), status_code=422)
+
+
+@app.exception_handler(Exception)
+async def _api_unhandled_exception_handler(request: Request, exc: Exception):
+    if not request.url.path.startswith("/api/ext/"):
+        # 与 Starlette 默认 500 同形（ServerErrorMiddleware 仍记录堆栈）
+        return PlainTextResponse("Internal Server Error", status_code=500)
+    return JSONResponse(_ext_error_body(500, f"服务器内部错误：{exc}"), status_code=500)
 
 # ── 本机来源校验（IMPROVEMENT_PLAN S1）────────────────────────────────────
 # 服务仅绑定 127.0.0.1，但浏览器不限：恶意网页可向 http://127.0.0.1:8720 发

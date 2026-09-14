@@ -110,6 +110,38 @@ class EmailActionIn(BaseModel):
     folder: str | None = None  # action=move 时的目标文件夹
 
 
+def _validate_date(value: str, name: str) -> None:
+    """after/before 需为可解析日期（YYYY-MM-DD 或含时间的 ISO 串），否则 400。"""
+    from datetime import date as _date
+
+    try:
+        _date.fromisoformat(value.strip()[:10])
+    except ValueError:
+        raise HTTPException(400, f"{name} 需为日期（YYYY-MM-DD 或 ISO 日期时间）") from None
+
+
+def recent_emails(since_id: int = 0, account_id: int | None = None, limit: int = 50) -> dict:
+    """新邮件游标轮询（对外 API watch 用，AGENT_SKILL_PLAN P1）：id > since_id 的
+    邮件按 id 升序返回（≤200，不限文件夹），并附当前最新 id——空轮询也用
+    latest_id 推进游标；首呼不带 since_id 即以 latest_id 为基线，不回放历史。"""
+    limit = max(1, min(limit, 200))
+    since_id = max(0, since_id)
+    where = ["e.id > ?"]
+    params: list = [since_id]
+    if account_id is not None:
+        where.append("e.account_id = ?")
+        params.append(account_id)
+    clause = f" WHERE {' AND '.join(where)}"
+    conn = get_conn()
+    rows = conn.execute(
+        f"SELECT {LIST_COLUMNS} FROM emails e JOIN accounts a ON a.id = e.account_id"
+        f"{clause} ORDER BY e.id ASC LIMIT ?",
+        [*params, limit],
+    ).fetchall()
+    latest = conn.execute("SELECT COALESCE(MAX(id), 0) AS n FROM emails").fetchone()["n"]
+    return {"items": [_summary(r) for r in rows], "latest_id": int(latest)}
+
+
 @router.get("/emails")
 def list_emails(
     account_id: int | None = None,
@@ -118,6 +150,11 @@ def list_emails(
     is_read: bool | None = None,
     starred: bool | None = None,
     category: str | None = None,
+    sender: str | None = None,
+    recipient: str | None = None,
+    after: str | None = None,
+    before: str | None = None,
+    has_attachments: bool | None = None,
     archived: bool = False,
     limit: int = 50,
     offset: int = 0,
@@ -162,6 +199,25 @@ def list_emails(
     if starred is not None:
         where.append("e.starred = ?")
         params.append(1 if starred else 0)
+    if sender and sender.strip():
+        like = f"%{sender.strip()}%"
+        where.append("(e.sender_email LIKE ? OR e.sender_name LIKE ?)")
+        params.extend([like, like])
+    if recipient and recipient.strip():
+        where.append("e.recipients LIKE ?")
+        params.append(f"%{recipient.strip()}%")
+    if after:
+        _validate_date(after, "after")
+        # date_sort 为 UTC ISO 串（sync._norm_date）；date() 截到日，起止均含当天
+        where.append("date(COALESCE(e.date_sort, e.date)) >= date(?)")
+        params.append(after.strip())
+    if before:
+        _validate_date(before, "before")
+        where.append("date(COALESCE(e.date_sort, e.date)) <= date(?)")
+        params.append(before.strip())
+    if has_attachments is not None:
+        where.append("e.has_attachments = ?")
+        params.append(1 if has_attachments else 0)
 
     clause = (" WHERE " + " AND ".join(where)) if where else ""
     conn = get_conn()

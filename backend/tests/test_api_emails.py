@@ -75,6 +75,37 @@ def test_list_filter_matrix():
     assert _list(**base, q="不存在的词xyz")["total"] == 0
 
 
+def test_list_filter_sender_recipient_dates_attachments():
+    """P1 补全（AGENT_SKILL_PLAN）：sender/recipient 模糊、after/before 按日含当天、
+    has_attachments；过滤可与 q 组合；非法日期 400。"""
+    aid = _seed_account()
+    e_hit = _seed_email(aid, 1, "张三的周报", sender_email="zhangsan@example.com",
+                        sender_name="张三", has_attachments=1,
+                        recipients='["me@example.com","lee@example.com"]',
+                        date="2026-09-10T09:30:00", date_sort="2026-09-10T01:30:00+00:00")
+    _seed_email(aid, 2, "李四的邮件", sender_email="lisi@example.com",
+                date="2026-08-01T10:00:00", date_sort="2026-08-01T02:00:00+00:00")
+    _seed_email(aid, 3, "张三的九月亮点", sender_email="zhangsan@example.com",
+                date="2026-09-12T10:00:00", date_sort="2026-09-12T02:00:00+00:00")
+
+    base = {"account_id": aid}
+    assert _list(**base, sender="张三")["total"] == 1  # 姓名匹配（仅 e1 带中文名）
+    assert _list(**base, sender="张三")["items"][0]["id"] == e_hit
+    assert _list(**base, sender="zhangsan@")["total"] == 2  # 地址匹配两封
+    assert _list(**base, recipient="lee@")["total"] == 1
+    assert _list(**base, recipient="lee@")["items"][0]["id"] == e_hit
+    assert _list(**base, after="2026-09-01")["total"] == 2
+    assert _list(**base, after="2026-09-01", before="2026-09-10")["total"] == 1
+    assert _list(**base, after="2026-09-01", before="2026-09-10")["items"][0]["id"] == e_hit
+    assert _list(**base, has_attachments="true")["total"] == 1
+    # 过滤与搜索组合
+    assert _list(**base, q="周报", sender="zhangsan@")["total"] == 1
+    # 非法日期 → 400（内部 API 仍 {"detail"} 形）
+    resp = client.get("/api/emails", params={"account_id": aid, "after": "not-a-date"})
+    assert resp.status_code == 400
+    assert "detail" in resp.json()
+
+
 def test_batch_archive_async_and_pending():
     """v0.4 归档语义（REDESIGN_PLAN §4.6）：批量 archive=后台 job 移服务器；
     存量本地归档走 archived_pending/migrate 迁移流。"""

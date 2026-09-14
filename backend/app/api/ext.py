@@ -9,17 +9,23 @@ scope 分级 read / write / send / agent；限流 60 次/分钟（内存滑动�
 跨站带不上（触发预检而本服务不应答），drive-by 风险由 Key 兜住。
 
 端点全部薄壳转调既有能力（api/emails、user_drafts、folders、contacts、digest、
-ai/agent），不实现新的邮件操作。
+ai/agent），不实现新的邮件操作。错误响应统一 envelope（main.py 异常处理器）：
+{"ok":false,"error":{code,message}}，429 带 Retry-After；成功体保持资源原形。
+P1 补全（AGENT_SKILL_PLAN §3，2026-09-15）：搜索过滤（sender/recipient/after/
+before/has_attachments）、回复/转发草稿（对齐写信台语义）、正文三选一
+（html/md/text）、草稿附件上传、/emails/recent 游标轮询。
 """
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import time
 from collections import defaultdict, deque
+from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from app.ai import agent, tasks
@@ -30,6 +36,7 @@ from app.api import user_drafts
 from app.api.ai import AgentDecisionIn
 from app.core import folders as folders_core
 from app.core import sync as sync_engine
+from app.core.mail_html import markdown_to_email_html
 from app.db.database import get_conn, get_setting
 
 router = APIRouter(prefix="/api/ext/v1", tags=["ext-api"])
@@ -44,6 +51,12 @@ _daily_counters: dict[int, tuple[str, int]] = {}
 _last_used_flush: dict[int, float] = {}
 
 
+def _seconds_until_midnight() -> int:
+    now = datetime.now()
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(1, int((tomorrow - now).total_seconds()))
+
+
 def _check_rate(key_id: int) -> None:
     """60 次/分钟滑动窗 + 每 Key 每日上限（内存计数，重启清零——本地单机软限制）。"""
     now = time.monotonic()
@@ -51,7 +64,8 @@ def _check_rate(key_id: int) -> None:
     while dq and now - dq[0] > 60:
         dq.popleft()
     if len(dq) >= RATE_LIMIT_PER_MIN:
-        raise HTTPException(429, f"调用过于频繁（上限 {RATE_LIMIT_PER_MIN} 次/分钟）")
+        raise HTTPException(429, f"调用过于频繁（上限 {RATE_LIMIT_PER_MIN} 次/分钟）",
+                            headers={"Retry-After": "60"})
     dq.append(now)
 
 
@@ -63,7 +77,10 @@ def _check_daily_limit(row) -> None:  # noqa: ANN001 — sqlite3.Row
     count = _daily_counters.get(int(row["id"]), ("", 0))
     n = count[1] + 1 if count[0] == today else 1
     if n > int(limit):
-        raise HTTPException(429, f"已达该 Key 的每日调用上限（{limit} 次/天），明天再试或到设置调整")
+        raise HTTPException(
+            429, f"已达该 Key 的每日调用上限（{limit} 次/天），明天再试或到设置调整",
+            headers={"Retry-After": str(_seconds_until_midnight())},
+        )
     _daily_counters[int(row["id"])] = (today, n)
 
 
@@ -157,15 +174,37 @@ def ext_list_emails(
     is_read: bool | None = None,
     starred: bool | None = None,
     category: str | None = None,
+    sender: str | None = None,
+    recipient: str | None = None,
+    after: str | None = None,
+    before: str | None = None,
+    has_attachments: bool | None = None,
     limit: int = 50,
     offset: int = 0,
     _: Any = READ_KEY,
 ) -> dict:
-    """列表/搜索：与内部 /api/emails 同一实现（FTS5 检索、排序、上限 200）。"""
+    """列表/搜索：与内部 /api/emails 同一实现（FTS5 检索、排序、上限 200）。
+    过滤：sender/recipient 为发件人/收件人（地址或姓名包含匹配），after/before
+    为日期（YYYY-MM-DD，起止均含当天，按 UTC 归一化日期），has_attachments 布尔。"""
     return emails_api.list_emails(
         account_id=account_id, folder=folder, q=q, is_read=is_read,
-        starred=starred, category=category, limit=limit, offset=offset,
+        starred=starred, category=category, sender=sender, recipient=recipient,
+        after=after, before=before, has_attachments=has_attachments,
+        limit=limit, offset=offset,
     )
+
+
+@router.get("/emails/recent")
+def ext_recent_emails(
+    since_id: int = 0,
+    account_id: int | None = None,
+    limit: int = 50,
+    _: Any = READ_KEY,
+) -> dict:
+    """新邮件游标轮询（watch）：id > since_id 的邮件按 id 升序 + latest_id。
+    首呼不带 since_id 拿 latest_id 作基线，此后带上次返回的 latest_id 轮询；
+    空结果也推进游标（latest_id 不变即无新邮件）。"""
+    return emails_api.recent_emails(since_id=since_id, account_id=account_id, limit=limit)
 
 
 @router.get("/emails/{email_id}")
@@ -229,13 +268,31 @@ def ext_email_actions(payload: ExtActionsIn, _: Any = WRITE_KEY) -> dict:
     )
 
 
-class ExtDraftIn(BaseModel):
+class ExtBodyMixin(BaseModel):
+    """正文三选一：body_html 原样入库（消毒在发送管线统一做，与界面写信同口径）、
+    body_md 走 Markdown→带样式 HTML、body_text 纯文本转义换行；多选一给 400。"""
+    body_html: str = ""
+    body_md: str = ""
+    body_text: str = ""
+
+
+def _body_to_html(payload: ExtBodyMixin) -> str:
+    provided = [v for v in (payload.body_html, payload.body_md, payload.body_text) if v]
+    if len(provided) > 1:
+        raise HTTPException(400, "body_html / body_md / body_text 只能三选一")
+    if payload.body_md:
+        return markdown_to_email_html(payload.body_md)
+    if payload.body_text:
+        return html.escape(payload.body_text).replace("\n", "<br />")
+    return payload.body_html or ""
+
+
+class ExtDraftIn(ExtBodyMixin):
     account_id: int
     to: str = ""            # 逗号分隔地址串（与内部草稿同格式）
     cc: str = ""
     bcc: str = ""
     subject: str = ""
-    body_html: str = ""
 
 
 @router.post("/drafts")
@@ -244,8 +301,53 @@ def ext_create_draft(payload: ExtDraftIn, _: Any = WRITE_KEY) -> dict:
     return user_drafts.create_draft(user_drafts.UserDraftIn(
         account_id=payload.account_id, mode="new", to_addrs=payload.to,
         cc_addrs=payload.cc, bcc_addrs=payload.bcc,
-        subject=payload.subject, body_html=payload.body_html,
+        subject=payload.subject, body_html=_body_to_html(payload),
     ))
+
+
+class ExtReplyIn(ExtBodyMixin):
+    email_id: int
+    reply_all: bool = False  # true：原收件人并入 cc（剔除原发件人与本账号地址，与写信台同语义）
+    cc: str = ""             # 追加抄送（逗号分隔串）
+    bcc: str = ""
+
+
+@router.post("/drafts/reply")
+def ext_create_reply(payload: ExtReplyIn, _: Any = WRITE_KEY) -> dict:
+    """回复草稿：自动带 Re: 主题、in_reply_to（发送时自动 In-Reply-To 串线）、
+    收件人=原发件人；正文后自动追加与写信台同构的引用块。只建草稿不发送——
+    发送经 POST /drafts/{id}/approve（send scope）。"""
+    return user_drafts.create_reply_draft(
+        payload.email_id, _body_to_html(payload),
+        reply_all=payload.reply_all, extra_cc=payload.cc, extra_bcc=payload.bcc,
+    )
+
+
+class ExtForwardIn(ExtBodyMixin):
+    email_id: int
+    to: str = ""                    # 转发收件人（逗号分隔串，必填）
+    include_attachments: bool = False  # 复制原邮件附件进草稿
+    cc: str = ""
+    bcc: str = ""
+
+
+@router.post("/drafts/forward")
+def ext_create_forward(payload: ExtForwardIn, _: Any = WRITE_KEY) -> dict:
+    """转发草稿：自动带 Fwd: 主题与引用块；不设 in_reply_to（转发不串线、
+    不回标原邮件已读）；include_attachments=true 复制原附件到草稿。"""
+    return user_drafts.create_forward_draft(
+        payload.email_id, payload.to, _body_to_html(payload),
+        include_attachments=payload.include_attachments,
+        extra_cc=payload.cc, extra_bcc=payload.bcc,
+    )
+
+
+@router.post("/drafts/{draft_id}/attachments")
+async def ext_upload_draft_attachments(
+    draft_id: int, files: list[UploadFile] = File(...), _: Any = WRITE_KEY,  # noqa: B008 — FastAPI 依赖注入惯用法
+) -> dict:
+    """草稿附件上传（multipart，字段名 files；与内部写信台同一实现与落盘惯例）。"""
+    return await user_drafts.upload_attachments(draft_id, files)
 
 
 @router.post("/folders/sync")

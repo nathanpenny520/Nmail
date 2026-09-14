@@ -1604,8 +1604,32 @@ export interface paths {
         /**
          * Ext List Emails
          * @description 列表/搜索：与内部 /api/emails 同一实现（FTS5 检索、排序、上限 200）。
+         *     过滤：sender/recipient 为发件人/收件人（地址或姓名包含匹配），after/before
+         *     为日期（YYYY-MM-DD，起止均含当天，按 UTC 归一化日期），has_attachments 布尔。
          */
         get: operations["ext_list_emails_api_ext_v1_emails_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ext/v1/emails/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ext Recent Emails
+         * @description 新邮件游标轮询（watch）：id > since_id 的邮件按 id 升序 + latest_id。
+         *     首呼不带 since_id 拿 latest_id 作基线，此后带上次返回的 latest_id 轮询；
+         *     空结果也推进游标（latest_id 不变即无新邮件）。
+         */
+        get: operations["ext_recent_emails_api_ext_v1_emails_recent_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1764,6 +1788,69 @@ export interface paths {
          *     move/trash/archive 等服务器移动类异步（响应含 job_id，经 GET /jobs/{id} 轮询）。
          */
         post: operations["ext_email_actions_api_ext_v1_emails_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ext/v1/drafts/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ext Create Reply
+         * @description 回复草稿：自动带 Re: 主题、in_reply_to（发送时自动 In-Reply-To 串线）、
+         *     收件人=原发件人；正文后自动追加与写信台同构的引用块。只建草稿不发送——
+         *     发送经 POST /drafts/{id}/approve（send scope）。
+         */
+        post: operations["ext_create_reply_api_ext_v1_drafts_reply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ext/v1/drafts/forward": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ext Create Forward
+         * @description 转发草稿：自动带 Fwd: 主题与引用块；不设 in_reply_to（转发不串线、
+         *     不回标原邮件已读）；include_attachments=true 复制原附件到草稿。
+         */
+        post: operations["ext_create_forward_api_ext_v1_drafts_forward_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ext/v1/drafts/{draft_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ext Upload Draft Attachments
+         * @description 草稿附件上传（multipart，字段名 files；与内部写信台同一实现与落盘惯例）。
+         */
+        post: operations["ext_upload_draft_attachments_api_ext_v1_drafts__draft_id__attachments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2094,6 +2181,11 @@ export interface components {
             /** Folder */
             folder?: string | null;
         };
+        /** Body_ext_upload_draft_attachments_api_ext_v1_drafts__draft_id__attachments_post */
+        Body_ext_upload_draft_attachments_api_ext_v1_drafts__draft_id__attachments_post: {
+            /** Files */
+            files: string[];
+        };
         /** Body_upload_attachments_api_user_drafts__draft_id__attachments_post */
         Body_upload_attachments_api_user_drafts__draft_id__attachments_post: {
             /** Files */
@@ -2212,6 +2304,21 @@ export interface components {
         };
         /** ExtDraftIn */
         ExtDraftIn: {
+            /**
+             * Body Html
+             * @default
+             */
+            body_html: string;
+            /**
+             * Body Md
+             * @default
+             */
+            body_md: string;
+            /**
+             * Body Text
+             * @default
+             */
+            body_text: string;
             /** Account Id */
             account_id: number;
             /**
@@ -2234,11 +2341,81 @@ export interface components {
              * @default
              */
             subject: string;
+        };
+        /** ExtForwardIn */
+        ExtForwardIn: {
             /**
              * Body Html
              * @default
              */
             body_html: string;
+            /**
+             * Body Md
+             * @default
+             */
+            body_md: string;
+            /**
+             * Body Text
+             * @default
+             */
+            body_text: string;
+            /** Email Id */
+            email_id: number;
+            /**
+             * To
+             * @default
+             */
+            to: string;
+            /**
+             * Include Attachments
+             * @default false
+             */
+            include_attachments: boolean;
+            /**
+             * Cc
+             * @default
+             */
+            cc: string;
+            /**
+             * Bcc
+             * @default
+             */
+            bcc: string;
+        };
+        /** ExtReplyIn */
+        ExtReplyIn: {
+            /**
+             * Body Html
+             * @default
+             */
+            body_html: string;
+            /**
+             * Body Md
+             * @default
+             */
+            body_md: string;
+            /**
+             * Body Text
+             * @default
+             */
+            body_text: string;
+            /** Email Id */
+            email_id: number;
+            /**
+             * Reply All
+             * @default false
+             */
+            reply_all: boolean;
+            /**
+             * Cc
+             * @default
+             */
+            cc: string;
+            /**
+             * Bcc
+             * @default
+             */
+            bcc: string;
         };
         /** FolderCreateIn */
         FolderCreateIn: {
@@ -3461,6 +3638,11 @@ export interface operations {
                 is_read?: boolean | null;
                 starred?: boolean | null;
                 category?: string | null;
+                sender?: string | null;
+                recipient?: string | null;
+                after?: string | null;
+                before?: string | null;
+                has_attachments?: boolean | null;
                 archived?: boolean;
                 limit?: number;
                 offset?: number;
@@ -5901,8 +6083,48 @@ export interface operations {
                 is_read?: boolean | null;
                 starred?: boolean | null;
                 category?: string | null;
+                sender?: string | null;
+                recipient?: string | null;
+                after?: string | null;
+                before?: string | null;
+                has_attachments?: boolean | null;
                 limit?: number;
                 offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ext_recent_emails_api_ext_v1_emails_recent_get: {
+        parameters: {
+            query?: {
+                since_id?: number;
+                account_id?: number | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -6197,6 +6419,113 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ExtActionsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ext_create_reply_api_ext_v1_drafts_reply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtReplyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ext_create_forward_api_ext_v1_drafts_forward_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtForwardIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ext_upload_draft_attachments_api_ext_v1_drafts__draft_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_ext_upload_draft_attachments_api_ext_v1_drafts__draft_id__attachments_post"];
             };
         };
         responses: {

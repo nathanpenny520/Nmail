@@ -1,7 +1,13 @@
 """对外 API 测试（v0.4 P7，REDESIGN_PLAN §7）：Key 认证/scope 分级/限流、
 密钥管理往返、Host 豁免边界、调用日志。端点薄壳转调既有实现，这里只测鉴权
-与契约；agent 端点未配 AI 时应 400。"""
+与契约；agent 端点未配 AI 时应 400。
+P1 补全（AGENT_SKILL_PLAN，2026-09-15）：错误 envelope、搜索过滤透传、
+recent 游标、回复/转发草稿、正文三选一、草稿附件。"""
 from __future__ import annotations
+
+import json
+import uuid
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -26,6 +32,32 @@ def _headers(key: str | None) -> dict:
     return h
 
 
+def _seed_account() -> int:
+    conn = database.get_conn()
+    cur = conn.execute(
+        "INSERT INTO accounts (email, imap_server, imap_port) VALUES (?, 'imap.test', 993)",
+        (f"x{uuid.uuid4().hex[:8]}@example.com",),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def _seed_email(account_id: int, uid: int, subject: str, **extra) -> int:
+    conn = database.get_conn()
+    cols: dict = {
+        "account_id": account_id, "folder": "INBOX", "uid": uid,
+        "subject": subject, "sender_email": "boss@example.com", "body_text": "正文",
+    }
+    cols.update(extra)
+    keys = ",".join(cols)
+    cur = conn.execute(
+        f"INSERT INTO emails ({keys}) VALUES ({','.join('?' * len(cols))})",
+        tuple(cols.values()),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
 def test_health_无认证可用():
     assert client.get("/api/ext/v1/health").status_code == 200
 
@@ -35,7 +67,9 @@ def test_未启用时有效key也403():
     key = _make_key(["read"])
     resp = client.get("/api/ext/v1/accounts", headers=_headers(key["key"]))
     assert resp.status_code == 403
-    assert "未启用" in resp.json()["detail"]
+    body = resp.json()
+    assert body["ok"] is False and "未启用" in body["error"]["message"]
+    assert body["error"]["code"] == "forbidden"
 
 
 def test_启用后缺key与坏key都401():
@@ -167,3 +201,186 @@ def test_agent未配AI返回400():
     resp = client.post("/api/ext/v1/agent/chat", headers=_headers(key["key"]),
                        json={"question": "帮我看看收件箱"})
     assert resp.status_code == 400  # AINotConfigured → 400（未配置 AI）
+
+
+# ── P1 补全（AGENT_SKILL_PLAN，2026-09-15）──────────────────────
+
+def test_错误envelope统一():
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    # 401 → invalid_key
+    resp = client.get("/api/ext/v1/accounts")
+    assert resp.status_code == 401
+    assert resp.json()["error"]["code"] == "invalid_key"
+    # 404 → not_found
+    key = _make_key(["read"])
+    resp = client.get("/api/ext/v1/emails/999999", headers=_headers(key["key"]))
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "not_found"
+    # 422（query 校验失败）→ invalid_params
+    resp = client.get("/api/ext/v1/emails", params={"limit": "abc"}, headers=_headers(key["key"]))
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "invalid_params"
+    # 内部 API 不受影响，仍 {"detail"} 原样
+    resp = client.get("/api/emails", params={"after": "bad-date"})
+    assert resp.status_code == 400
+    assert "detail" in resp.json() and "ok" not in resp.json()
+
+
+def test_限流429带Retry_After(monkeypatch):
+    from app.api import ext
+
+    monkeypatch.setattr(ext, "RATE_LIMIT_PER_MIN", 1)
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    key = _make_key(["read"])
+    assert client.get("/api/ext/v1/contacts", headers=_headers(key["key"])).status_code == 200
+    resp = client.get("/api/ext/v1/contacts", headers=_headers(key["key"]))
+    assert resp.status_code == 429
+    assert resp.json()["error"]["code"] == "rate_limited"
+    assert resp.headers.get("retry-after") == "60"
+
+
+def test_search_filters经ext透传():
+    aid = _seed_account()
+    e1 = _seed_email(aid, 1, "带附件的合同", sender_email="boss@example.com", has_attachments=1)
+    _seed_email(aid, 2, "普通邮件", sender_email="other@example.com")
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    h = _headers(_make_key(["read"])["key"])
+    resp = client.get("/api/ext/v1/emails", headers=h,
+                      params={"account_id": aid, "sender": "boss@", "has_attachments": "true"})
+    assert resp.status_code == 200
+    assert [i["id"] for i in resp.json()["items"]] == [e1]
+    # 非法日期 → 400 envelope
+    resp = client.get("/api/ext/v1/emails", headers=h, params={"account_id": aid, "after": "bad"})
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "bad_request"
+
+
+def test_recent游标轮询():
+    aid = _seed_account()
+    e1 = _seed_email(aid, 1, "第一封")
+    e2 = _seed_email(aid, 2, "第二封")
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    h = _headers(_make_key(["read"])["key"])
+    body = client.get("/api/ext/v1/emails/recent", headers=h,
+                      params={"account_id": aid}).json()
+    assert body["latest_id"] >= e2
+    # since_id=e1 → 只返回 e2
+    body = client.get("/api/ext/v1/emails/recent", headers=h,
+                      params={"account_id": aid, "since_id": e1}).json()
+    assert [i["id"] for i in body["items"]] == [e2]
+    # 推进到 latest 后空轮询，游标不回退
+    body = client.get("/api/ext/v1/emails/recent", headers=h,
+                      params={"account_id": aid, "since_id": body["latest_id"]}).json()
+    assert body["items"] == [] and body["latest_id"] >= e2
+
+
+def test_正文三选一():
+    aid = _seed_account()
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    h = _headers(_make_key(["write"])["key"])
+    # 多选 → 400
+    resp = client.post("/api/ext/v1/drafts", headers=h,
+                       json={"account_id": aid, "to": "a@b.com",
+                             "body_html": "<p>x</p>", "body_md": "# x"})
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "bad_request"
+    # md → 带样式 HTML
+    resp = client.post("/api/ext/v1/drafts", headers=h,
+                       json={"account_id": aid, "to": "a@b.com", "body_md": "# 标题\n\n正文"})
+    assert resp.status_code == 200, resp.text
+    assert "<h1>" in resp.json()["draft"]["body_html"]
+    # text → 转义 + 换行
+    resp = client.post("/api/ext/v1/drafts", headers=h,
+                       json={"account_id": aid, "to": "a@b.com", "body_text": "a<b\nc"})
+    body = resp.json()["draft"]["body_html"]
+    assert "&lt;b" in body and "<br />" in body
+    # 清理测试草稿，零残留
+    for d in client.get("/api/user-drafts", params={"status": "editing"}).json()["drafts"]:
+        if d["account_id"] == aid:
+            assert client.delete(f"/api/user-drafts/{d['id']}").status_code == 200
+
+
+def test_reply_forward草稿():
+    aid = _seed_account()
+    eid = _seed_email(aid, 1, "项目排期", sender_email="boss@example.com",
+                      recipients='["me@example.com"]', cc="[]")
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    h = _headers(_make_key(["write"])["key"])
+    # 回复：Re: 主题、to=原发件人、in_reply_to、引用块、body_md 转 HTML
+    resp = client.post("/api/ext/v1/drafts/reply", headers=h,
+                       json={"email_id": eid, "body_md": "**收到**，明天回复。"})
+    assert resp.status_code == 200, resp.text
+    draft = resp.json()["draft"]
+    assert draft["mode"] == "reply" and draft["in_reply_to"] == eid
+    assert draft["to_addrs"] == "boss@example.com"
+    assert draft["subject"].startswith("Re:")
+    assert "<strong>收到</strong>" in draft["body_html"]
+    assert "-------- 原始邮件 --------" in draft["body_html"]
+    # reply_all：原收件人入 cc（剔除原发件人与本账号地址，与写信台同语义）
+    conn = database.get_conn()
+    own_email = conn.execute("SELECT email FROM accounts WHERE id = ?", (aid,)).fetchone()["email"]
+    conn.execute("UPDATE emails SET recipients = ? WHERE id = ?",
+                 (json.dumps([own_email, "colleague@example.com"]), eid))
+    conn.commit()
+    resp = client.post("/api/ext/v1/drafts/reply", headers=h,
+                       json={"email_id": eid, "body_text": "好的", "reply_all": True})
+    draft = resp.json()["draft"]
+    assert draft["to_addrs"] == "boss@example.com"
+    assert "colleague@example.com" in draft["cc_addrs"]
+    assert own_email not in draft["cc_addrs"]
+    # 转发：Fwd: 主题、不设 in_reply_to、引用块为「转发邮件」
+    resp = client.post("/api/ext/v1/drafts/forward", headers=h,
+                       json={"email_id": eid, "to": "a@x.com, b@x.com", "body_text": "请查收"})
+    draft = resp.json()["draft"]
+    assert draft["mode"] == "forward" and draft["in_reply_to"] is None
+    assert draft["subject"].startswith("Fwd:")
+    assert draft["to_addrs"] == "a@x.com,b@x.com"
+    assert "-------- 转发邮件 --------" in draft["body_html"]
+    # 边界：转发缺收件人 400 / 原邮件不存在 404
+    resp = client.post("/api/ext/v1/drafts/forward", headers=h,
+                       json={"email_id": eid, "body_text": "x"})
+    assert resp.status_code == 400
+    resp = client.post("/api/ext/v1/drafts/reply", headers=h, json={"email_id": 999999})
+    assert resp.status_code == 404
+    # 清理测试草稿
+    for d in client.get("/api/user-drafts", params={"status": "editing"}).json()["drafts"]:
+        if d["account_id"] == aid:
+            assert client.delete(f"/api/user-drafts/{d['id']}").status_code == 200
+
+
+def test_草稿附件上传与转发复制(tmp_path):
+    aid = _seed_account()
+    eid = _seed_email(aid, 1, "带附件的原始邮件")
+    src = tmp_path / "report.pdf"
+    src.write_bytes(b"%PDF-1.4 test")
+    conn = database.get_conn()
+    conn.execute(
+        "INSERT INTO attachments (email_id, filename, mime, size, path)"
+        " VALUES (?, 'report.pdf', 'application/pdf', ?, ?)",
+        (eid, src.stat().st_size, str(src)),
+    )
+    conn.commit()
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    h = _headers(_make_key(["write"])["key"])
+    # 建稿 + multipart 上传附件
+    resp = client.post("/api/ext/v1/drafts", headers=h,
+                       json={"account_id": aid, "to": "a@b.com", "subject": "s", "body_text": "正文"})
+    draft_id = resp.json()["draft"]["id"]
+    resp = client.post(f"/api/ext/v1/drafts/{draft_id}/attachments", headers=h,
+                       files={"files": ("hello.txt", b"hello world", "text/plain")})
+    assert resp.status_code == 200, resp.text
+    atts = resp.json()["draft"]["attachments"]
+    assert len(atts) == 1 and atts[0]["filename"] == "hello.txt" and atts[0]["size"] == 11
+    # 转发复制原附件到草稿存储
+    resp = client.post("/api/ext/v1/drafts/forward", headers=h,
+                       json={"email_id": eid, "to": "c@x.com", "include_attachments": True})
+    assert resp.status_code == 200, resp.text
+    fwd_id = resp.json()["draft"]["id"]
+    fwd_atts = resp.json()["draft"]["attachments"]
+    assert len(fwd_atts) == 1 and fwd_atts[0]["filename"] == "report.pdf"
+    row = conn.execute("SELECT path FROM user_draft_attachments WHERE id = ?",
+                       (fwd_atts[0]["id"],)).fetchone()
+    assert Path(row["path"]).read_bytes() == b"%PDF-1.4 test"
+    # 清理测试草稿（磁盘文件随 delete_draft 清除）
+    assert client.delete(f"/api/user-drafts/{draft_id}").status_code == 200
+    assert client.delete(f"/api/user-drafts/{fwd_id}").status_code == 200

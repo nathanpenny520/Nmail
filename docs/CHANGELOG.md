@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 对外 API P1 补全：搜索过滤/回复转发草稿/正文三选一/附件/watch 游标/错误 envelope（AGENT_SKILL_PLAN，REDESIGN_PLAN §19）
+- 方案：docs/AGENT_SKILL_PLAN.md（2026-09-14 方向确认、参考 AgentlyMail 只借思想）三层补全的 P1——为 skill/agent 使用补齐 API 面；方案并入 REDESIGN_PLAN §19（§18 已被 P7 强化方案占用）
+- 搜索过滤（api/emails.py `list_emails`，ext 透传、内部 /api/emails 同受益）：`sender`/`recipient`（地址或姓名 LIKE）、`after`/`before`（UTC 归一化日期按日含当天，date() 口径，非法值 400）、`has_attachments`；可与 q 搜索组合
+- ext 回复/转发草稿（api/user_drafts.py 新增 create_reply_draft/create_forward_draft，core/imap_client.py 新增 forward_subject）：对齐写信台 quote.ts 语义——replyAll 原收件人入 cc（剔除原发件人与本账号地址）、Re:/Fwd: 前缀防重复、正文后自动追加同构引用块；转发**不设 in_reply_to**（发送管线对 in_reply_to 会带 In-Reply-To 并回标原邮件已读，转发均不适用）；`include_attachments` 复制原附件进草稿存储
+- 正文三选一（ext）：body_html 原样入库（消毒统一在发送管线，与界面写信同口径）/body_md（markdown_to_email_html）/body_text（转义+换行），多选一 400；草稿附件上传 `POST /drafts/{id}/attachments`（multipart 转调内部实现）
+- watch 轮询版：`GET /api/ext/v1/emails/recent?since_id=`（id 升序 + latest_id 游标，空轮询可推进；限流 429 附 `Retry-After`——分钟限 60s、每日限到午夜秒数）
+- 错误统一 envelope（main.py 异常处理器）：`/api/ext/*` 失败体 `{"ok":false,"error":{code,message}}`（code：invalid_key/forbidden/not_found/bad_request/invalid_params/rate_limited/upstream/server_error），内部 API 与 /api/extkeys 管理面保持 `{"detail"}` 原样；成功体不变
+- 验证：pytest 196 全绿（+8：envelope/Retry-After/过滤透传/recent 游标/回复转发/正文三选一/附件上传与转发复制）、ruff 通过、npm build（tsc+字号门禁）通过；openapi 快照+schema.d.ts 同提交；真库副本隔离实例（8795，不带 secrets 零外联）curl 全往返——真实发件人 25 封、日期区间 17 封、recent 游标推进、真实邮件回复（Re:+引用块+md 转 HTML）与转发（Fwd:+无 in_reply_to）草稿、401/400 envelope；测试草稿删除零残留
+
 ## 3726850 — Agent 上下文管理：五层渐进压缩 + AutoCompact（REDESIGN_PLAN §17.8）
 - 对标 Claude Code 上下文管理落地五层管线（新模块 ai/context.py）：L1 分工具结果预算（read_email 4000 字符其余 1200，截断留召回提示）、L2 微压缩双门（步数>12 或 token 水位≥55%）且升级为确定性摘要行（工具名+关键标量，替代盲截 160 字符；只缩 content 绝不删消息保 tool_calls 配对）、L3 会话结构化记忆（chat_sessions.memory_json＝任务简报+动作台账，注入 system 尾部+每步增量回写，run_stream 改服务端自取 chat_messages 最近 12 条，前端 6 条历史退役）、L4 确定性折叠（AutoCompact 失败兜底）、L5 AutoCompact（token≥窗口 80% 调一次 LLM 压五段式摘要替换早期段，原文归档 agent_runs.archived_json、摘要落 summary_json 并同步会话简报）
 - token 计量：估算器（CJK≈1/字 ASCII≈/4）+ 每步真实 usage.prompt_tokens 校准滑动比率（EMA，压缩后重置）取大者；窗口默认 1,000,000（用户拍板），AI 档案新增 context_window 字段按模型实际值指定（本地小窗模型必填，防压缩触发过晚爆窗）；API context overflow 报错自动紧急压缩+重试一次（窗口误配自愈）

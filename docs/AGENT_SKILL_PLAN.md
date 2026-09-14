@@ -2,7 +2,8 @@
 
 > 背景：用户 2026-09-14 提出「对外 API 还很不完善，第三方无法使用」，目标：**把 Nmail 邮件能力作为 skill 交付给任意外部 agent**（Claude Code / Codex / 任何能跑命令的 agent），并指定参考 `reference/AgentlyMail`（QQ 邮箱团队的 Agent 邮箱技能，Apache-2.0——按决策 6 只借思想、不复制文本）。
 > 结论：`/api/ext/v1` 底子可用（REDESIGN_PLAN §7 / P7 已落地 Key 认证、scope、限流、调用日志），但对照 AgentlyMail 的 agent-first 设计缺三层——**CLI 客户端、API 面补全、skill 分发**。本方案补齐三层。
-> 状态：方向已确认（2026-09-14），**暂缓实施**（并行会话清空后开工）。落地时并入 REDESIGN_PLAN §18 并更新 §7 与 PRODUCT_PLAN P7 状态；本会话为避免与 §17.8（上下文管理，在途）文件尾冲突，方案先行落在独立文档。
+> 状态：方向已确认（2026-09-14）。**P1 API 补全已落地（2026-09-15，详见 §7 表格与 REDESIGN_PLAN §19.3）**；
+> P2 nmail-cli / P3 SKILL.md 未开始。方案全文并入 REDESIGN_PLAN §19（§18 已被 P7 强化方案占用）。
 
 ## 1. 现状与差距：为什么第三方用不了
 
@@ -35,7 +36,7 @@ nmail-cli（CLI，uvx 零安装）        ← 技能的「手」：配置管理 
 
 | # | 改动 | 落点 |
 |---|---|---|
-| 1 | 搜索过滤扩展：`from`/`to`（发件人/收件人 LIKE，含姓名）、`after`/`before`（date_sort）、`has_attachments`；ext 透传（内部 `/api/emails` 同受益） | `api/emails.py` `list_emails` |
+| 1 | 搜索过滤扩展：发件人/收件人（地址或姓名 LIKE，HTTP 参数 `sender`/`recipient`，§8 备注）、`after`/`before`（date_sort，按日含当天）、`has_attachments`；ext 透传（内部 `/api/emails` 同受益）✅ 已落地 | `api/emails.py` `list_emails` |
 | 2 | 回复/转发草稿端点：`POST /api/ext/v1/drafts/reply`（`{email_id, body_*, reply_all?, cc?, bcc?}`，自动带 `in_reply_to`/收件人/Re: 主题）、`POST /drafts/forward`（`{email_id, to, body_*, include_attachments?, cc?, bcc?}`）——字段组装复用 `regenerate_for_email`/imap_client 既有逻辑 | `api/ext.py` 薄壳 + `api/user_drafts.py` |
 | 3 | 正文三选一：`body_html`（消毒）/`body_text`（纯文本转 HTML）/`body_md`（走 compose_extras 现成 `markdown_body_html`+`sanitize_outgoing_html` 管线） | `api/ext.py` `ExtDraftIn` |
 | 4 | 草稿附件：`POST /api/ext/v1/drafts/{id}/attachments`（multipart，write scope），转调既有 `upload_attachments` | `api/ext.py` |
@@ -107,20 +108,23 @@ nmail-cli watch                                      # 轮询 /emails/recent，N
 
 | 阶段 | 内容 | 验证 |
 |---|---|---|
-| P1 | API 补全（§3，1~2 会话） | ruff + pytest + openapi 快照 + 隔离实例 curl 全往返；**搜索过滤用真实账号数据验证**（工作流规范 5） |
+| P1 | API 补全（§3，1~2 会话）✅ 已落地（2026-09-15） | ruff + pytest 196 全绿 + openapi 快照 + 真库副本隔离实例 curl 全往返（真实发件人/日期过滤、回复/转发草稿，测试草稿零残留） |
 | P2 | nmail-cli（§4，1 会话） | CLI 与 curl 对照测试；`watch` 用真实账号收一封信验证；PyPI 发包 |
 | P3 | SKILL.md + 分发（§5） | 装进本机 Claude Code 实测全链路：看最近 10 封 → 搜索 → 回复其一（两阶段）→ 归档；官网补页 |
 
 - 文档同提交：CHANGELOG、ARCHITECTURE §7 扩写、PRODUCT_PLAN P7 状态；实施开工时本方案并入 REDESIGN_PLAN §18、`对外API使用指南.md` 补 CLI 章节。
 - 开工时按规范 8 在 `docs/SESSIONS.md` 登记会话；与在途会话的共享文档（CHANGELOG/SESSIONS/openapi 快照）按惯例构造 patch 暂存。
 
-## 8. 待拍板项（实施前确认）
+## 8. 待拍板项（2026-09-15 已按推荐值执行）
 
-1. CLI 包名 `nmail-cli`（PyPI 占用待查；备选 `nmail-cli-py`）。
-2. CLI 语言 Python/uvx（本方案推荐）；如需 npm 生态再议。
-3. `skills/` 放主仓根（本方案推荐）；如官网文档站独立收录再调整。
-4. watch 轮询版先行、SSE 版后置（本方案推荐）。
-5. `auth login` 默认 scope 只 `read`（本方案推荐）。
+1. ✅ CLI 包名 `nmail-cli`（P2 发包前查 PyPI 占用；备选 `nmail-cli-py`）。
+2. ✅ CLI 语言 Python/uvx；如需 npm 生态再议。
+3. ✅ `skills/` 放主仓根；如官网文档站独立收录再调整。
+4. ✅ watch 轮询版先行（已落地 `GET /emails/recent`）、SSE 版后置观察需求。
+5. ✅ `auth login` 默认 scope 只 `read`。
+
+> 实现备注：搜索过滤 HTTP 参数名为 `sender`/`recipient`（`from` 是 Python 关键字，不作参数名）；
+> CLI 层提供 `--from/--to` 映射，agent 词汇不受影响（REDESIGN_PLAN §19.2 拍板 3）。
 
 ## 9. 参考：AgentlyMail 借鉴清单（只借思想）
 

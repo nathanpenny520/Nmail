@@ -16,6 +16,13 @@
 
 ## 进行中
 
+### S-0915-0017-P1对外API补全 ✅
+- 目标: AGENT_SKILL_PLAN P1 落地——搜索过滤（sender/recipient/after/before/has_attachments）、ext 回复/转发草稿端点（对齐写信台 quote.ts 语义：replyAll 原收件人入 cc、Re:/Fwd: 前缀、同构引用块）、正文三选一（html/md/text）、草稿附件 ext 暴露、watch 轮询版 /emails/recent、/api/ext/* 统一错误 envelope + 429 Retry-After
+- 范围: backend(api/emails.py, api/user_drafts.py, api/ext.py, main.py, core/imap_client.py〔forward_subject〕, tests/test_ext_api.py, tests/test_api_emails.py) + openapi/schema 快照 + docs(AGENT_SKILL_PLAN 落地状态, REDESIGN_PLAN §19+§0+§7, ARCHITECTURE, 对外API使用指南, PRODUCT_PLAN, CHANGELOG, SESSIONS)
+- 产出: 提交（哈希见 CHANGELOG 回填）——全部落地；pytest 196 全绿（+8）、ruff、npm build 通过；openapi 快照+schema.d.ts 同提交；真库副本隔离实例（8795，不带 secrets 零外联）curl 全往返：真实发件人过滤 25 封/日期区间 17 封/recent 游标推进/真实邮件回复（Re:+引用块+md→HTML）与转发（Fwd:+无 in_reply_to）草稿/401+400 envelope/测试草稿零残留；REDESIGN_PLAN 新增 §19（方案并入，§18 已被 P7 方案占用）、§8 待拍板 5 项按推荐值执行（拍板记录 §19.2）
+- 遗留: ①真实 8720 进程未重启——后端改动重启后生效 ②P2 nmail-cli、P3 SKILL.md 分发未开始（方案 §4/§5）③CLI 层 --from/--to 映射随 P2 落地
+- 状态: 已完成（2026-09-15 凌晨）
+
 ### S-0914-2353-P7方案文档 ✅
 - 目标: 用户两问答疑落档+AI 能力强化（P7）方案定稿——①操作记录撤销已实现、不可见系展示条件+「审批/自动」徽章误读 ②操作记录可否删除/会不会积压→审计保留期设计 ③七章节 Agent 清单映射现状
 - 范围: 仅 docs/REDESIGN_PLAN.md（新增 §18）+ docs/SESSIONS.md；不动代码；共享文档 staging 用 HEAD 基线构造 blob（避让并行会话 S-0914-2346 的 §17.8 WIP）；CHANGELOG 随各阶段实施提交补记

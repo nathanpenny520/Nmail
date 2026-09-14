@@ -8,6 +8,8 @@ origin 区分 ai / human。原 api/drafts.py 的批准发送（走 outbox 同一
 """
 from __future__ import annotations
 
+import html
+import json
 import shutil
 from contextlib import suppress
 from datetime import datetime
@@ -236,6 +238,124 @@ def delete_attachment(draft_id: int, att_id: int) -> dict:
     with suppress(OSError):
         Path(row["path"]).unlink(missing_ok=True)
     return {"draft": _draft_dict(_get_draft(draft_id))}
+
+
+# ── 外部 API 建稿：回复/转发（AGENT_SKILL_PLAN P1）────────────────
+# 语义对齐写信台 quote.ts：replyAll 把原收件人放进 cc（剔除原发件人与本账号地址）、
+# Re:/Fwd: 前缀防重复、正文后追加同构引用块。只建草稿不发送（status=editing，
+# origin=human），发送走既有 send_draft（outbox 同一通路）。
+
+def _addr_list(raw: str | None) -> list[str]:
+    """逗号分隔地址串 → 去空格、按小写去重的地址列表。"""
+    seen: set[str] = set()
+    out: list[str] = []
+    for a in (raw or "").split(","):
+        a = a.strip()
+        if a and a.lower() not in seen:
+            seen.add(a.lower())
+            out.append(a)
+    return out
+
+
+def _quote_block(email_row, mode: str) -> str:  # noqa: ANN001 — sqlite3.Row
+    """与写信台 quote.ts 同构的引用块：转发/原始邮件头 + 正文前 2000 字。"""
+    name = (email_row["sender_name"] or "").strip()
+    addr = (email_row["sender_email"] or "").strip()
+    sender = f"{name} <{addr}>" if name and addr else (addr or name)
+    head = [
+        f"-------- {'转发邮件' if mode == 'forward' else '原始邮件'} --------",
+        f"发件人: {sender}",
+        f"日期: {email_row['date'] or ''}",
+        f"主题: {email_row['subject'] or '（无主题）'}",
+    ]
+    text = (email_row["body_text"] or "")[:2000]
+    quoted = html.escape(text).replace("\n", "<br>") or "<br>"
+    head_html = "<br>".join(html.escape(h) for h in head)
+    return f"<p><br></p><blockquote><p><b>{head_html}</b></p><p>{quoted}</p></blockquote>"
+
+
+def create_reply_draft(email_id: int, body_html: str, reply_all: bool = False,
+                       extra_cc: str = "", extra_bcc: str = "") -> dict:
+    """回复原邮件：收件人=原发件人，reply_all 把原收件人并入 cc；主题 Re:，
+    in_reply_to 软引用原邮件（发送时自动带 In-Reply-To 并回标已读）。"""
+    conn = get_conn()
+    email_row = conn.execute("SELECT * FROM emails WHERE id = ?", (email_id,)).fetchone()
+    if not email_row:
+        raise HTTPException(404, "邮件不存在")
+    account = conn.execute(
+        "SELECT * FROM accounts WHERE id = ?", (email_row["account_id"],)
+    ).fetchone()
+    if not account:
+        raise HTTPException(404, "账号不存在")
+    own = (account["email"] or "").strip().lower()
+    sender = (email_row["sender_email"] or "").strip()
+    cc: list[str] = []
+    if reply_all:
+        known = {own, sender.lower()}
+        cc += [a for a in json.loads(email_row["recipients"] or "[]")
+               if (a or "").strip().lower() and (a or "").strip().lower() not in known]
+    cc += _addr_list(extra_cc)
+    cur = conn.execute(
+        "INSERT INTO user_drafts (account_id, mode, in_reply_to, to_addrs, cc_addrs,"
+        " bcc_addrs, subject, body_html) VALUES (?, 'reply', ?, ?, ?, ?, ?, ?)",
+        (account["id"], email_id, sender, ",".join(cc), ",".join(_addr_list(extra_bcc)),
+         imap_client.reply_subject(email_row["subject"] or ""),
+         body_html + _quote_block(email_row, "reply")),
+    )
+    conn.commit()
+    return {"draft": _draft_dict(_get_draft(cur.lastrowid))}
+
+
+def create_forward_draft(email_id: int, to_addrs: str, body_html: str,
+                         include_attachments: bool = False,
+                         extra_cc: str = "", extra_bcc: str = "") -> dict:
+    """转发原邮件：**不设 in_reply_to**——发送管线对 in_reply_to 会带 In-Reply-To
+    并回标原邮件已读，转发（新会话）均不适用；include_attachments 复制原附件进草稿。"""
+    to = _addr_list(to_addrs)
+    if not to:
+        raise HTTPException(400, "转发需要至少一个收件人（to）")
+    conn = get_conn()
+    email_row = conn.execute("SELECT * FROM emails WHERE id = ?", (email_id,)).fetchone()
+    if not email_row:
+        raise HTTPException(404, "邮件不存在")
+    cur = conn.execute(
+        "INSERT INTO user_drafts (account_id, mode, to_addrs, cc_addrs, bcc_addrs,"
+        " subject, body_html) VALUES (?, 'forward', ?, ?, ?, ?, ?)",
+        (email_row["account_id"], ",".join(to), ",".join(_addr_list(extra_cc)),
+         ",".join(_addr_list(extra_bcc)),
+         imap_client.forward_subject(email_row["subject"] or ""),
+         body_html + _quote_block(email_row, "forward")),
+    )
+    draft_id = int(cur.lastrowid)
+    if include_attachments:
+        _copy_email_attachments(email_id, draft_id, conn)
+    conn.commit()
+    return {"draft": _draft_dict(_get_draft(draft_id))}
+
+
+def _copy_email_attachments(email_id: int, draft_id: int, conn) -> None:  # noqa: ANN001
+    """原邮件附件复制进草稿附件存储（data_dir/drafts/<id>/，与 upload 同落盘惯例）；
+    源文件缺失的条目跳过（不阻塞转发）。"""
+    rows = conn.execute(
+        "SELECT filename, mime, size, path FROM attachments WHERE email_id = ? ORDER BY id",
+        (email_id,),
+    ).fetchall()
+    target_dir = outbox.draft_dir(draft_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for r in rows:
+        src = Path(r["path"])
+        if not src.exists():
+            continue
+        cur = conn.execute(
+            "INSERT INTO user_draft_attachments (draft_id, filename, mime, size, path)"
+            " VALUES (?, ?, ?, ?, '')",
+            (draft_id, r["filename"], r["mime"], r["size"]),
+        )
+        target = target_dir / f"{cur.lastrowid}_{Path(r['filename']).name}"
+        shutil.copyfile(src, target)
+        conn.execute(
+            "UPDATE user_draft_attachments SET path = ? WHERE id = ?", (str(target), cur.lastrowid)
+        )
 
 
 # ── 定时发送 ────────────────────────────────────────────────

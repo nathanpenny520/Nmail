@@ -298,6 +298,16 @@ def reply_subject(subject: str) -> str:
     return f"Re: {trimmed}"
 
 
+def forward_subject(subject: str) -> str:
+    """补 Fwd: 前缀；已带则原样返回（与写信台 quote.ts prefix 同口径）。"""
+    trimmed = (subject or "").strip()
+    if not trimmed:
+        return "Fwd:"
+    if re.match(r"^(fw|转发)\s*(:|：)", trimmed, re.IGNORECASE):
+        return trimmed
+    return f"Fwd: {trimmed}"
+
+
 def send_email(
     cfg: MailConfig,
     to: list[str],

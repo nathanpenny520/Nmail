@@ -16,7 +16,7 @@
 | 4 | 草稿合并 | 待审草稿（AI）与草稿箱（手写）合并为**单一草稿体系**：一张表、一个视图、一条发送通路 | 后端数据统一 + 前端合并视图 |
 | 5 | 通讯录 | 自动采集往来联系人 + 写信台收件人 chips 自动补全 + 轻量管理界面 | 新表 + 新端点 + 写信台改造 |
 | 6 | AI 专门入口 | 「AI 总管家」升级为 GPT 式对话 Agent：工具调用 + 审批/自动双模式 + 账号级细粒度权限 + AI 专属邮箱 + 全量审计 | 新 agent 框架（核心工作量） |
-| 7 | 对外 API | 本机进程新增 `/api/ext/v1/*`，API Key 认证 + scope 分级；默认仅 127.0.0.1，外部设备走用户自建隧道 | 新路由 + 认证中间件 |
+| 7 | 对外 API | 本机进程新增 `/api/ext/v1/*`，API Key 认证 + scope 分级；默认仅 127.0.0.1，外部设备走用户自建隧道。P1 补全+Skill 化（nmail-cli + SKILL.md）见 §19 | 新路由 + 认证中间件 + CLI/技能包 |
 | 8 | 登录配置优化 | **内置公开客户端凭证=默认快速授权（已拍板，见 D1）**：添加 Gmail/Outlook 零配置直接授权登录；自定义客户端降为高级折叠区；操作与文档分离 | 后端小改 + 前端 |
 | 9 | 字体统一 | 全部 UI 文本收敛到 t-* 令牌（4 档），禁用 text-xs/sm 与 text-[Npx] 裸写法，加 lint 门禁 | 纯前端 + 门禁脚本 |
 | 10 | 官网 | nmail.whizzzest.com 静态官网（Cloudflare Pages），与个人站 whizzzest.com 项目区块同步 | 独立仓库，不动主仓 |
@@ -386,6 +386,11 @@ Thunderbird 式双栏（用户 2026-09-12 指定形态，仍留在设置页）�
 | `GET /contacts` | read | 通讯录 |
 | `GET /digest` | read | 最新每日摘要 |
 | `POST /agent/chat`（+ `/stream` SSE） | agent | 总管家对话（动作受该账号权限与模式约束，origin=api） |
+
+> **P1 补全（2026-09-15 已落地，§19）**：搜索过滤 `sender/recipient/after/before/has_attachments`、
+> `POST /drafts/reply|forward`（回复/转发草稿）、`POST /drafts/{id}/attachments`（multipart）、
+> `GET /emails/recent?since_id=`（watch 游标轮询）；错误统一 envelope
+> `{"ok":false,"error":{code,message}}` + 429 `Retry-After`（成功体不变）。
 
 ### 7.4 网络暴露（D3=A）
 
@@ -786,3 +791,38 @@ F：PII 正则门禁（身份证/银行卡命中→跳过摘要与分类的正�
 A（当天量级）→ C（记忆，体感最大）→ D（主动式）→ B（感知）→ E → F；每阶段独立提交，
 验收=pytest+ruff+npm build+真实账号 e2e；CHANGELOG 条目随各阶段实施提交补记（本节纯方案
 文档，为避让并行会话的 CHANGELOG WIP 暂不写条目）。**状态：方案定稿 2026-09-14，全部未执行。**
+
+## 19. 对外 API Skill 化（v0.4.x，2026-09-14 方向确认）
+
+> 目标：把 Nmail 邮件能力作为 skill 交付给任意外部 agent（Claude Code / Codex 等能跑命令的
+> agent），参考 `reference/AgentlyMail`（Apache-2.0，只借思想不复制文本）。完整方案见
+> **docs/AGENT_SKILL_PLAN.md**（三层断层/架构/P1-P3 细则/安全边界/验证），本节只记拍板与状态。
+
+### 19.1 三层架构与阶段
+
+外部 Agent → SKILL.md（P3，仓根 `skills/`，`npx skills add nathanpenny520/Nmail -g` 安装）→
+`nmail-cli`（P2，PyPI + `uvx nmail-cli` 零安装，JSON envelope + exit code 契约 + CLI 层两阶段
+确认）→ `/api/ext/v1/*`（P1 补全）→ 本机进程（127.0.0.1 或自建隧道）。**不做 MCP**（远期顺位不变）。
+
+### 19.2 拍板记录
+
+1. 2026-09-14 用户确认方向，先落方案文档暂缓执行（避让并行会话）；2026-09-15 开工 P1。
+2. 待拍板 5 项按方案推荐执行（2026-09-15）：PyPI 包名 `nmail-cli`、Python+uvx、`skills/`
+   放主仓根、watch 轮询版先行（SSE 观察需求）、`auth login` 默认只建 read scope。
+3. 搜索过滤 HTTP 参数名用 `sender`/`recipient`（`from` 是 Python 关键字）；CLI 层提供
+   `--from/--to` 映射，agent 词汇不受影响。
+4. 两阶段确认在 CLI 层实现（建草稿→approve 天然两段，服务端不加 ctk、零新增状态）。
+
+### 19.3 落地状态
+
+- **P1 API 补全 ✅（2026-09-15）**：`list_emails` 搜索过滤（sender/recipient 模糊、after/before
+  按 UTC 归一化日期含当天、has_attachments，可与 q 组合，非法日期 400）；ext 回复/转发草稿
+  `POST /drafts/reply|forward`（对齐写信台 quote.ts：replyAll 原收件人入 cc、Re:/Fwd: 前缀
+  防重复、同构引用块，转发不设 in_reply_to——不串线不回标已读；附件可随转发复制）；正文
+  三选一 body_html/body_md/body_text（消毒统一在发送管线）；`POST /drafts/{id}/attachments`
+  （multipart）；watch 轮询版 `GET /emails/recent?since_id=`（latest_id 游标，空轮询可推进）；
+  `/api/ext/*` 统一错误 envelope `{"ok":false,"error":{code,message}}`（main.py 异常处理器，
+  内部 API 与 /api/extkeys 不受影响）+ 429 `Retry-After`。验证：pytest 196 全绿（+8）、ruff、
+  npm build、真库副本隔离实例 curl 全往返（真实发件人/日期过滤、回复/转发草稿，测试草稿
+  零残留）、openapi 快照与 schema.d.ts 同提交。
+- **P2 nmail-cli / P3 SKILL.md 分发：⬜ 未开始。**
