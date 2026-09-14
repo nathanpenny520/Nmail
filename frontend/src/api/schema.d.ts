@@ -1699,6 +1699,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ext/v1/drafts/{draft_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ext Get Draft
+         * @description 单条草稿（CLI 发送前摘要用）。
+         */
+        get: operations["ext_get_draft_api_ext_v1_drafts__draft_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ext/v1/folders": {
         parameters: {
             query?: never;
@@ -6264,6 +6284,39 @@ export interface operations {
                 "application/json": components["schemas"]["ExtDraftIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ext_get_draft_api_ext_v1_drafts__draft_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

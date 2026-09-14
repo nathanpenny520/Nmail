@@ -5105,6 +5105,51 @@
         }
       }
     },
+    "/api/ext/v1/drafts/{draft_id}": {
+      "get": {
+        "tags": [
+          "ext-api"
+        ],
+        "summary": "Ext Get Draft",
+        "description": "单条草稿（CLI 发送前摘要用）。",
+        "operationId": "ext_get_draft_api_ext_v1_drafts__draft_id__get",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Ext Get Draft Api Ext V1 Drafts  Draft Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ext/v1/folders": {
       "get": {
         "tags": [
