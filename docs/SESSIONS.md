@@ -16,6 +16,13 @@
 
 ## 进行中
 
+### S-0914-2352-对外API-Skill方案 ✅
+- 目标: 用户确认方向后落方案文档——对外 API Skill 化（参考 AgentlyMail，只借思想不复制文本）：三层补全 P1 API 面（搜索过滤/reply-forward 草稿/正文三选一/草稿附件/watch 轮询/错误 envelope）+ P2 nmail-cli（uvx 分发/本机自动配对/exit code 契约/CLI 层两阶段确认）+ P3 SKILL.md 与 skills.sh 分发；用户明确「先写文档，暂不执行」（有并行会话）
+- 范围: docs/AGENT_SKILL_PLAN.md 新增 + docs/SESSIONS.md 登记；不动 REDESIGN_PLAN/CLAUDE.md（§17.8 上下文管理会话在途，避免文件尾冲突）
+- 产出: docs/AGENT_SKILL_PLAN.md 全文（现状三层断层/总体架构/P1-P3 方案/安全边界/落地顺序与验证/待拍板 5 项/AgentlyMail 借鉴清单）；实施时并入 REDESIGN_PLAN §18 并更新 §7、PRODUCT_PLAN P7 状态
+- 遗留: 实施待并行会话清空后按方案 §7 顺序开工（届时另行登记会话）；docs-only 无 CHANGELOG 条目（随实施首提交再记）
+- 状态: 已完成（2026-09-14 深夜）
+
 ### S-0914-2330-Agent修复与简化 ✅
 - 目标: 用户实测反馈三连修——用户提问不落库/审批内容在旧页面不可见/批准后要有总结，外加过程展示极简化（Claude 式单行）与提示词防猜账号
 - 产出: 提交（哈希见 CHANGELOG）——agent_stream 落库用户提问（require_session+ai_config_or_400 前置，标题自动生成生效）、ProcessBlock 单行化（运行中/待审批/失败/完成四态，点击展开明细）、系统提示词加「不猜测其他 account_id」；8721 顺延实例已停（统一 8720）；curl 实测用户消息+标题+segments 三件套
