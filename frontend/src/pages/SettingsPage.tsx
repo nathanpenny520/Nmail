@@ -1084,6 +1084,7 @@ function ProfileFields(props: {
   baseUrl: string
   model: string
   apiKey: string
+  contextWindow: string
   models: string[] | null
   modelsError: string
   modelsLoading: boolean
@@ -1091,6 +1092,7 @@ function ProfileFields(props: {
   onBaseUrl: (v: string) => void
   onModel: (v: string) => void
   onApiKey: (v: string) => void
+  onContextWindow: (v: string) => void
 }) {
   // API Key 默认遮蔽（保存/测试用的 state 不受影响，所见即所存），小眼睛一键显隐
   const [keyVisible, setKeyVisible] = useState(false)
@@ -1150,6 +1152,22 @@ function ProfileFields(props: {
           </div>
         </label>
       </div>
+      <label className="mt-3 block">
+        <span className="mb-1 block t-sm text-gray-500">上下文窗口（tokens，可选）</span>
+        <input
+          className={inputClass}
+          type="number"
+          min={8192}
+          step={1}
+          value={props.contextWindow}
+          onChange={(e) => props.onContextWindow(e.target.value)}
+          placeholder="默认 1000000"
+          spellCheck={false}
+        />
+        <span className="mt-1 block t-xs text-gray-400">
+          按模型实际上下文窗口填写（如 8192 / 32768 / 128000 / 1000000）。总管家会据此自动压缩长对话（AutoCompact）；本地小窗口模型建议必填，防止压缩触发过晚导致请求超限报错。
+        </span>
+      </label>
       {props.modelsLoading && (
         <p className="mt-2 t-xs text-gray-400">正在获取模型列表…</p>
       )}
@@ -1180,6 +1198,10 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
   const [model, setModel] = useState(profile.model)
   // 密钥明文回显（后端返回 api_key）：所见即所存，清空保存即清除
   const [apiKey, setApiKey] = useState(profile.api_key)
+  // 上下文窗口（§17.8）：空串=默认 1M；保存时 0=恢复默认
+  const [contextWindow, setContextWindow] = useState(
+    profile.context_window ? String(profile.context_window) : '',
+  )
   // Base URL/API Key 变化后自动拉取模型列表
   const { models, error: modelsError, loading: modelsLoading } =
     useModelFetcher(baseUrl, apiKey, profile.id)
@@ -1193,6 +1215,7 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
         base_url: baseUrl,
         model,
         api_key: apiKey, // 全量保存：与输入框一致（清空=清除）
+        context_window: contextWindow.trim() ? Number(contextWindow) : 0,
       }),
     onSuccess: ({ profile: saved }) => {
       // 用落库返回值回填输入框：页面显示与本地存储强制一致（后端已 trim）
@@ -1200,6 +1223,7 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
       setBaseUrl(saved.base_url)
       setModel(saved.model)
       setApiKey(saved.api_key)
+      setContextWindow(saved.context_window ? String(saved.context_window) : '')
       invalidate()
     },
   })
@@ -1253,6 +1277,7 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
         baseUrl={baseUrl}
         model={model}
         apiKey={apiKey}
+        contextWindow={contextWindow}
         models={models}
         modelsError={modelsError}
         modelsLoading={modelsLoading}
@@ -1260,6 +1285,7 @@ function ProfileCard({ profile, isActive }: { profile: AIProfile; isActive: bool
         onBaseUrl={setBaseUrl}
         onModel={setModel}
         onApiKey={setApiKey}
+        onContextWindow={setContextWindow}
       />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1311,6 +1337,7 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
   const [baseUrl, setBaseUrl] = useState('')
   const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const [contextWindow, setContextWindow] = useState('')
   // 未保存的新配置：用输入框现值直连拉取模型（无需先创建）
   const { models, error: modelsError, loading: modelsLoading } = useModelFetcher(baseUrl, apiKey)
 
@@ -1321,6 +1348,7 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
         base_url: baseUrl,
         model,
         ...(apiKey ? { api_key: apiKey } : {}),
+        ...(contextWindow.trim() ? { context_window: Number(contextWindow) } : {}),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['ai-profiles'] })
@@ -1338,6 +1366,7 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
         baseUrl={baseUrl}
         model={model}
         apiKey={apiKey}
+        contextWindow={contextWindow}
         models={models}
         modelsError={modelsError}
         modelsLoading={modelsLoading}
@@ -1345,6 +1374,7 @@ function NewProfileCard({ onDone }: { onDone: () => void }) {
         onBaseUrl={setBaseUrl}
         onModel={setModel}
         onApiKey={setApiKey}
+        onContextWindow={setContextWindow}
       />
       <div className="mt-4 flex items-center gap-3">
         <button

@@ -10,8 +10,10 @@ JSON 降级模式非流式（与 v1 一致）。
 写类动作遇审批：落 ai_actions pending → run 置 waiting_approval → paused 结束本轮——
 批准/拒绝后经 /api/ai/agent/resume 续跑（拒绝同样回灌让模型改道），刷新/重启可续。
 
-上下文管理：工具结果紧凑回灌（≤1200 字符，邮件列表行格式）；步数超阈值后早期
-工具结果截断为确定性摘要（不额外调 LLM）。
+上下文管理（§17.8，五层管线见 ai/context.py）：工具结果分工具预算紧凑回灌；步数/token
+双门微压缩早期工具结果（确定性摘要行，不删消息保配对）；会话结构化记忆注入 system+
+增量回写；token 水位超窗阈值时 AutoCompact（LLM 五段式摘要，原文归档）；context
+overflow 报错紧急压缩重试一次（窗口误配自愈）。
 
 安全边界（§6.6/§17.5 全保留）：
 - 权限门控：写类工具需对应授权位；多账号范围取交集；续跑时重新解析；
@@ -23,12 +25,14 @@ JSON 降级模式非流式（与 v1 一致）。
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import time
 from collections.abc import Generator
 from dataclasses import dataclass, field
 
+from app.ai import context as C
 from app.ai import llm, tasks
 from app.ai import tools as T
 from app.db.database import get_conn, get_setting, set_setting
@@ -42,8 +46,9 @@ MAX_STEPS = 25
 TIME_BUDGET_S = 180.0
 DAILY_SEND_LIMIT = 20
 DAILY_ACTION_LIMIT = 200
-FEEDBACK_MAX = 1200        # 单条工具结果回灌上限（字符）
-COMPACT_AFTER = 12         # 步数超过后开始压缩早期工具结果
+FEEDBACK_MAX = 1200        # 单条工具结果回灌上限（字符；read_email 见 FEEDBACK_BUDGETS）
+FEEDBACK_BUDGETS = {"read_email": 4000}  # 分工具预算：读详情类放宽（起草回复需要正文）
+COMPACT_AFTER = 12         # 步数超过后开始压缩早期工具结果（L2 步数门；token 门在 context.py）
 COMPACT_KEEP = 8           # 压缩时保留最近 N 条工具结果原文
 
 _SYSTEM_NATIVE = """你是「Nmail AI 总管家」，本地邮箱客户端里的邮件助理，通过调用工具帮用户查邮件、整理邮箱、起草和发送。
@@ -254,8 +259,11 @@ def _summarize_result(tool: str, result: dict) -> str:
     return "完成"
 
 
-def _feedback_text(result: dict) -> str:
-    """工具结果 → 回灌文本：邮件列表转紧凑行格式，整体截断（§17.2）。"""
+def _feedback_text(result: dict, tool: str = "") -> str:
+    """工具结果 → 回灌文本：邮件列表转紧凑行格式，按工具预算截断（§17.2/§17.8）。
+
+    截断留召回提示——结果可按条件重新调用获取（对齐「原文不丢、按需重读」）。
+    """
     if "emails" in result and isinstance(result["emails"], list):
         lines = [
             f"id={e.get('id')} | {(e.get('subject') or '')[:40]} | {(e.get('from') or '')[:30]}"
@@ -269,8 +277,9 @@ def _feedback_text(result: dict) -> str:
         text = json.dumps(out, ensure_ascii=False)
     else:
         text = json.dumps(result, ensure_ascii=False)
-    if len(text) > FEEDBACK_MAX:
-        text = text[:FEEDBACK_MAX] + "…（结果过长已截断）"
+    budget = FEEDBACK_BUDGETS.get(tool, FEEDBACK_MAX)
+    if len(text) > budget:
+        text = text[:budget] + "…（结果过长已截断，可缩小范围/分批调用重新获取）"
     return text
 
 
@@ -292,6 +301,11 @@ class RunState:
     pending: dict | None = None   # {"action_id","call_id","tool","args"}
     run_id: int = 0
     status: str = "running"
+    # 上下文管理（§17.8）：窗口与水位计量（不落库——resume 时按档案重解析）
+    window: int = C.DEFAULT_CONTEXT_WINDOW
+    last_prompt_tokens: int = 0   # 最近一步真实 prompt_tokens（校准基准）
+    token_ratio: float = 1.0      # 估算→真实的滑动校准比率（EMA）
+    emergency_window: int | None = None  # 溢出自愈后收缩的有效窗口
 
 
 _RESUMABLE = ("waiting_approval", "paused_max_steps", "paused_budget")
@@ -411,7 +425,7 @@ def _append_assistant_calls(state: RunState, mode: str, content: str, calls: lis
 def _append_feedback(state: RunState, mode: str, call: dict, result: dict,
                      summary: str, ok: bool, hint: str = "") -> None:
     """工具结果回灌（原生=role:tool；JSON=user 消息，v1 形态）。"""
-    feedback = _feedback_text(result)
+    feedback = _feedback_text(result, str(call.get("name") or ""))
     if mode == "native":
         suffix = f"（{hint}）" if hint else ""
         state.messages.append({"role": "tool", "tool_call_id": call["id"],
@@ -423,17 +437,87 @@ def _append_feedback(state: RunState, mode: str, call: dict, result: dict,
 
 
 def _compact_messages(state: RunState) -> None:
-    """步数超阈值后，把早期工具结果截断为确定性摘要（保留 pairing，只换 content）。"""
-    if state.steps <= COMPACT_AFTER:
-        return
+    """L2 微压缩（§17.8）：早期工具结果 → 确定性摘要行（保留 pairing，只换 content）。
+
+    双门触发：步数门（>COMPACT_AFTER）或 token 门（水位 ≥ FOLD_RATIO，提前加大力度、
+    保留更少原文）。摘要行带工具名与关键标量字段（替代盲截，id 等决策要素不丢）。
+    """
     msgs = state.messages
+    token_gate = C.effective_est(state) >= C.FOLD_RATIO * C.effective_window(state)
+    if state.steps <= COMPACT_AFTER and not token_gate:
+        return
     idxs = [i for i, m in enumerate(msgs)
             if m.get("role") == "tool"
             or (m.get("role") == "user" and str(m.get("content") or "").startswith("工具结果："))]
-    for i in idxs[:-COMPACT_KEEP]:
+    keep = COMPACT_KEEP if not token_gate else 4
+    for i in idxs[:-keep]:
         c = str(msgs[i].get("content") or "")
         if len(c) > 160:
-            msgs[i]["content"] = c[:160] + "…（早期工具结果已省略）"
+            msgs[i]["content"] = C.compact_tool_line(msgs, i)
+
+
+def _archive_fold(state: RunState, folded: list[dict], block: str) -> None:
+    """折叠段原文归档（后台 transcript，容量限最近 2 段）+ 摘要落 summary_json。"""
+    conn = get_conn()
+    row = conn.execute("SELECT archived_json FROM agent_runs WHERE id = ?",
+                       (state.run_id,)).fetchone()
+    try:
+        archives = json.loads(row["archived_json"]) if row and row["archived_json"] else []
+    except ValueError:
+        archives = []
+    if not isinstance(archives, list):
+        archives = []
+    archives.append({"at": datetime_now(), "summary": block,
+                     "messages": folded})
+    conn.execute(
+        "UPDATE agent_runs SET archived_json = ?, summary_json = ? WHERE id = ?",
+        (json.dumps(archives[-2:], ensure_ascii=False), block, state.run_id),
+    )
+    conn.commit()
+
+
+def _autocompact(state: RunState, base_url: str, model: str, api_key: str | None) -> bool:
+    """L5 AutoCompact（§17.8）：早期段 → 五段式摘要，替换早期历史。
+
+    折叠边界取最大安全边界（assistant 组起点，保留 COMPACT_KEEP_TAIL 条尾巴）；
+    LLM 摘要失败退回 L4 确定性纪要，不阻塞任务。摘要同步会话简报（L3）。
+    返回是否发生压缩。
+    """
+    b = C.boundary_index(state.messages, C.COMPACT_KEEP_TAIL)
+    if b is None:
+        return False
+    folded = state.messages[1:b]
+    digest = C.deterministic_digest(state.messages, b)
+    summary: dict | None = None
+    try:
+        system, user = C.build_summary_prompt(state.messages, b, digest)
+        text, _usage = llm.chat_messages(base_url, model, api_key,
+                                         [{"role": "system", "content": system},
+                                          {"role": "user", "content": user}],
+                                         max_tokens=C.SUMMARY_MAX_TOKENS, temperature=0.2)
+        summary = C.parse_summary(text)
+    except Exception:  # noqa: BLE001 — 摘要失败走确定性纪要兜底，不终止任务
+        summary = None
+    block = C.render_summary(summary) if summary else C.digest_block(digest)
+    state.messages = [state.messages[0],
+                      {"role": "user", "content": block},
+                      *state.messages[b:]]
+    state.last_prompt_tokens = 0  # 真实值对应压缩前的消息集，重置避免水位虚高
+    state.token_ratio = 1.0
+    _archive_fold(state, folded, block)
+    if state.session_id and summary:
+        C.set_brief(state.session_id, block)
+    return True
+
+
+def _maybe_autocompact(state: RunState, base_url: str, model: str, api_key: str | None) -> None:
+    """水位达标即 AutoCompact（KV 开关可停用；waiting_approval 挂起路径不经过这里）。"""
+    if not C.autocompact_enabled() or state.steps < C.COMPACT_MIN_STEPS:
+        return
+    if C.effective_est(state) < C.COMPACT_RATIO * C.effective_window(state):
+        return
+    with contextlib.suppress(Exception):  # 归档落库等异常不阻塞主循环（L2 兜底已在）
+        _autocompact(state, base_url, model, api_key)
 
 
 def _approval_reason(state: RunState, tool_name: str, args: dict) -> str:
@@ -483,6 +567,7 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
         for t in T.TOOLS.values()
     ]
     note_pending = False
+    overflow_retry_left = 1  # 溢出自愈只重试一次（§17.8）
     try:
         while True:
             if state.steps >= MAX_STEPS:
@@ -497,7 +582,9 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
                                        "content": "（系统提示：时间预算已到，请直接给出最终回答，不要再调用工具。）"})
                 note_pending = True
             _compact_messages(state)
+            _maybe_autocompact(state, base_url, model, api_key)
 
+            est_before = C.estimate_messages(state.messages)  # 调用前水位（校准用）
             t0 = time.monotonic()
             full_parts: list[str] = []
             usage: dict = {}
@@ -527,12 +614,30 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
                 yield {"type": "done"}
                 return
             except Exception as exc:  # noqa: BLE001 — 单步失败终止本轮而非崩掉会话
+                error_text = str(exc)
+                if C.is_overflow_error(error_text) and overflow_retry_left > 0:
+                    # 窗口误配自愈（§17.8）：按当前水位收缩有效窗口，紧急压缩后重试一次
+                    overflow_retry_left -= 1
+                    state.emergency_window = max(16384, int(est_before * 0.85))
+                    try:
+                        compacted = _autocompact(state, base_url, model, api_key)
+                    except Exception:  # noqa: BLE001
+                        compacted = False
+                    if compacted:
+                        state.budget_used_s += time.monotonic() - t0
+                        continue
                 _save_run(state, "failed")
-                yield {"type": "error", "error": str(exc)[:300]}
+                yield {"type": "error", "error": error_text[:300]}
                 yield {"type": "done"}
                 return
             state.budget_used_s += time.monotonic() - t0
             state.steps += 1
+            if usage.get("prompt_tokens"):
+                # 估算校准（§17.8）：真实 prompt_tokens ↔ 调用前估算的比率 EMA
+                if est_before > 0:
+                    sample = usage["prompt_tokens"] / est_before
+                    state.token_ratio = min(4.0, max(0.5, 0.7 * state.token_ratio + 0.3 * sample))
+                state.last_prompt_tokens = int(usage["prompt_tokens"])
             if note_pending:
                 state.messages.pop()
                 note_pending = False
@@ -641,6 +746,9 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
                 yield {"type": "tool_result", "tool": tool_name, "call_id": call.get("id"),
                        "ok": ok_run, "summary": summary,
                        **({"action_id": action_row_id} if action_row_id is not None else {})}
+                # L3 会话记忆：动作台账增量回写（崩溃/断开不丢，§17.8）
+                if state.session_id:
+                    C.append_ledger(state.session_id, f"{tool_name}：{summary}")
                 _append_feedback(state, mode_used, call, result, summary, ok=ok_run)
             _save_run(state, "running")
     except GeneratorExit:
@@ -697,10 +805,30 @@ def run_stream(question: str, history: list[dict] | None, session_id: int | None
         session_id=session_id, account_ids=[int(a) for a in account_ids],
         mode=mode, profile_id=profile_id, origin=origin,
         native=_native_supported(base_url, model, api_key),
+        window=C.resolve_window(profile_id),
     )
-    state.messages = [{"role": "system", "content": _system_prompt(state.account_ids, state.native)}]
-    for h in (history or [])[-6:]:
-        state.messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
+    system_prompt = _system_prompt(state.account_ids, state.native)
+    # L3 会话记忆：任务简报+动作台账注入 system 尾部（run 内不再变动，前缀缓存友好）
+    memory = C.load_memory(session_id)
+    if memory["brief"] or memory["ledger"]:
+        system_prompt += "\n\n" + C.memory_block(memory)
+    state.messages = [{"role": "system", "content": system_prompt}]
+    # 跨轮历史（§17.8）：会话在库时服务端自取（前端 6 条文本限制退役）；无会话
+    # （ext 直传/旧客户端）沿用入参兜底
+    if session_id is not None:
+        rows = get_conn().execute(
+            "SELECT role, content FROM chat_messages WHERE session_id = ?"
+            " AND role IN ('user','assistant') AND content != ''"
+            " ORDER BY id DESC LIMIT ?", (session_id, C.HISTORY_TURN_MAX)).fetchall()
+        hist = [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
+        # 当前问题已随流落库（api 层 append_message 在流启动前），避免重复注入
+        if hist and hist[-1]["role"] == "user" and hist[-1]["content"] == question:
+            hist.pop()
+    else:
+        hist = [{"role": h.get("role", "user"), "content": h.get("content", "")}
+                for h in (history or []) if h.get("content")][-6:]
+    for h in hist:
+        state.messages.append(h)
     state.messages.append({"role": "user", "content": question})
     state.run_id = _create_run(state)
     yield {"type": "run_started", "run_id": state.run_id}
@@ -718,6 +846,7 @@ def resume_stream(run_id: int) -> Generator[dict, None, None]:
         yield {"type": "error", "error": f"该运行状态为 {state.status}，不可续跑"}
         yield {"type": "done"}
         return
+    state.window = C.resolve_window(state.profile_id)  # 窗口计量不落库，续跑按档案重解析
     # 步数/预算触顶续跑 = 用户点了「继续」，授予新的一段预算/步数
     resuming_from = state.status
     state.steps = 0

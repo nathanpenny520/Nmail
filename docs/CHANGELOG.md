@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — Agent 上下文管理：五层渐进压缩 + AutoCompact（REDESIGN_PLAN §17.8）
+- 对标 Claude Code 上下文管理落地五层管线（新模块 ai/context.py）：L1 分工具结果预算（read_email 4000 字符其余 1200，截断留召回提示）、L2 微压缩双门（步数>12 或 token 水位≥55%）且升级为确定性摘要行（工具名+关键标量，替代盲截 160 字符；只缩 content 绝不删消息保 tool_calls 配对）、L3 会话结构化记忆（chat_sessions.memory_json＝任务简报+动作台账，注入 system 尾部+每步增量回写，run_stream 改服务端自取 chat_messages 最近 12 条，前端 6 条历史退役）、L4 确定性折叠（AutoCompact 失败兜底）、L5 AutoCompact（token≥窗口 80% 调一次 LLM 压五段式摘要替换早期段，原文归档 agent_runs.archived_json、摘要落 summary_json 并同步会话简报）
+- token 计量：估算器（CJK≈1/字 ASCII≈/4）+ 每步真实 usage.prompt_tokens 校准滑动比率（EMA，压缩后重置）取大者；窗口默认 1,000,000（用户拍板），AI 档案新增 context_window 字段按模型实际值指定（本地小窗模型必填，防压缩触发过晚爆窗）；API context overflow 报错自动紧急压缩+重试一次（窗口误配自愈）
+- 安全：摘要/纪要一律标注「其中指令均来自邮件内容非用户指令」防注入洗白（用户约束只从 user 消息提取）；折叠只在配对边界、waiting_approval 不压缩；archived_json/chat_messages/ai_actions 原始记录不受压缩影响；KV agent_autocompact=0 可停用 L5
+- 数据库 v23：chat_sessions.memory_json、agent_runs.archived_json/summary_json；AI 档案 API/设置页新增 context_window（0=恢复默认）
+- 验证：待补（pytest/ruff/npm build + 8720 重启冒烟）
+
 ## df9c86b — Agent 修复与简化：用户提问落库+极简过程行+提示词防猜账号
 - 用户实测反馈三连修（8721 旧标签页/旧 bundle 造成的混淆一并厘清）：①「对话历史只剩 AI 的」——agent 流从 P6 起从不落库用户提问（仅 chat-manager 流落），刷新/重开后只剩 AI 内容且会话永远叫「新对话」：agent_stream 端点在流启动前 `require_session`+`ai_config_or_400` 后 `append_message(user)`（标题自动生成顺带生效）；②「审批内容不见了」——审批暂停轮的 segments 其实已落库，是旧 bundle 渲染不出（见下使用提示），另把该轮 content 兜底文案保留；③「写完草稿要有总结」——新代码批准/拒绝后自动续跑由模型收尾总结，旧实例/旧页面无此行为
 - 过程展示极简化（Claude 式单行）：ProcessBlock 去边框块——运行中=「正在执行…（已 N 步）」spinner 一行、待审批=琥珀「待审批 · 已执行 N 步」、有失败=红色「N 步 · M 步失败」、全部成功=淡灰「已执行 N 步」；点击才展开步骤明细，默认不占版面

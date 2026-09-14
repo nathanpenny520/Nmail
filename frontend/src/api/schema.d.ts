@@ -2393,6 +2393,8 @@ export interface components {
             model: string;
             /** Api Key */
             api_key?: string | null;
+            /** Context Window */
+            context_window?: number | null;
         };
         /** ProfileUpdateIn */
         ProfileUpdateIn: {
@@ -2404,6 +2406,8 @@ export interface components {
             model?: string | null;
             /** Api Key */
             api_key?: string | null;
+            /** Context Window */
+            context_window?: number | null;
         };
         /** RegenerateForEmailIn */
         RegenerateForEmailIn: {

@@ -29,6 +29,15 @@
 - 遗留: 实施待并行会话清空后按方案 §7 顺序开工（届时另行登记会话）；docs-only 无 CHANGELOG 条目（随实施首提交再记）
 - 状态: 已完成（2026-09-14 深夜）
 
+### S-0914-2346-上下文管理 ✅
+- 目标: 用户拍板的邮件 Agent 上下文管理优化（REDESIGN_PLAN §17.8，对标 Claude Code 五层渐进压缩+AutoCompact）——L1 分工具结果预算、L2 摘要式微压缩（token 感知）、L3 会话结构化记忆（chat_sessions.memory_json：任务简报+动作台账，注入 system+增量回写）、L4 确定性折叠（AutoCompact 失败兜底）、L5 AutoCompact（LLM 五段式摘要，原文归档 archived_json）；窗口默认 1M、AI 档案新增 context_window 字段用户可指定（防压缩失效）、API context overflow 报错紧急压缩+重试一次
+- 范围: backend(app/ai/context.py 新增, agent.py, profiles.py, api/profiles.py, db/database.py v23, tests/test_context.py 新增+test_agent_loop.py/test_database.py) + frontend(types.ts, api/client.ts, pages/SettingsPage.tsx, openapi/schema 快照再生) + docs(REDESIGN_PLAN §17.8, ARCHITECTURE, CHANGELOG, SESSIONS)
+- 产出: 提交（哈希见 CHANGELOG）——五层管线全落地；188 pytest 全绿（+12：估算器/边界/纪要/摘要解析/记忆读写/预算分工具/循环级 AutoCompact/溢出自愈/记忆注入）、ruff 通过、npm build（tsc+字号门禁）通过；openapi/schema 快照再生（context_window）
+- 真实数据验证（8720 重启加载新代码，DeepSeek 真实调用）: ①context_window 往返（临时档案 32768→0→None 恢复默认，零残留）②真实两轮对话——turn1「未读几封」digest_stats 后回答，memory_json 台账即时落「digest_stats：完成」；turn2 传干扰 history 仍只凭服务端历史正确复述 turn1 问答，system 尾部确认注入「# 会话记忆」块（防注入标注+台账）③agent_runs.messages_json 结构核对：server 历史逐轮在库；冒烟会话已删除（run 审计记录保留）
+- 关键决策: L4 不做独立机制——折叠并入 L5 的安全边界截取（保留尾 8 条），L5 失败时以台账式确定性纪要兜底（同一折叠边界函数，零重复代码）；阈值常量在 context.py（FOLD 55%/COMPACT 80%），KV agent_autocompact=0 整体停用 L5；1M 默认下 L4/L5 为极端长会话与窗口误配的安全网
+- 遗留: ①UI 上下文水位指示/手动压缩按钮（P3 可选，未做）②超长会话（20+ 轮/30+ 步）AutoCompact 实际触发待用户日常长任务使用观察 ③SettingsPage 上下文窗口字段走查待用户强刷自看
+- 状态: 已完成（2026-09-15）
+
 ### S-0914-2330-Agent修复与简化 ✅
 - 目标: 用户实测反馈三连修——用户提问不落库/审批内容在旧页面不可见/批准后要有总结，外加过程展示极简化（Claude 式单行）与提示词防猜账号
 - 产出: 提交（哈希见 CHANGELOG）——agent_stream 落库用户提问（require_session+ai_config_or_400 前置，标题自动生成生效）、ProcessBlock 单行化（运行中/待审批/失败/完成四态，点击展开明细）、系统提示词加「不猜测其他 account_id」；8721 顺延实例已停（统一 8720）；curl 实测用户消息+标题+segments 三件套

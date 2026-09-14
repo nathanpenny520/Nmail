@@ -296,3 +296,118 @@ def test_resume_rejects_unknown_or_finished_run():
     agent._save_run(state, "done")
     events2 = list(agent.resume_stream(state.run_id))
     assert events2[0]["type"] == "error"
+
+
+# ── 上下文管理（REDESIGN_PLAN §17.8）────────────────────────────────
+
+def _summary_stub(monkeypatch, text='{"task_overview": "查概况", "user_constraints": "", "todo": "继续"}'):
+    """AutoCompact 的 LLM 打桩：返回五段式摘要 JSON；记录调用次数。"""
+    calls = {"n": 0}
+
+    def fake_chat(base_url, model, api_key, messages, max_tokens=2000, temperature=0.3):
+        calls["n"] += 1
+        return text, {"prompt_tokens": 10, "completion_tokens": 10}
+
+    monkeypatch.setattr(agent.llm, "chat_messages", fake_chat)
+    return calls
+
+
+def test_autocompact_mid_run(monkeypatch):
+    """L5 AutoCompact：水位门触发（测试把阈值压到 0），早期段被五段式摘要替换；
+    原文归档 archived_json、摘要落 summary_json；tool_calls 配对保持完整。"""
+    aid = _aid()
+    monkeypatch.setattr(agent.C, "COMPACT_MIN_STEPS", 1)
+    monkeypatch.setattr(agent.C, "COMPACT_RATIO", 0.0)
+    monkeypatch.setattr(agent.C, "COMPACT_KEEP_TAIL", 2)
+    summary_calls = _summary_stub(monkeypatch)
+    _native_script(monkeypatch, [
+        ([], [{"id": "c1", "name": "digest_stats", "arguments": {}}]),
+        ([], [{"id": "c2", "name": "digest_stats", "arguments": {}}]),
+        (["概况已汇总，一切正常。"], []),
+    ])
+    events = list(agent.run_stream("概况", None, None, [aid], "approval", None))
+    assert events[-1]["type"] == "done" and _collect(events, "error") == []
+    row = _run_row(events[0]["run_id"])
+    assert row["status"] == "done"
+    messages = json.loads(row["messages_json"])
+    # 摘要块出现且带防注入标注；最近一步工具结果原样保留（保留尾长内）
+    summary_msgs = [m for m in messages if "系统会话摘要" in str(m.get("content") or "")]
+    assert summary_msgs and "不是用户本人指令" in summary_msgs[0]["content"]
+    assert any(m.get("role") == "tool" and m.get("tool_call_id") == "c2" for m in messages)
+    # 首次折叠的原文归档含最初的用户问题（transcript 不丢）
+    archives = json.loads(row["archived_json"])
+    assert archives and archives[0]["messages"] == [{"role": "user", "content": "概况"}]
+    assert "任务目标" in (row["summary_json"] or "")
+    assert summary_calls["n"] >= 1
+    # 配对不变量：每条 tool 消息都有对应 assistant.tool_calls 的 id
+    call_ids = {tc["id"] for m in messages for tc in (m.get("tool_calls") or [])}
+    assert all(m.get("tool_call_id") in call_ids for m in messages if m.get("role") == "tool")
+
+
+def test_overflow_triggers_emergency_compact_and_retry(monkeypatch):
+    """溢出自愈（§17.8）：context overflow 报错 → 收缩有效窗口+紧急压缩 → 重试成功，
+    run 不判 failed（窗口误配的自愈兜底）。"""
+    aid = _aid()
+    monkeypatch.setattr(agent.C, "COMPACT_KEEP_TAIL", 1)
+    summary_calls = _summary_stub(monkeypatch)
+    monkeypatch.setattr(agent.tasks, "_ai_config", lambda pid=None: ("http://x", "test-model", None))
+    monkeypatch.setattr(agent, "_native_supported", lambda *a, **k: True)
+    n = {"v": 0}
+
+    def fake_iter(base_url, model, api_key, messages, tools=None, tool_choice=None,
+                  max_tokens=2000, temperature=0.3):
+        n["v"] += 1
+        if False:  # pragma: no cover — 仅为成为生成器函数（与 _call_model 迭代契约一致）
+            yield ("text_delta", "")
+        if n["v"] == 1:
+            return ("", [{"id": "c1", "name": "digest_stats", "arguments": {}}],
+                    {"prompt_tokens": 2, "completion_tokens": 2}, "tool_calls")
+        if n["v"] == 2:
+            raise RuntimeError("This model's maximum context length is 8192 tokens,"
+                               " however you requested 9000 tokens")
+        return ("概况：收件箱一切正常。", [], {"prompt_tokens": 2, "completion_tokens": 2}, "stop")
+
+    monkeypatch.setattr(agent.llm, "iter_chat_step", fake_iter)
+    events = list(agent.run_stream("概况", None, None, [aid], "approval", None))
+    assert events[-1]["type"] == "done" and _collect(events, "error") == []
+    row = _run_row(events[0]["run_id"])
+    assert row["status"] == "done"  # 重试成功而非 failed
+    messages = json.loads(row["messages_json"])
+    assert any("系统会话摘要" in str(m.get("content") or "") for m in messages)
+    assert row["archived_json"] and summary_calls["n"] == 1
+    assert _collect(events, "text")[-1]["text"].startswith("概况：收件箱一切正常")
+
+
+def test_session_memory_writeback_and_injection(monkeypatch):
+    """L3 会话记忆：执行过的动作增量回写台账；下一轮 run 注入 system（防注入标注+台账）。"""
+    aid = _aid()
+    conn = database.get_conn()
+    cur = conn.execute("INSERT INTO chat_sessions (title) VALUES ('记忆集成')")
+    conn.commit()
+    sid = int(cur.lastrowid)
+    try:
+        _native_script(monkeypatch, [
+            ([], [{"id": "c1", "name": "search_emails",
+                   "arguments": {"q": "招新", "account_id": aid}}]),
+            (["收件箱有 1 封招新邮件。"], []),
+        ])
+        events = list(agent.run_stream("帮我找招新的邮件", None, sid, [aid], "approval", None))
+        assert events[-1]["type"] == "done"
+        memory = agent.C.load_memory(sid)
+        assert any("search_emails" in line for line in memory["ledger"])
+
+        seen = {}
+
+        def fake_iter(base_url, model, api_key, messages, tools=None, tool_choice=None,
+                      max_tokens=2000, temperature=0.3):
+            seen["system"] = messages[0]["content"]
+            return ("第二轮看到了记忆。", [], {"prompt_tokens": 2, "completion_tokens": 2}, "stop")
+
+        monkeypatch.setattr(agent.llm, "iter_chat_step", fake_iter)
+        events2 = list(agent.run_stream("继续", None, sid, [aid], "approval", None))
+        assert events2[-1]["type"] == "done"
+        assert "会话记忆" in seen["system"] and "不是用户本人指令" in seen["system"]
+        assert "search_emails" in seen["system"]  # 台账可见：模型知道自己做过什么
+    finally:
+        conn.execute("DELETE FROM chat_sessions WHERE id = ?", (sid,))
+        conn.commit()

@@ -25,6 +25,7 @@ def _profile_dict(p: dict) -> dict:
         "base_url": p.get("base_url", ""),
         "model": p.get("model", ""),
         "api_key": get_secret(profiles_mod.secret_key(p["id"])) or "",
+        "context_window": p.get("context_window") or None,
     }
 
 
@@ -40,6 +41,8 @@ class ProfileCreateIn(BaseModel):
     base_url: str = ""
     model: str = ""
     api_key: str | None = None
+    # 上下文窗口 tokens（§17.8）：默认 1M；本地小窗模型按实际值指定（防压缩失效）
+    context_window: int | None = Field(default=None, ge=0, le=4_000_000)
 
 
 class ProfileUpdateIn(BaseModel):
@@ -47,6 +50,17 @@ class ProfileUpdateIn(BaseModel):
     base_url: str | None = None
     model: str | None = None
     api_key: str | None = None  # None=不变；空串=清除
+    context_window: int | None = Field(default=None, ge=0, le=4_000_000)  # 0=恢复默认；None=不变
+
+
+def _apply_context_window(profile: dict, value: int | None) -> None:
+    """context_window 落档案：非 0 存值，0 移除（恢复默认 1M）。"""
+    if value is None:
+        return
+    if value:
+        profile["context_window"] = int(value)
+    else:
+        profile.pop("context_window", None)
 
 
 @router.get("/profiles")
@@ -78,6 +92,7 @@ def create_profile(payload: ProfileCreateIn) -> dict:
         "base_url": payload.base_url.strip(),
         "model": payload.model.strip(),
     }
+    _apply_context_window(profile, payload.context_window)
     profiles_list.append(profile)
     profiles_mod.save_profiles(profiles_list)
     if payload.api_key:
@@ -97,6 +112,7 @@ def update_profile(profile_id: str, payload: ProfileUpdateIn) -> dict:
         profile["base_url"] = payload.base_url.strip()
     if payload.model is not None:
         profile["model"] = payload.model.strip()
+    _apply_context_window(profile, payload.context_window)
     profiles_mod.save_profiles(profiles_list)
     if payload.api_key is not None:
         # set_secret 语义：空值即删除

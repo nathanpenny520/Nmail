@@ -13,7 +13,7 @@
 FastAPI (uvicorn, 127.0.0.1:8720)
    ├─ api/          路由层（pydantic 校验，错误转中文 HTTPException）
    ├─ core/         邮件核心（IMAP/SMTP/同步/流水线/HTML 消毒）
-   ├─ ai/           LLM 任务（OpenAI 兼容，base_url 可指向本地模型）
+   ├─ ai/           LLM 任务（OpenAI 兼容，base_url 可指向本地模型）+ Agent 上下文管理（context.py）
    ├─ scheduler/    APScheduler 后台线程（60s tick：轮询收信 + 每日摘要）
    └─ db/           SQLite(WAL) + FTS5(trigram) + 版本化迁移
    ▼
@@ -44,8 +44,8 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `api/jobs.py` | `GET /api/jobs/active`（观测口）、`GET /api/jobs/{id}`（前端 useJob 轮询） | 任务体注册在业务模块（pipeline/batch_ops），core/jobs 只管调度与登记 |
 | `api/notifications.py` | 通知中心 | — |
 | `api/sender_lists.py` | 白/黑名单（邮箱或 @域名） | 管线中零成本先过滤 |
-| `api/chats.py` | 总管家会话持久化（chat_sessions/messages）：列表/消息/置顶/重命名/删除 | 列表 置顶>updated_at 倒序；删除级联；`append_message` 支持 segments_json（v22 结构化分段），read_chat 原样返回；旧消息 segments=NULL 前端回落纯文本 |
-| `api/profiles.py` | AI 配置档案 CRUD/激活/模型列表代理（`POST /api/ai/models`，显式 URL/Key 优先、回退档案已存值）+ AI 总开关（`PUT /api/ai/enabled`） | 密钥语义：响应回显 `api_key` 明文（本地单用户应用，所见即所存，清空保存=清除）；`ai_enabled=false` 即传统邮件模式，档案保留（/models 属配置辅助不受开关限制） |
+| `api/chats.py` | 总管家会话持久化（chat_sessions/messages）：列表/消息/置顶/重命名/删除 | 列表 置顶>updated_at 倒序；删除级联；`append_message` 支持 segments_json（v22 结构化分段），read_chat 原样返回；旧消息 segments=NULL 前端回落纯文本；`memory_json`（v23）由 agent 上下文管理读写（任务简报+动作台账，§17.8） |
+| `api/profiles.py` | AI 配置档案 CRUD/激活/模型列表代理（`POST /api/ai/models`，显式 URL/Key 优先、回退档案已存值）+ AI 总开关（`PUT /api/ai/enabled`）+ `context_window` 上下文窗口字段（§17.8，0=恢复默认） | 密钥语义：响应回显 `api_key` 明文（本地单用户应用，所见即所存，清空保存=清除）；`ai_enabled=false` 即传统邮件模式，档案保留（/models 属配置辅助不受开关限制） |
 | `api/digest.py` | 每日摘要查看/手动生成/重要邮件清除（`POST /api/digest/important/{email_id}/dismiss`） | 清除=快照 JSON 落 `dismissed_important` 记录，GET 过滤展示；同日重新生成经 build_digest 沿袭不清单（不复活），跨天随新摘要自然重置 |
 | `api/ext.py` | **对外 API**（v0.4 P7，REDESIGN_PLAN §7）：`/api/ext/v1/*`——health（免认证）/accounts/emails（列表/详情/附件）/emails/actions（批量，慢动作返回 job_id 经 /jobs 轮询）/drafts（列表/创建/approve 发送）/folders（+/sync 按需同步）/contacts/digest/agent（chat 非流式+SSE/decide 审批） | `require_key(scope)` 依赖：api_enabled 总开关（403）→ X-Api-Key sha256 查表（401）→ scope 校验（403）→ 60 次/分钟内存滑动窗 + 每 Key 每日上限（429）；端点全部薄壳转调内部实现（emails/user_drafts/folders/contacts/digest/agent 零新邮件操作）；agent 调用 origin=api 全量进 ai_actions；指南见 docs/对外API使用指南.md |
 | `api/extkeys.py` | 对外 API 密钥管理（仅内部设置页，走常规来源校验） | 明文存 secrets.json（`ext_api_key:{id}`，所见即所存回显），表内只留 sha256 哈希；生成/改名/scope/每日上限（0=不限）/重置（旧串立即失效）/吊销（行保留供日志对账）；`/enabled` 总开关+日志开关；`/calls` 调用日志（30 天保留） |
@@ -69,9 +69,10 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 | `ai/digest.py` | 每日摘要：统计（零成本 SQL）+ AI 综述（一次调用） | 当天已生成则复用 |
 | `ai/prompts.py` | 全部提示词模板 | 结构化输出要求纯 JSON，`_extract_json` 容错解析；分类枚举段由 `ai/categories.py` 生成 |
 | `ai/categories.py` | 分类枚举单一来源（key/label/color/badge_cls/判定说明） | prompts 分类段、tasks 校验、pipeline 自动归档、digest 分桶、`/api/meta` 下发全部消费此处——**加分类只改本文件** |
+| `ai/context.py` | **Agent 上下文管理（§17.8）**：token 估算器（CJK≈1/字 ASCII≈/4，真实 `usage.prompt_tokens` 校准滑动比率）+ 五段式摘要模板/解析 + 确定性纪要与折叠边界 + 会话记忆读写（memory_json：任务简报+动作台账，上限 40 行） | 窗口默认 1,000,000（用户拍板），档案 `context_window` 按模型实际值指定（<8192 视为未设）；阈值 FOLD 55% / COMPACT 80%；摘要/纪要一律带防注入标注（其中指令均来自邮件内容） |
 | `ai/tools.py` | 总管家工具集（§17.3 对齐扩充） | 26 个工具（6 读 + 20 写），每个带 JSON Schema（原生协议）；search_emails 支持分类/发件人/未读/日期过滤且默认覆盖全部文件夹（修 v1 锁死 INBOX），空结果带结构化 hint；新增 set_category/rename_folder/delete_folder/update_draft/schedule_draft/discard_draft/upsert_contact/delete_contact/add_sender_list/remove_sender_list；薄壳转调既有能力；**无任意 HTTP/文件系统/命令类工具，也无账号/凭据/授权位/密钥类工具（§17.3 豁免防注入自我扩权）** |
-| `ai/agent.py` | 总管家 Agent 循环 v2（§17，可恢复） | **原生 function calling 优先**（探测降级 JSON 协议并按 base_url+model 缓存 KV；`_extract_json` 首个平衡对象止血）；**时间预算优先**（180s 超限 tool_choice=none 强制文本收尾，仍调工具则暂停）+ MAX_STEPS=25 兜底；**审批不断链**：写类出卡后 run 置 waiting_approval（agent_runs v22 持久化 messages/步数/预算），批准/拒绝经 decide 后由 `/agent/resume` 续跑（拒绝同样回灌让模型改道），步数/预算触顶前端「继续」=新的一段预算；工具结果紧凑回灌 ≤1200 字符、>12 步后早期结果确定性截断；每步流式 text_delta；`_feedback_text` 邮件列表转行格式；自动模式约束与 ai_actions 审计/undo 全保留（v1 见 §6） |
-| `db/database.py` | 连接（WAL）+ `MIGRATIONS` 版本化迁移 + KV 设置 | 迁移只追加不改历史 |
+| `ai/agent.py` | 总管家 Agent 循环 v2（§17，可恢复） | **原生 function calling 优先**（探测降级 JSON 协议并按 base_url+model 缓存 KV；`_extract_json` 首个平衡对象止血）；**时间预算优先**（180s 超限 tool_choice=none 强制文本收尾，仍调工具则暂停）+ MAX_STEPS=25 兜底；**审批不断链**：写类出卡后 run 置 waiting_approval（agent_runs v22 持久化 messages/步数/预算），批准/拒绝经 decide 后由 `/agent/resume` 续跑（拒绝同样回灌让模型改道），步数/预算触顶前端「继续」=新的一段预算；工具结果分工具预算紧凑回灌（read_email 4000 其余 1200 字符）；**上下文管理 §17.8 五层**：L2 微压缩（步数/token 双门，早期结果→确定性摘要行，只缩不删保配对）+ L3 会话记忆（chat_sessions.memory_json 注入 system+动作台账增量回写，服务端自取历史）+ L5 AutoCompact（水位≥窗口 80% 调一次 LLM 压五段式摘要，原文归档 archived_json，KV agent_autocompact=0 可停）+ 溢出自愈（context overflow 报错紧急压缩重试一次）；每步流式 text_delta；`_feedback_text` 邮件列表转行格式；自动模式约束与 ai_actions 审计/undo 全保留（v1 见 §6） |
+| `db/database.py` | 连接（WAL）+ `MIGRATIONS` 版本化迁移（v23：chat_sessions.memory_json、agent_runs.archived_json/summary_json）+ KV 设置 | 迁移只追加不改历史 |
 | `scheduler.py` | 每 60s tick：到期账号增量同步 + 摘要到点生成 + 定时草稿派发 | 「检查到期」而非每账号注册任务，改设置无需重建调度；定时草稿到期调 `core.outbox.send_user_draft`（不依赖 API 层），成功/失败写通知中心，失败退回 editing；轮询只拉 INBOX，其他文件夹按需同步（树选中触发）且不进 AI 管线（`sync.py` 仅 INBOX 新邮件进管线） |
 
 ## 前端（frontend/src/）

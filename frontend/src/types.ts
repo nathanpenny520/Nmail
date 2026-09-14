@@ -5,6 +5,8 @@ export interface AIProfile {
   model: string
   /** 已存密钥明文（本地单用户应用，回显供所见即所存；空串=未设置） */
   api_key: string
+  /** 上下文窗口 tokens（REDESIGN_PLAN §17.8）：缺省=1,000,000；本地小窗模型按实际值指定 */
+  context_window?: number | null
 }
 
 export interface AIProfilesResp {

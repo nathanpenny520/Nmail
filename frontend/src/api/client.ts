@@ -109,14 +109,26 @@ export const api = {
 
   // ── AI 配置档案（多模型 / 多 Key）──
   getAIProfiles: () => request<AIProfilesResp>('/api/ai/profiles'),
-  createAIProfile: (payload: { name: string; base_url: string; model: string; api_key?: string }) =>
+  createAIProfile: (payload: {
+    name: string
+    base_url: string
+    model: string
+    api_key?: string
+    context_window?: number | null
+  }) =>
     request<{ profile: AIProfile }>('/api/ai/profiles', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
   updateAIProfile: (
     id: string,
-    payload: { name?: string; base_url?: string; model?: string; api_key?: string },
+    payload: {
+      name?: string
+      base_url?: string
+      model?: string
+      api_key?: string
+      context_window?: number | null // 0=恢复默认 1M；undefined=不变
+    },
   ) =>
     request<{ profile: AIProfile }>(`/api/ai/profiles/${id}`, {
       method: 'PATCH',

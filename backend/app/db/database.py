@@ -494,6 +494,17 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE chat_messages ADD COLUMN segments_json TEXT;
         """,
     ),
+    (
+        23,
+        """
+        -- 上下文管理（REDESIGN_PLAN §17.8，2026-09-14 拍板）：L3 会话结构化记忆
+        -- （任务简报+动作台账，注入 system+增量回写）与 L5 AutoCompact 的归档/
+        -- 摘要落点（原始 transcript 不丢，用户可见层与审计均不受压缩影响）。
+        ALTER TABLE chat_sessions ADD COLUMN memory_json TEXT;
+        ALTER TABLE agent_runs ADD COLUMN archived_json TEXT;
+        ALTER TABLE agent_runs ADD COLUMN summary_json TEXT;
+        """,
+    ),
 ]
 
 
