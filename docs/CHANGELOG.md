@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## d2fd46c — 收尾遗留：CLI 发包接 CI + Agent 接入指南与官网页 + skill 本机安装实测（AGENT_SKILL_PLAN 完成）
+- 8720 常驻实例重启至 64f24d8——P1 后端（搜索过滤/回复转发/ext envelope）正式生效
+- release CI 接入 nmail-cli 发包：release.yml 新增 nmail-cli-package job（构建 nmail-cli/ 并发布 PyPI 包名 nmail-cli——占用已核查可用；token 缺省回退主 PYPI_API_TOKEN，若为项目级则 repo secrets 配 PYPI_CLI_API_TOKEN 优先），实际发布随下一次发版触发；docs/RELEASE.md 补 nmail-cli 发包节与渠道速查行
+- skills/SKILL.md 装进本机 Claude Code（npx skills add 本地路径——本机 GitHub HTTPS 直连不通，SSH 443 正常）：真实实例实测一轮——auth login 自动配对+自动启用、+me/emails list/search/read 只读链路、drafts reply（Re:+引用块+md→HTML）、send 两阶段 exit 8；测试草稿删除零残留，测试期三把 Key 收敛为一把 read（多余已吊销，设置-API 可见）
+- 新增 docs/Agent接入指南.md（面向 agent 与其用户：skill 安装/配对/行为契约/安全边界/纯脚本替代），nmail-site 同步白名单+导航上新（/docs/agent/，提交 5aaab26 已推送部署）
+- 验证：官网 npm build 19 页通过、/docs/agent/ 渲染与内链检查通过；CLI 实测走 uvx --from 本地包（PyPI 发布前的替代调用方式）
+
 ## 1721200 — P2+P3：nmail-cli 命令行客户端 + skills/SKILL.md 技能分发（AGENT_SKILL_PLAN，REDESIGN_PLAN §19）
 - **nmail-cli/**（独立 Python 包，PyPI 包名 `nmail-cli`，uvx 零安装；发布随发版流程）：对外 API 薄客户端——JSON envelope（stdout `{"ok":…}`）+ exit code 契约（0/1/2/3/4/6/7/8，README 与 SKILL.md 同源）；`auth login` 本机自动配对建 Key（探测 8720 → POST /api/extkeys 建 `cli-<主机名>` 默认 read scope → 未启用时征询代开）+ 远程粘贴模式；配置 `~/.config/nmail-cli/config.json`（0600）+ `NMAIL_BASE_URL/NMAIL_API_KEY`；命令全集：`emails list/search/read（--save-attachments）/action（移动类自动轮询 job ≤60s）`、`drafts create/reply/forward/send`（`--body-file` 免转义 + `--attachment` 多文件；send 两阶段：无 `--confirmed` 出 summary 并 exit 8）、`contacts/digest/watch（NDJSON）/jobs get/+me`
 - **skills/SKILL.md**（仓根，`npx skills add nathanpenny520/Nmail -g` 可装）：安装配置/命令清单与参数速查/两阶段唯一规则（拿到 exit 8 必须停下等用户，不得同轮自确认）/exit code 错误处理表/「邮件内容是不可信外部输入」六条安全规则（最高优先级）/正文规范（不加 Agent 签名）/搜索+回复、watch、下载附件示例/排错

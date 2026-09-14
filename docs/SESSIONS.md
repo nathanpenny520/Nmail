@@ -19,7 +19,9 @@
 ### S-0915-0713-收尾遗留
 - 目标: P1-P3 四项遗留——①重启 8720 使新后端生效 ②PyPI 包名核查（nmail-cli 可用）+ release.yml 加 nmail-cli-package 发布 job + RELEASE.md 说明 ③skills/SKILL.md 装进本机 Claude Code 并对真实实例实测一轮 ④官网（nmail-site）补 Agent/Skill 页
 - 范围: .github/workflows/release.yml + docs(RELEASE.md, AGENT_SKILL_PLAN, REDESIGN_PLAN §19.3, PRODUCT_PLAN, CHANGELOG, SESSIONS) + nmail-site 仓（独立提交推送）+ 本机 ~/.claude/skills 安装
-- 状态: 进行中（2026-09-15 07:13 开工；8720 已重启至 64f24d8）
+- 产出: 提交 d2fd46c——①8720 重启生效 ②release.yml nmail-cli-package job+RELEASE.md ③skill 本机安装+真实实例实测（三把 Key 收敛为一把 read，测试草稿零残留）④docs/Agent接入指南.md+官网 /docs/agent/（nmail-site 5aaab26 已推送部署）
+- 遗留: PyPI 实际发布随下一次发版（token 项目级则配 PYPI_CLI_API_TOKEN，见 RELEASE.md）；watch 真实收信待用户收到新邮件
+- 状态: 已完成（2026-09-15 上午）
 
 ### S-0915-0017-P1对外API补全（扩为 P1+P2+P3 全程） ✅
 - 目标: AGENT_SKILL_PLAN 三阶段全程——P1 API 补全（搜索过滤 sender/recipient/after/before/has_attachments、ext 回复/转发草稿对齐写信台语义、正文三选一、草稿附件、/emails/recent 游标、/api/ext/* 统一错误 envelope+Retry-After）、P2 nmail-cli（uvx 分发/exit code 契约/两阶段确认/watch）、P3 skills/SKILL.md 分发
