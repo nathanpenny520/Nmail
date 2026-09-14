@@ -646,44 +646,59 @@ export default function ManagerPage() {
   )
 }
 
-/** 可折叠执行过程块（Claude Code 式，§17.4）：运行中自动展开当前步、完成自动收起 */
+/** 执行过程（Claude 式极简单行，§17.4 简化版）：运行中一行状态、完成后一行淡字、
+ * 失败才醒目；点击才展开步骤明细，默认不占版面 */
 function ProcessBlock({ steps, onUndo }: {
   steps: AgentSegment[]
   onUndo: (id: number) => void
 }) {
   const running = steps.some((s) => s.status === 'running')
-  const [open, setOpen] = useState(running)
-  const wasRunning = useRef(running)
-  useEffect(() => {
-    if (running) {
-      setOpen(true)
-    } else if (wasRunning.current) {
-      setOpen(false) // 完成自动收起
-    }
-    wasRunning.current = running
-  }, [running])
+  const waiting = steps.some((s) => s.status === 'waiting')
+  const failCount = steps.filter((s) => s.status === 'fail').length
   const doneCount = steps.filter((s) => s.status === 'ok' || s.status === 'fail').length
+  const [open, setOpen] = useState(false)
+  let head
+  if (running) {
+    head = (
+      <>
+        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-violet-500" />
+        <span className="text-gray-500">正在执行…{doneCount > 0 ? `（已 ${doneCount} 步）` : ''}</span>
+      </>
+    )
+  } else if (failCount > 0) {
+    head = (
+      <>
+        <X className="h-3 w-3 shrink-0 text-red-500" />
+        <span className="text-red-500">执行过程 · {steps.length} 步 · {failCount} 步失败</span>
+      </>
+    )
+  } else if (waiting) {
+    head = (
+      <>
+        <Clock className="h-3 w-3 shrink-0 text-amber-500" />
+        <span className="text-amber-600">待审批 · 已执行 {doneCount} 步</span>
+      </>
+    )
+  } else {
+    head = (
+      <>
+        <Check className="h-3 w-3 shrink-0 text-gray-300" />
+        <span className="text-gray-400">已执行 {steps.length} 步</span>
+      </>
+    )
+  }
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50/80">
+    <div>
       <button
-        className="flex w-full items-center gap-2 px-3 py-2 t-xs text-gray-500"
+        className="group flex w-full items-center gap-1.5 py-0.5 t-xs"
         onClick={() => setOpen(!open)}
+        title="查看执行明细"
       >
-        {running
-          ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-500" />
-          : <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />}
-        <span className="shrink-0 font-medium text-gray-600">执行过程</span>
-        <span className="min-w-0 truncate">
-          · {doneCount}/{steps.length} 步{running
-            ? ' · 进行中'
-            : steps.some((s) => s.status === 'waiting')
-              ? ' · 待审批'
-              : doneCount === steps.length ? ' · 已完成' : ' · 已停止'}
-        </span>
-        <ChevronDown className={`ml-auto h-3.5 w-3.5 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
+        {head}
+        <ChevronDown className={`h-3 w-3 shrink-0 text-gray-300 transition-transform group-hover:text-gray-500 ${open ? '' : '-rotate-90'}`} />
       </button>
       {open && (
-        <div className="border-t border-gray-100 px-3 py-1">
+        <div className="mt-0.5 ml-2 border-l border-gray-200 pl-3">
           {steps.map((s, i) => <StepRow key={s.call_id ?? i} step={s} onUndo={onUndo} />)}
         </div>
       )}

@@ -423,6 +423,12 @@ class _AgentSSE:
 def agent_stream(payload: AgentStreamIn):
     """总管家 Agent 对话（SSE）：run_started / text_delta / text / tool_call /
     tool_result / approval_required / paused / error / done。"""
+    # 用户提问随流落库（此前只存 AI 回复，刷新后只剩 AI 内容）；先验配置
+    # 与会话，避免未配置/无效会话产生孤儿消息
+    if payload.session_id is not None:
+        require_session(payload.session_id)
+        ai_config_or_400(payload.profile_id)
+        append_message(payload.session_id, "user", payload.question)
     return _AgentSSE(payload).response()
 
 

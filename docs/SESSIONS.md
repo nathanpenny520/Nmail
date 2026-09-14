@@ -16,6 +16,12 @@
 
 ## 进行中
 
+### S-0914-2330-Agent修复与简化 ✅
+- 目标: 用户实测反馈三连修——用户提问不落库/审批内容在旧页面不可见/批准后要有总结，外加过程展示极简化（Claude 式单行）与提示词防猜账号
+- 产出: 提交（哈希见 CHANGELOG）——agent_stream 落库用户提问（require_session+ai_config_or_400 前置，标题自动生成生效）、ProcessBlock 单行化（运行中/待审批/失败/完成四态，点击展开明细）、系统提示词加「不猜测其他 account_id」；8721 顺延实例已停（统一 8720）；curl 实测用户消息+标题+segments 三件套
+- 遗留: 无（原三项遗留解释见会话记录：①并行工具逐步渲染不值得做②agent_runs 清理可观察后再做③LLM 中期压缩不需要）
+- 状态: 已完成（2026-09-14 23:40）
+
 ### S-0914-2208-Agent可用性
 - 目标: 用户已拍板的「AI 总管家 Agent 化」方案（REDESIGN_PLAN §17）——原生 function calling+降级探测、循环 v2（时间预算 180s+步数 25 兜底+审批续跑不断链）、agent_runs 持久化（v22）、工具集对齐人人能力（搜索增强/set_category/文件夹改删/草稿全家桶/通讯录写/黑白名单）、前端 Claude Code 式 segments+过程折叠+流式+Stop/继续
 - 范围: backend(app/ai/llm.py, agent.py, tools.py, api/ai.py, api/chats.py, db/database.py v22, tests/test_agent_loop.py) + frontend(pages/ManagerPage.tsx, types.ts, api/stream.ts) + docs(ARCHITECTURE, REDESIGN_PLAN §17, CHANGELOG, SESSIONS)

@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — Agent 修复与简化：用户提问落库+极简过程行+提示词防猜账号
+- 用户实测反馈三连修（8721 旧标签页/旧 bundle 造成的混淆一并厘清）：①「对话历史只剩 AI 的」——agent 流从 P6 起从不落库用户提问（仅 chat-manager 流落），刷新/重开后只剩 AI 内容且会话永远叫「新对话」：agent_stream 端点在流启动前 `require_session`+`ai_config_or_400` 后 `append_message(user)`（标题自动生成顺带生效）；②「审批内容不见了」——审批暂停轮的 segments 其实已落库，是旧 bundle 渲染不出（见下使用提示），另把该轮 content 兜底文案保留；③「写完草稿要有总结」——新代码批准/拒绝后自动续跑由模型收尾总结，旧实例/旧页面无此行为
+- 过程展示极简化（Claude 式单行）：ProcessBlock 去边框块——运行中=「正在执行…（已 N 步）」spinner 一行、待审批=琥珀「待审批 · 已执行 N 步」、有失败=红色「N 步 · M 步失败」、全部成功=淡灰「已执行 N 步」；点击才展开步骤明细，默认不占版面
+- 提示词补「不猜测或尝试其他 account_id」（用户单账号场景模型猜 id=2/3 被范围守卫拦、白耗两步——守卫行为正确，模型不应试）
+- 使用提示：8721 为重复启动的顺延实例已停掉，统一用 8720；浏览器标签需强刷（Cmd+Shift+R）否则旧 bundle 渲染不出新格式
+- 验证：pytest 176 全绿、ruff 通过、npm build 通过；8720 重启后 curl 实测——agent 会话用户消息落库+标题自动生成+assistant 带 segments
 ## 3eefdb5 — AI 总管家 Agent 化：原生工具调用+可恢复长链+人人对齐工具集+Claude Code 式过程展示（REDESIGN_PLAN §17，2026-09-14 拍板）
 - 背景：P6 的 Agent 实测不可用——提示词约定 JSON 文本作工具协议（裸 JSON/DSML 标记泄漏给用户、`_extract_json` 首尾跨度被幻觉文本搅坏）、MAX_STEPS=8 且审批即断链、search_emails 锁死 INBOX 与描述不符、过程平铺无折叠
 - 原生 function calling（ai/llm.py `chat_step`/`iter_chat_step` + ai/tools.py 每 tool JSON Schema）：tools 参数+tool_calls 解析，流式分片按 index 聚合；端点不认 tools（400/404/422）自动探测降级 JSON 协议并按 base_url+model 落 KV 缓存（`_parse_model_action`/DSML 兜底保留），原生模式下模型输出裸 JSON 也兜底解析；`_extract_json` 改首个平衡对象截取（止血）
