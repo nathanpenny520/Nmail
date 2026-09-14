@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — 对外 API P1 补全：搜索过滤/回复转发草稿/正文三选一/附件/watch 游标/错误 envelope（AGENT_SKILL_PLAN，REDESIGN_PLAN §19）
+## bb4822e — 对外 API P1 补全：搜索过滤/回复转发草稿/正文三选一/附件/watch 游标/错误 envelope（AGENT_SKILL_PLAN，REDESIGN_PLAN §19）
 - 方案：docs/AGENT_SKILL_PLAN.md（2026-09-14 方向确认、参考 AgentlyMail 只借思想）三层补全的 P1——为 skill/agent 使用补齐 API 面；方案并入 REDESIGN_PLAN §19（§18 已被 P7 强化方案占用）
 - 搜索过滤（api/emails.py `list_emails`，ext 透传、内部 /api/emails 同受益）：`sender`/`recipient`（地址或姓名 LIKE）、`after`/`before`（UTC 归一化日期按日含当天，date() 口径，非法值 400）、`has_attachments`；可与 q 搜索组合
 - ext 回复/转发草稿（api/user_drafts.py 新增 create_reply_draft/create_forward_draft，core/imap_client.py 新增 forward_subject）：对齐写信台 quote.ts 语义——replyAll 原收件人入 cc（剔除原发件人与本账号地址）、Re:/Fwd: 前缀防重复、正文后自动追加同构引用块；转发**不设 in_reply_to**（发送管线对 in_reply_to 会带 In-Reply-To 并回标原邮件已读，转发均不适用）；`include_attachments` 复制原附件进草稿存储
