@@ -836,4 +836,7 @@ A（当天量级）→ C（记忆，体感最大）→ D（主动式）→ B（�
   （ASGI 传输打真实 app）+ 隔离实例真实子进程 e2e（配对/权限门禁/reply/两阶段/到达 outbox）。
 - **P3 SKILL.md ✅（2026-09-15）**：仓根 `skills/SKILL.md`（`npx skills add nathanpenny520/Nmail
   -g` 可装）——安装配置/命令清单/两阶段唯一规则/exit code 表/邮件内容不可信六条/正文规范/示例/
-  排错。装进本机 agent 实测与官网补页待后续。
+  排错。本机 Claude Code 已装并实测一轮（真实实例：配对/只读链路/回复草稿/两阶段 exit 8/watch；
+  测试 Key 收敛为一把 read，多余已吊销）；官网 /docs/agent/ 上线（主仓 docs/Agent接入指南.md
+  同源同步，nmail-site 5aaab26）；release CI 接入 nmail-cli 发布 job（PyPI 包名已核查可用，
+  实际发布随下一次发版；token 权限注意事项见 docs/RELEASE.md）。

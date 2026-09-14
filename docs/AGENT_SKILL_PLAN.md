@@ -2,8 +2,10 @@
 
 > 背景：用户 2026-09-14 提出「对外 API 还很不完善，第三方无法使用」，目标：**把 Nmail 邮件能力作为 skill 交付给任意外部 agent**（Claude Code / Codex / 任何能跑命令的 agent），并指定参考 `reference/AgentlyMail`（QQ 邮箱团队的 Agent 邮箱技能，Apache-2.0——按决策 6 只借思想、不复制文本）。
 > 结论：`/api/ext/v1` 底子可用（REDESIGN_PLAN §7 / P7 已落地 Key 认证、scope、限流、调用日志），但对照 AgentlyMail 的 agent-first 设计缺三层——**CLI 客户端、API 面补全、skill 分发**。本方案补齐三层。
-> 状态：方向已确认（2026-09-14）。**P1 API 补全已落地（2026-09-15，详见 §7 表格与 REDESIGN_PLAN §19.3）**；
-> P2 nmail-cli / P3 SKILL.md 未开始。方案全文并入 REDESIGN_PLAN §19（§18 已被 P7 强化方案占用）。
+> 状态：方向已确认（2026-09-14）。**P1/P2/P3 全部落地（2026-09-15，详见 §7 表格与 REDESIGN_PLAN §19.3）**，
+> 遗留收尾同日完成：8720 重启生效、CLI 发包接入 release CI（PyPI 包名已核查可用）、SKILL.md 装进本机
+> Claude Code 并对真实实例实测一轮、官网 /docs/agent/ 页上线（nmail-site 5aaab26）。剩余：PyPI 实际
+> 发布随下一次发版触发（token 权限若为项目级需配 PYPI_CLI_API_TOKEN，见 docs/RELEASE.md）。
 
 ## 1. 现状与差距：为什么第三方用不了
 
@@ -84,7 +86,7 @@ nmail-cli watch                                      # 轮询 /emails/recent，N
 - **两阶段确认**：发送类命令不带 `--confirmed` 时打印 summary（收件人/主题/正文前 200 字/附件清单）并以 exit 8 退出；用户许可后**原参数 + `--confirmed`** 重发。服务端不加 ctk——Nmail「建草稿 → approve」天然两阶段，CLI 层确认即可，零服务端状态；裸 HTTP 用户走两步调用同样是两段。
 - 任何非 0 退出，agent 不得在同轮宣称「已发送/已完成」（写进 SKILL.md）。
 
-## 5. P3：SKILL.md 与分发 ✅ 已落地（2026-09-15，`skills/SKILL.md`；官网补页待随 nmail-site 更新）
+## 5. P3：SKILL.md 与分发 ✅ 已落地（2026-09-15，`skills/SKILL.md`；本机 Claude Code 已装（GitHub HTTPS 不通，用本地路径安装）并对真实实例实测一轮；官网 /docs/agent/ 已上线（nmail-site 5aaab26，主仓 docs/Agent接入指南.md 同源同步））
 
 - **位置**：GitHub 仓根 `skills/SKILL.md`（即本仓根），`npx skills add nathanpenny520/Nmail -g` 一键安装（skills.sh 约定识别 `skills/` 目录）。
 - **frontmatter**：`name: nmail` / `description` 含触发词（收发/搜索/整理邮件、Nmail）/ `version`。
@@ -110,7 +112,7 @@ nmail-cli watch                                      # 轮询 /emails/recent，N
 |---|---|---|
 | P1 | API 补全（§3，1~2 会话）✅ 已落地（2026-09-15） | ruff + pytest 196 全绿 + openapi 快照 + 真库副本隔离实例 curl 全往返（真实发件人/日期过滤、回复/转发草稿，测试草稿零残留） |
 | P2 | nmail-cli（§4，1 会话）✅ 已落地（2026-09-15） | pytest 9 契约用例（ASGI 传输打真实 app）+ 隔离实例真实子进程 e2e（auth login 自动配对/权限门禁 exit 3/reply --body-file/两阶段 exit 8/--confirmed 到达 outbox）；`watch` 收信验证待用户真实新邮件；PyPI 发包随发版流程 |
-| P3 | SKILL.md + 分发（§5）✅ 已落地（2026-09-15） | `skills/SKILL.md`（仓根，`npx skills add nathanpenny520/Nmail -g` 可装）；装进本机 Claude Code 实测全链路与官网补页待用户/后续会话 |
+| P3 | SKILL.md + 分发（§5）✅ 已落地（2026-09-15） | `skills/SKILL.md` 已装进本机 Claude Code 并实测（配对/只读链路/回复草稿/两阶段/watch，测试 Key 收敛为一把 read）；官网 /docs/agent/ 上线（主仓 docs/Agent接入指南.md 同源） |
 
 - 文档同提交：CHANGELOG、ARCHITECTURE §7 扩写、PRODUCT_PLAN P7 状态；实施开工时本方案并入 REDESIGN_PLAN §18、`对外API使用指南.md` 补 CLI 章节。
 - 开工时按规范 8 在 `docs/SESSIONS.md` 登记会话；与在途会话的共享文档（CHANGELOG/SESSIONS/openapi 快照）按惯例构造 patch 暂存。

@@ -77,11 +77,23 @@ winget search nathanpenny520.Nmail                    # ⑤ 合并后可见（PR
    ```
 7. 修 manifest = 直接往 PR 分支推新提交，校验自动重跑；大改后等不到自动触发就在 PR 评论 `/azp run`
 
+## nmail-cli 发包（REDESIGN_PLAN §19，2026-09-15 起）
+
+release CI 新增 `nmail-cli-package` job：构建 `nmail-cli/` 并发布到 PyPI 包名 **`nmail-cli`**
+（占用已核查，2026-09-15 可用）。注意：
+
+1. **版本号独立**在 `nmail-cli/pyproject.toml`，发版前按需 bump（不随主包版本）。
+2. **token**：默认回退主 `PYPI_API_TOKEN`；若该 token 是项目级（只限 `nmail-app`），
+   到 PyPI 给账号建一个含 `nmail-cli` 项目的 token，配到 repo secrets `PYPI_CLI_API_TOKEN`
+   （该 job 会优先用它）。首次发布即认领包名，之后可把 token 收窄为项目级。
+3. CI 失败排查：`gh run view --job <id> --log-failed`，常见即 403=token 无 nmail-cli 权限。
+
 ## 渠道速查（用户侧如何拿到更新）
 
 | 渠道 | 更新时机 | 用户命令 |
 |---|---|---|
 | PyPI | CI 即时 | `uv tool upgrade nmail-app` / `pip install -U nmail-app` |
+| PyPI（nmail-cli） | CI 即时 | `uvx nmail-cli@latest` / `uv tool upgrade nmail-cli` |
 | GitHub Release | CI 即时 | 下载覆盖 |
 | Homebrew | CI 即时（tap 自动 bump） | `brew upgrade nmail` |
 | winget | 版本 PR 合并后 | `winget upgrade nathanpenny520.Nmail` |

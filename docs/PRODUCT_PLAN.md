@@ -203,7 +203,7 @@ Nmail/
 | **远期** | PII 脱敏、主密码加密、MCP 接口、AI 强化路线（§11） | ⬜ 未开始（自动助理已由 v0.4 的 P6+Agent 化落地；Gmail/Outlook OAuth2 已于 2026-09-11 以用户自建 OAuth 客户端方式落地；MCP 以 P7 对外 API 为基座） |
 | **v0.4 改版** | P1 导航骨架（砍侧栏）+字号统一 · P2 资源管理器（文件夹树/拖拽/按需同步）+每账号服务器归档 · P3 草稿体系合并 · P4 通讯录 · P5 OAuth 内置凭证快速授权 · P6 AI 总管家 2.0（工具+审批/自动） · P7 对外 API · P8 官网 | ✅ 完成并随 v0.3.0 发布 |
 | **v0.4.x Agent 化** | 原生 function calling+降级探测 · 可恢复长链（时间预算/步数/审批续跑/继续与停止） · 工具集对齐人人能力（26 工具） · Claude 式过程展示 · 用户提问与会话分段持久化 | ✅ 完成（REDESIGN_PLAN §17，2026-09-14） |
-| **v0.4.x 对外 API Skill 化** | P1 API 补全（搜索过滤/回复转发草稿/正文三选一/草稿附件/watch 游标/错误 envelope+Retry-After） · P2 nmail-cli（uvx 分发/exit code 契约/CLI 两阶段确认） · P3 SKILL.md 分发（skills/ + `npx skills add`） | ✅ 代码全部完成（REDESIGN_PLAN §19，2026-09-15）；余：nmail-cli PyPI 发包随发版、装进本机 agent 实测、官网补页 |
+| **v0.4.x 对外 API Skill 化** | P1 API 补全（搜索过滤/回复转发草稿/正文三选一/草稿附件/watch 游标/错误 envelope+Retry-After） · P2 nmail-cli（uvx 分发/exit code 契约/CLI 两阶段确认） · P3 SKILL.md 分发（skills/ + `npx skills add`） | ✅ 全部完成（REDESIGN_PLAN §19，2026-09-15：P1-P3+收尾——skill 本机安装实测、官网 /docs/agent/、release CI 接入 CLI 发包）；余：PyPI 实际发布随下一次发版触发 |
 
 ## 9. 参考项目（只借思想，不搬受限代码）
 
