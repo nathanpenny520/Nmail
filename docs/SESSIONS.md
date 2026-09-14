@@ -19,7 +19,7 @@
 ### S-0915-0017-P1对外API补全（扩为 P1+P2+P3 全程） ✅
 - 目标: AGENT_SKILL_PLAN 三阶段全程——P1 API 补全（搜索过滤 sender/recipient/after/before/has_attachments、ext 回复/转发草稿对齐写信台语义、正文三选一、草稿附件、/emails/recent 游标、/api/ext/* 统一错误 envelope+Retry-After）、P2 nmail-cli（uvx 分发/exit code 契约/两阶段确认/watch）、P3 skills/SKILL.md 分发
 - 范围: backend(api/emails.py, api/user_drafts.py, api/ext.py, main.py, core/imap_client.py, tests/test_api_emails.py, test_ext_api.py) + nmail-cli/ 新包（cli+tests） + skills/SKILL.md 新增 + openapi/schema 快照 + docs(AGENT_SKILL_PLAN, REDESIGN_PLAN §19+§0+§7, ARCHITECTURE, 对外API使用指南, PRODUCT_PLAN, CHANGELOG, SESSIONS)
-- 产出: 提交 bb4822e（P1：pytest 196 全绿 +8、真库副本隔离实例 8795 curl 全往返、openapi+schema 同提交）+ 提交（哈希见 CHANGELOG 回填，P2+P3：CLI 包 9 契约用例 + 后端 197 全绿 + 隔离实例 8796 真实子进程 e2e——自动配对/权限门禁 exit 3/reply/两阶段 exit 8/到达 outbox/零残留）+ REDESIGN_PLAN §19（方案并入，§18 已被 P7 方案占用）、§8 待拍板 5 项按推荐值执行（§19.2）
+- 产出: 提交 bb4822e（P1：pytest 196 全绿 +8、真库副本隔离实例 8795 curl 全往返、openapi+schema 同提交）+ 提交 1721200（P2+P3：CLI 包 9 契约用例 + 后端 197 全绿 + 隔离实例 8796 真实子进程 e2e——自动配对/权限门禁 exit 3/reply/两阶段 exit 8/到达 outbox/零残留）+ REDESIGN_PLAN §19（方案并入，§18 已被 P7 方案占用）、§8 待拍板 5 项按推荐值执行（§19.2）
 - 遗留: ①真实 8720 进程未重启——后端改动重启后生效 ②nmail-cli PyPI 发包随发版流程（包名占用待查）③SKILL.md 装进本机 agent 全链路实测、官网（nmail-site）Agent 页补页待后续会话 ④watch 真实收信验证待用户收到新邮件
 - 状态: 已完成（2026-09-15 凌晨）
 

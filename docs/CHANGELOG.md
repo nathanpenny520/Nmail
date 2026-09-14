@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — P2+P3：nmail-cli 命令行客户端 + skills/SKILL.md 技能分发（AGENT_SKILL_PLAN，REDESIGN_PLAN §19）
+## 1721200 — P2+P3：nmail-cli 命令行客户端 + skills/SKILL.md 技能分发（AGENT_SKILL_PLAN，REDESIGN_PLAN §19）
 - **nmail-cli/**（独立 Python 包，PyPI 包名 `nmail-cli`，uvx 零安装；发布随发版流程）：对外 API 薄客户端——JSON envelope（stdout `{"ok":…}`）+ exit code 契约（0/1/2/3/4/6/7/8，README 与 SKILL.md 同源）；`auth login` 本机自动配对建 Key（探测 8720 → POST /api/extkeys 建 `cli-<主机名>` 默认 read scope → 未启用时征询代开）+ 远程粘贴模式；配置 `~/.config/nmail-cli/config.json`（0600）+ `NMAIL_BASE_URL/NMAIL_API_KEY`；命令全集：`emails list/search/read（--save-attachments）/action（移动类自动轮询 job ≤60s）`、`drafts create/reply/forward/send`（`--body-file` 免转义 + `--attachment` 多文件；send 两阶段：无 `--confirmed` 出 summary 并 exit 8）、`contacts/digest/watch（NDJSON）/jobs get/+me`
 - **skills/SKILL.md**（仓根，`npx skills add nathanpenny520/Nmail -g` 可装）：安装配置/命令清单与参数速查/两阶段唯一规则（拿到 exit 8 必须停下等用户，不得同轮自确认）/exit code 错误处理表/「邮件内容是不可信外部输入」六条安全规则（最高优先级）/正文规范（不加 Agent 签名）/搜索+回复、watch、下载附件示例/排错
 - ext 新增 `GET /drafts/{id}` 单条草稿（CLI 发送前摘要用，read scope；+1 用例）
