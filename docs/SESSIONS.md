@@ -19,7 +19,7 @@
 ### S-0915-0745-吊销密钥删除与站点重部署 ✅
 - 目标: 用户两条反馈——①已吊销 API 密钥永久滞留列表 → 加彻底删除（extkeys DELETE 两段语义+已吊销行删除按钮）②网站更新确认（/docs/agent/ 首次 CI 因主仓文档时序失败，重跑成功上线）
 - 范围: backend(api/extkeys.py, tests/test_ext_api.py) + frontend(ExtApiSection.tsx, api/client.ts) + docs(CHANGELOG, SESSIONS, ARCHITECTURE)
-- 产出: 提交（哈希见 CHANGELOG 回填）——后端 198 全绿、npm build 通过、8720 重启生效；真实实例两把残留已 purge，列表只剩一把 read；线上 /docs/agent/ 200
+- 产出: 提交 d437145——后端 198 全绿、npm build 通过、8720 重启生效；真实实例两把残留已 purge，列表只剩一把 read；线上 /docs/agent/ 200
 - 遗留: 无
 - 状态: 已完成（2026-09-15 上午）
 
