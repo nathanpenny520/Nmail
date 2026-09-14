@@ -16,6 +16,12 @@
 
 ## 进行中
 
+### S-0914-2353-P7方案文档 ✅
+- 目标: 用户两问答疑落档+AI 能力强化（P7）方案定稿——①操作记录撤销已实现、不可见系展示条件+「审批/自动」徽章误读 ②操作记录可否删除/会不会积压→审计保留期设计 ③七章节 Agent 清单映射现状
+- 范围: 仅 docs/REDESIGN_PLAN.md（新增 §18）+ docs/SESSIONS.md；不动代码；共享文档 staging 用 HEAD 基线构造 blob（避让并行会话 S-0914-2346 的 §17.8 WIP）；CHANGELOG 随各阶段实施提交补记
+- 产出: REDESIGN_PLAN §18——清单映射表/撤销答疑结论/审计保留期（ai_actions 分层 30/90 天+send_draft 永久、agent_runs 终态 30 天，并入 cleanup_retention）/P7-A 撤销补全（create_draft 可撤、trash 可恢复、update_draft 可回滚、徽章弱化、清 _FakeMB 残留 8 条）/P7-B 感知/P7-C 记忆/P7-D 主动式/P7-E 语义检索/P7-F 安全/拍板项 4 条/与 §17.8 正交边界；真实库实测 ai_actions 13 行·ai_logs 118 行·agent_runs 17 行·14MB 入档
+- 状态: 已完成（2026-09-14，纯文档零代码，产出即本条登记所在提交）
+
 ### S-0914-2352-对外API-Skill方案 ✅
 - 目标: 用户确认方向后落方案文档——对外 API Skill 化（参考 AgentlyMail，只借思想不复制文本）：三层补全 P1 API 面（搜索过滤/reply-forward 草稿/正文三选一/草稿附件/watch 轮询/错误 envelope）+ P2 nmail-cli（uvx 分发/本机自动配对/exit code 契约/CLI 层两阶段确认）+ P3 SKILL.md 与 skills.sh 分发；用户明确「先写文档，暂不执行」（有并行会话）
 - 范围: docs/AGENT_SKILL_PLAN.md 新增 + docs/SESSIONS.md 登记；不动 REDESIGN_PLAN/CLAUDE.md（§17.8 上下文管理会话在途，避免文件尾冲突）
