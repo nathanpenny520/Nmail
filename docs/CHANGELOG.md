@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — feat: 桌面图标一键安装（各安装方式）+ 渠道识别 + CLI 单实例探测
+- 新增 `core/channel.py`：启动时识别安装渠道（binary/brew/winget/pip/uvx）——自更新与桌面集成都按渠道分流；uvx 经 uv 缓存路径特征识别，brew/winget 冻结二进制按安装路径识别
+- 新增 `core/desktop.py`：一键生成桌面图标——Windows 桌面+开始菜单 .lnk（PowerShell COM）、macOS `~/Applications/Nmail.app` 包（Info.plist+icns）、Linux .desktop+hicolor 图标；状态检测/移除/重装；binary 渠道直接包装自身，pip/uvx 先落启动命令包装器再包装
+- 图标资产随包分发：`backend/app/assets/`（ico/icns/512png 入库入 wheel package-data，nmail.spec datas 打入冻结包），gen_icons.py 产出时同步写入
+- cli.py：`install-shortcut`/`uninstall-shortcut` 子命令；单实例探测（8720 已有健康 Nmail 直接开浏览器退出，不再端口顺延多开）；`--wait-port N` 启动参数（等端口释放精确回绑，供更新重启使用，下一条提交消费）
+- API `GET/POST/DELETE /api/desktop-shortcut`；设置页「关于」新增「桌面图标」卡片（未安装→一键安装，已安装→显示位置+移除）
+- CLAUDE.md 决策#2 修订：桌面图标集成按需生成、只写用户目录；方案与决策记录 docs/UPDATE_AND_DESKTOP.md
+- 会话：S-0915-2225-更新与桌面图标
+
 ## 03c44e7 — fix: 写信页签关闭即问去留 + 页签顺序跨刷新保留
 - 非 dirty 写信页签关闭不再静默——已落库草稿（含已自动保存的）一律弹「保留草稿/丢弃草稿」确认：此前非 dirty 直接关、草稿留在服务端 status=editing，启动恢复会把页签原样拉回，页签条永远关不干净（用户反馈「删了刷新又出现」的根因）；仅空白未落库标签维持直接关（随手点开零成本）；确认弹窗标题措辞改为对 dirty/非 dirty 都成立
 - 确认弹窗从 ComposeWorkbench 上移到 Layout 常驻渲染——工作台仅激活态挂载，原先关 **dirty 非激活**页签时弹窗挂不上、点 × 无反应（潜伏 bug，一并修复）

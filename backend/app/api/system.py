@@ -4,7 +4,7 @@ import subprocess
 from fastapi import APIRouter
 
 from app.config import APP_VERSION, get_data_dir, get_install_dir
-from app.core import update_check
+from app.core import desktop, update_apply, update_check
 from app.db.database import get_conn
 
 router = APIRouter(tags=["system"])
@@ -53,3 +53,44 @@ def system_paths() -> dict:
 def update_check_state(force: bool = False) -> dict:
     """更新检查状态；带缓存节流（24h），force=True 跳过缓存立即检查。"""
     return update_check.get_state(force=force)
+
+
+# ── 桌面图标（UPDATE_AND_DESKTOP.md §2）─────────────────────────────────
+
+@router.get("/api/desktop-shortcut")
+def desktop_shortcut_status() -> dict:
+    return desktop.get_shortcut_status()
+
+
+@router.post("/api/desktop-shortcut")
+def desktop_shortcut_install() -> dict:
+    """一键安装桌面图标（Windows .lnk / macOS Nmail.app / Linux .desktop）。"""
+    return desktop.install_shortcut()
+
+
+@router.delete("/api/desktop-shortcut")
+def desktop_shortcut_remove() -> dict:
+    return desktop.remove_shortcut()
+
+
+# ── 应用内更新执行（UPDATE_AND_DESKTOP.md §3）───────────────────────────
+
+@router.get("/api/update-apply")
+def update_apply_state() -> dict:
+    """自更新任务状态：渠道能力 + 当前 phase/progress/staged_version。"""
+    return update_apply.get_state()
+
+
+@router.post("/api/update-apply")
+def update_apply_start() -> dict:
+    """启动后台更新（binary 下载换身 / pip 原地升级）；不可自更新渠道返回命令提示。"""
+    return update_apply.start_apply()
+
+
+@router.post("/api/update-apply/restart")
+def update_apply_restart(port: int = 0) -> dict:
+    """以已就位的新代码重启服务：新进程 --wait-port 接管当前端口后本进程退出。
+
+    port 由前端按 window.location 传入（服务端不反推监听端口）；缺省 0 时
+    退化为仅退出请求（新进程找不到端口会顺延），正常流程前端必传。"""
+    return update_apply.restart_app(port or 8720)

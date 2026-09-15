@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import socket
+import sys
 import threading
 import time
 import webbrowser
@@ -27,25 +28,95 @@ def find_free_port(start: int) -> int:
     raise RuntimeError(f"端口 {start} 起连续 50 个端口均被占用")
 
 
+def wait_for_port(port: int, timeout: float = 30.0) -> int:
+    """等 port 可绑定后精确回绑（更新重启专用：旧进程退出、新进程接同一端口，
+    浏览器页面地址不变）；超时才退回顺延策略。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.bind(("127.0.0.1", port))
+                return port
+        except OSError:
+            time.sleep(0.2)
+    print(f"等待端口 {port} 释放超时（{timeout:.0f}s），改用顺延端口")
+    return find_free_port(port)
+
+
+def probe_existing(port: int) -> str | None:
+    """端口上已有健康 Nmail 时返回其 URL。
+
+    单实例语义：图标双击/重复命令启动不再顺延端口多开一套服务，直接打开
+    已运行实例的页面（UPDATE_AND_DESKTOP.md §2）。探测失败一律当「没在运行」。
+    """
+    try:
+        import httpx
+
+        resp = httpx.get(f"http://127.0.0.1:{port}/api/health", timeout=1.0)
+        if resp.status_code == 200 and resp.json().get("status") == "ok":
+            return f"http://127.0.0.1:{port}"
+    except Exception:  # noqa: BLE001 — 非 Nmail 服务/网络栈异常都视为端口可用
+        pass
+    return None
+
+
 def open_browser_later(url: str) -> None:
     time.sleep(1.5)
     with suppress(OSError):
         webbrowser.open(url)  # 无图形环境时静默跳过
 
 
+def _shortcut_command(install: bool) -> None:
+    """install-shortcut / uninstall-shortcut：桌面图标一键安装（设置页同名功能）。"""
+    from app.core import desktop  # 延迟导入保持 --help 轻量
+
+    result = desktop.install_shortcut() if install else desktop.remove_shortcut()
+    if result.get("ok"):
+        paths = "、".join(result.get("paths", [])) or "（默认位置）"
+        print(("已创建桌面图标: " if install else "已移除桌面图标: ") + paths)
+    else:
+        print(f"操作失败: {result.get('error')}")
+        raise SystemExit(1)
+
+
 def main(argv: list[str] | None = None) -> None:
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    # 轻量子命令：argparse 前预扫，不影响既有参数面
+    if args_list and args_list[0] in ("install-shortcut", "uninstall-shortcut"):
+        _shortcut_command(args_list[0] == "install-shortcut")
+        return
+
     from app.config import APP_VERSION  # 延迟导入保持 --help/--version 轻量
 
     parser = argparse.ArgumentParser(description="Nmail 一键启动")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
+    parser.add_argument(
+        "--wait-port", type=int, default=None, metavar="N",
+        help="等端口 N 释放后精确绑定它（更新重启专用；不做单实例探测）",
+    )
     parser.add_argument("--version", action="version", version=f"Nmail {APP_VERSION}")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
+
+    # 更新换身收尾：上次下载中途退出留下的半程更新在此完成或清理（binary 渠道，
+    # UPDATE_AND_DESKTOP.md §3.1 第 5 步）——保证「下次打开一定是新版」
+    from app.core import update_apply  # noqa: E402 — 同样延迟导入
+
+    update_apply.finish_pending_swap()
 
     from app.main import app as fastapi_app  # 延迟导入：--help 无需加载重型依赖
     import uvicorn
 
-    port = find_free_port(args.port)
+    if args.wait_port is not None:
+        port = wait_for_port(args.wait_port)
+    else:
+        existing = probe_existing(args.port)
+        if existing is not None:
+            print(f"Nmail 已在运行: {existing}  (直接打开)")
+            if not args.no_browser:
+                webbrowser.open(existing)
+            return
+        port = find_free_port(args.port)
     url = f"http://127.0.0.1:{port}"
 
     print(f"Nmail 启动中: {url}  (Ctrl+C 退出)")

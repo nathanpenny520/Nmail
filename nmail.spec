@@ -19,6 +19,10 @@ ICON = str(_icon_path) if _icon_path and _icon_path.exists() else None
 
 # pyproject.toml 是版本唯一来源：冻结环境无包元数据，config._app_version 读随包副本解析版本
 datas = [(str(ROOT / "pyproject.toml"), ".")]
+# 桌面图标生成资产（core/desktop.py 运行时读取；UPDATE_AND_DESKTOP.md §2）
+APP_ASSETS = ROOT / "backend" / "app" / "assets"
+if APP_ASSETS.is_dir():
+    datas.append((str(APP_ASSETS), "app/assets"))
 if STATIC.is_dir():
     datas.append((str(STATIC), "app/static"))
 

@@ -85,6 +85,14 @@ def main() -> None:
     master.resize((192, 192), Image.LANCZOS).save(pub / "icon-192.png")
     master.resize((512, 512), Image.LANCZOS).save(pub / "icon-512.png")
 
+    # 随包分发（pip wheel package-data + nmail.spec datas）：桌面图标生成用
+    appassets = ROOT / "backend" / "app" / "assets"
+    appassets.mkdir(parents=True, exist_ok=True)
+    m256.save(appassets / "nmail.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+    master.save(appassets / "nmail.icns", format="ICNS",
+                append_images=[master.resize((s, s), Image.LANCZOS) for s in (512, 256, 128, 64, 32, 16)])
+    (appassets / "nmail-512.png").write_bytes((pub / "icon-512.png").read_bytes())
+
     # apple-touch-icon：满幅重排，圆角交给系统蒙版（见 apple_touch 文档串）
     apple_touch(master).save(pub / "apple-touch-icon.png")
 

@@ -16,6 +16,12 @@
 
 ## 进行中
 
+### S-0915-2225-更新与桌面图标
+- 目标: 用户两项拍板落地——①应用内更新：检查到新版本后台静默下载+换身（binary/pip 渠道），提示「重启即更新，下次打开自动生效」，设置页可关（auto_update_enabled 默认开）+「立即更新/立即重启」按钮；brew/winget/uvx 渠道展示升级命令不自换身 ②每种安装方式都有桌面图标：设置页一键安装（Win .lnk / mac Nmail.app / Linux .desktop）+ `nmail install-shortcut` 子命令 + cli 单实例探测 + `--wait-port` 重启参数；发版 CI 追加 Nmail.app.zip 资产（用户已同意）
+- 范围: backend(app/core/channel.py 新增, core/desktop.py 新增, core/update_apply.py 新增, cli.py, api/system.py, api/settings.py, main.py, scheduler.py, nmail.spec, backend/app/assets/ 新增) + frontend(SettingsPage, types, client, Layout 浮条, openapi 快照) + .github/workflows/release.yml + scripts/gen_icons.py + docs(UPDATE_AND_DESKTOP 新增, INSTALL, ARCHITECTURE, CHANGELOG, SESSIONS) + CLAUDE.md 决策#2 修订
+- 方案: docs/UPDATE_AND_DESKTOP.md（渠道识别表 / 换身机制 / 自动更新口径 / UI 文案）
+- 时间: 2026-09-15 22:25 开工
+
 ### S-0915-2150-页签恢复修复 ✅
 - 目标: 用户反馈三修——①非 dirty 写信页签关闭也弹「保留/丢弃」确认（方案A：关标签≠关草稿，否则启动恢复把页签拉回）②写信页签拖拽顺序跨刷新保留（恢复复用 draftId→tabId 映射）③nmail_tab_order 死键清理；另核实 uvx @latest 语义（官方文档）并在 SKILL.md 更新检查补缓存清理提议
 - 范围: frontend(components/compose/ComposeContext.tsx, components/compose/ComposeWorkbench.tsx, components/Layout.tsx) + skills/SKILL.md + docs(CHANGELOG, SESSIONS)

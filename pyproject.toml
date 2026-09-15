@@ -36,9 +36,10 @@ package-dir = { "" = "backend" }
 [tool.setuptools.packages.find]
 where = ["backend"]
 
-# 前端构建产物由 scripts/sync_frontend.sh 同步进 app/static 后一起打入 wheel
+# 前端构建产物由 scripts/sync_frontend.sh 同步进 app/static 后一起打入 wheel；
+# assets/ 是桌面图标生成资产（UPDATE_AND_DESKTOP.md §2），nmail.spec datas 同步打入冻结包
 [tool.setuptools.package-data]
-app = ["static/**/*"]
+app = ["static/**/*", "assets/**/*"]
 
 # ── pytest（T1：纯函数层优先，零覆盖率指标）──────────────────────
 [tool.pytest.ini_options]

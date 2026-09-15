@@ -71,6 +71,42 @@ export interface UpdateCheckResp {
   checked_at: string | null
 }
 
+/** 桌面图标状态（GET /api/desktop-shortcut） */
+export interface DesktopShortcutResp {
+  installed: boolean
+  healthy: boolean
+  paths: string[]
+  channel: string
+  platform: string
+  installed_at: string | null
+}
+
+/** 桌面图标安装/移除结果 */
+export interface DesktopShortcutActionResp {
+  ok: boolean
+  paths: string[]
+  error: string | null
+}
+
+/** 自更新任务状态（GET /api/update-apply）：phase = idle|downloading|verifying|pip_upgrading|ready|failed */
+export interface UpdateApplyResp {
+  channel: string
+  can_self_update: boolean
+  upgrade_hint: string | null
+  phase: string
+  progress: number
+  error: string | null
+  staged_version: string | null
+  current_version: string
+  updated_at: string | null
+}
+
+export interface UpdateApplyStartResp {
+  ok: boolean
+  already_running?: boolean
+  error?: string
+}
+
 export interface AITestPayload {
   base_url?: string
   model?: string

@@ -62,6 +62,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desktop-shortcut": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Desktop Shortcut Status */
+        get: operations["desktop_shortcut_status_api_desktop_shortcut_get"];
+        put?: never;
+        /**
+         * Desktop Shortcut Install
+         * @description 一键安装桌面图标（Windows .lnk / macOS Nmail.app / Linux .desktop）。
+         */
+        post: operations["desktop_shortcut_install_api_desktop_shortcut_post"];
+        /** Desktop Shortcut Remove */
+        delete: operations["desktop_shortcut_remove_api_desktop_shortcut_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update-apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Update Apply State
+         * @description 自更新任务状态：渠道能力 + 当前 phase/progress/staged_version。
+         */
+        get: operations["update_apply_state_api_update_apply_get"];
+        put?: never;
+        /**
+         * Update Apply Start
+         * @description 启动后台更新（binary 下载换身 / pip 原地升级）；不可自更新渠道返回命令提示。
+         */
+        post: operations["update_apply_start_api_update_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update-apply/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Apply Restart
+         * @description 以已就位的新代码重启服务：新进程 --wait-port 接管当前端口后本进程退出。
+         *
+         *     port 由前端按 window.location 传入（服务端不反推监听端口）；缺省 0 时
+         *     退化为仅退出请求（新进程找不到端口会顺延），正常流程前端必传。
+         */
+        post: operations["update_apply_restart_api_update_apply_restart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -2960,6 +3029,149 @@ export interface operations {
         parameters: {
             query?: {
                 force?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    desktop_shortcut_status_api_desktop_shortcut_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    desktop_shortcut_install_api_desktop_shortcut_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    desktop_shortcut_remove_api_desktop_shortcut_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    update_apply_state_api_update_apply_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    update_apply_start_api_update_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    update_apply_restart_api_update_apply_restart_post: {
+        parameters: {
+            query?: {
+                port?: number;
             };
             header?: never;
             path?: never;

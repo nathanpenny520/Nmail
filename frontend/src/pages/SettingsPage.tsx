@@ -842,6 +842,9 @@ export default function SettingsPage() {
               {updateToggleMutation.isPending && <span className="t-sm text-gray-400">保存中…</span>}
             </div>
 
+            {/* 桌面图标：一键安装（UPDATE_AND_DESKTOP.md §2）——非技术用户不必碰命令行 */}
+            <DesktopShortcutCard />
+
             {/* 本机路径：体现软件本地性——数据与程序都在这台电脑上，路径为运行进程实时解析的真实值 */}
             <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
               <div className="t-md font-medium text-gray-700">本机数据</div>
@@ -894,6 +897,75 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/** 桌面图标卡片（UPDATE_AND_DESKTOP.md §2）：一键安装/移除/重装。
+ * 状态由后端检测（数据目录标记 + 产物路径实存）；渠道信息后端已知，前端零判断。 */
+function DesktopShortcutCard() {
+  const queryClient = useQueryClient()
+  const [actionError, setActionError] = useState<string | null>(null)
+  const statusQuery = useQuery({ queryKey: ['desktop-shortcut'], queryFn: api.getDesktopShortcut })
+  const installMutation = useMutation({
+    mutationFn: () => api.installDesktopShortcut(),
+    onSuccess: (r) => {
+      if (r.ok) setActionError(null)
+      else setActionError(r.error || '安装失败')
+      void queryClient.invalidateQueries({ queryKey: ['desktop-shortcut'] })
+    },
+    onError: (err: Error) => setActionError(err.message),
+  })
+  const removeMutation = useMutation({
+    mutationFn: () => api.removeDesktopShortcut(),
+    onSuccess: () => {
+      setActionError(null)
+      void queryClient.invalidateQueries({ queryKey: ['desktop-shortcut'] })
+    },
+    onError: (err: Error) => setActionError(err.message),
+  })
+  const s = statusQuery.data
+  const busy = installMutation.isPending || removeMutation.isPending
+  return (
+    <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="t-md font-medium text-gray-700">桌面图标</div>
+        <span className="t-sm text-gray-400">在桌面/启动台创建 Nmail 图标，双击即用</span>
+        <span className="flex-1" />
+        {s?.installed ? (
+          <>
+            <button
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => installMutation.mutate()}
+              disabled={busy}
+            >
+              重新安装
+            </button>
+            <button
+              className="rounded-lg border border-red-200 bg-white px-3 py-1.5 t-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+              onClick={() => removeMutation.mutate()}
+              disabled={busy}
+            >
+              移除
+            </button>
+          </>
+        ) : (
+          <button
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 t-sm text-white hover:bg-indigo-500 disabled:opacity-50"
+            onClick={() => installMutation.mutate()}
+            disabled={busy || !s}
+          >
+            安装桌面图标
+          </button>
+        )}
+      </div>
+      {s?.installed && s.paths.length > 0 && (
+        <p className="mt-1 t-sm text-gray-400">已安装：{s.paths.join('、')}</p>
+      )}
+      {s && !s.installed && s.paths.length > 0 && (
+        <p className="mt-1 t-sm text-amber-600">快捷方式已失效（目标被移动或删除），重新安装即可修复</p>
+      )}
+      {actionError && <p className="mt-1 t-sm text-red-600">{actionError}</p>}
     </div>
   )
 }

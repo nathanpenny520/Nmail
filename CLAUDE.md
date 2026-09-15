@@ -39,7 +39,7 @@ cd ../nmail-site && npm run build               # 官网仓库（独立 git 仓�
 ## 关键决策（勿违背）
 
 1. 只做邮件核心：收发读搜分类归档；**不做**日历/CRM/任务/聊天（docs/PRODUCT_PLAN.md §3.6）；轻量通讯录（自动采集+写信补全）属邮件核心，非 CRM（v0.4 修订）
-2. 跨端优先：不用 OS keyring/DPAPI/托盘；通知走浏览器 Notification API
+2. 跨端优先：不用 OS keyring/DPAPI/托盘；通知走浏览器 Notification API。桌面图标集成（快捷方式/.app/.desktop）按需生成、只写用户目录（2026-09-15 修订，UPDATE_AND_DESKTOP.md）
 3. AI 分类先行，无规则引擎；仅发件人白/黑名单两个零成本集合
 4. 人在回路默认：AI 发送默认必须人工审批；自动模式仅「AI 专属邮箱」默认开启，普通账号手动开且需二次确认（v0.4 修订，边界见 REDESIGN_PLAN §6.6）
 5. 成本控制：规则/集合先行，AI 批量分类（约 20 封/请求），正文截断，全量 ai_logs

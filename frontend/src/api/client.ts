@@ -36,6 +36,10 @@ import type {
   Settings,
   SettingsPayload,
   SystemPaths,
+  DesktopShortcutResp,
+  DesktopShortcutActionResp,
+  UpdateApplyResp,
+  UpdateApplyStartResp,
   UpdateCheckResp,
   UsageStats,
   UserDraft,
@@ -107,6 +111,19 @@ export const api = {
     request<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(payload) }),
   getUpdateCheck: (force: boolean = false) =>
     request<UpdateCheckResp>(`/api/update-check${force ? '?force=true' : ''}`),
+  getUpdateApply: () => request<UpdateApplyResp>('/api/update-apply'),
+  startUpdateApply: () =>
+    request<UpdateApplyStartResp>('/api/update-apply', { method: 'POST' }),
+  restartForUpdate: () =>
+    request<{ ok: boolean; restarting: boolean }>(
+      `/api/update-apply/restart?port=${window.location.port || 8720}`,
+      { method: 'POST' },
+    ),
+  getDesktopShortcut: () => request<DesktopShortcutResp>('/api/desktop-shortcut'),
+  installDesktopShortcut: () =>
+    request<DesktopShortcutActionResp>('/api/desktop-shortcut', { method: 'POST' }),
+  removeDesktopShortcut: () =>
+    request<DesktopShortcutActionResp>('/api/desktop-shortcut', { method: 'DELETE' }),
   getSystemPaths: () => request<SystemPaths>('/api/system/paths'),
   testAI: (payload: AITestPayload) =>
     request<AITestResult>('/api/ai/test', { method: 'POST', body: JSON.stringify(payload) }),
