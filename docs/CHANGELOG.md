@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — Agent 扩展收官 A6-A8 + B1-B3：运行观测/技能层/CLI 全量对齐（REDESIGN_PLAN §20 / AGENT_EXTEND_PLAN 全部落地）
+## b247eae — Agent 扩展收官 A6-A8 + B1-B3：运行观测/技能层/CLI 全量对齐（REDESIGN_PLAN §20 / AGENT_EXTEND_PLAN 全部落地）
 - 用户指示「全部完成」——§20 剩余六项一次收尾；B3 按拍板 3 落地，A7 技能存放按推荐值内置层先行
 - A6+A8 运行观测：`GET /api/ai/agent/runs`（列表）+ `/agent/runs/{id}`（状态/pending/步级 token——聚合 ai_logs 'run {id} step {n}' 行，零新表）；前端 openSession 查最新运行、停在触顶态时恢复「继续」横幅（刷新不再丢续跑入口）
 - A7 技能层：`ai/skills_builtin.py` 四个内置工作流技能（周报摘要/跟进提醒/批量归档策略/报销发票整理——方法论提示词包，零规则匹配不违背决策 3）；系统提示词只注入索引（prompt 缓存友好），新工具 read_skill 按需取全文（工具 29→31）；SCHEDULER_ALLOWED 增 read_skill

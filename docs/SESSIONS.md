@@ -19,7 +19,7 @@
 ### S-0915-1130-Agent扩展收官A6-B3 ✅
 - 目标: 用户指示「全部完成」——AGENT_EXTEND_PLAN 剩余六项一次收尾：A6 运行观测+跨刷新恢复继续入口、A7 内置技能层（read_skill+索引注入，四个内置技能）、A8 步级可观测（并入 runs/{id}）、B1 CLI folders、B2 版本协商 _notice.update、B3 CLI 总管家通道（agent ask/decide/resume）；SKILL.md v1.2.0
 - 范围: backend(app/ai/skills_builtin.py 新增, app/ai/tools.py, app/ai/agent.py, app/api/ai.py, app/api/ext.py, tests) + nmail-cli(cli.py+tests) + frontend(types, api/client.ts, pages/ManagerPage.tsx, openapi/schema 快照) + skills/SKILL.md + docs(REDESIGN_PLAN §20, ARCHITECTURE, CHANGELOG, SESSIONS)
-- 产出: 提交（哈希见 CHANGELOG 回填）——§20 全部条目落地完毕
+- 产出: 提交 b247eae——§20 全部条目落地完毕
 - 验收: pytest 224 全绿（+1）、CLI 契约 13 全绿（+4）、ruff 通过、npm build 通过、快照再生、8720 重启 /api/health ok
 - 遗留: A7 用户自定义技能（数据目录/设置页管理）为后续迭代（拍板 3 明确）；A5/A7 真实模型行为待用户日常观察；PyPI 发包随发版
 - 状态: 已完成（2026-09-15 中午）
