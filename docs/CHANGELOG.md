@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — skills/SKILL.md v1.1.0 打磨（对齐 CLI 实际参数面）+ Agent 扩展方案落档
+## 90f3ece — skills/SKILL.md v1.1.0 打磨（对齐 CLI 实际参数面）+ Agent 扩展方案落档
 - SKILL.md 审计：对照 `nmail_cli/cli.py` 实际参数面逐项核对，P3 成文时文档落后实现——补 6 处缺口：①草稿附件 `--attachment`（create/reply/forward 可重复，P1 端点+CLI 均有而文档未提）②`--cc/--bcc` ③分页 `--limit/--offset` + 「翻页保持原条件只增 offset」纪律 ④`watch --since-id/--account-id/--interval` ⑤`auth status/logout` 入命令清单 ⑥scope↔命令对照表（read/write/send 分工、只读 Key 撞 exit 3 的处理）；新增「参数速查」节 + 发送带附件两阶段示例；version 1.0.0→1.1.0
 - 核对无误未动：exit code 表与 CLI `EXIT_*` 全量一致、安全六条、两阶段唯一规则、正文规范；官网 /docs/agent/ 走 sync-docs 白名单同步 Agent接入指南.md（人类向简介），无需随动
 - docs/AGENT_EXTEND_PLAN.md 新增（deer-flow 2.0 / smolagents 1.27 调研产出，**未执行**）：§1 两仓机制↔Nmail 现状对照（错误回灌/上下文压缩/校验/审批/白名单/流式/审计均已覆盖，勿重复建设）；方向 A 内置总管家 8 项——A1 步数耗尽强制收尾（scheduler 晨报无人值守场景零产出）、A2 final answer 确定性校验闸门、A3 工具结果保头尾截断、A4 同批只读调用并行、A5 `ask_user` 澄清中断（deer-flow 表单协议）、A6 批量任务事件持久化+断线回填、A7 邮件工作流技能包、A8 步级可观测；方向 B 对外 CLI 3 项（folders 命令/版本协商 _notice.update/包装总管家通道缓发）；待拍板 5 项 + 明确不做 4 项（代码沙箱/MCP/向量检索/LangGraph 级框架）

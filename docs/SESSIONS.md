@@ -19,7 +19,7 @@
 ### S-0915-0923-Agent扩展方案与SKILL打磨
 - 目标: 用户指派两项——①打磨 skills/SKILL.md（对照 nmail-cli 实际参数面补缺口，可直接改）②deer-flow/smolagents 调研出的 agent 扩展方向落成方案文档（docs/AGENT_EXTEND_PLAN.md，不动代码）
 - 范围: skills/SKILL.md 重写版 + docs/AGENT_EXTEND_PLAN.md 新增 + docs(CHANGELOG, SESSIONS)；明确避让工作树内并行会话 WIP（scheduler.py/NotificationBell.tsx 晨报通知）与 REDESIGN_PLAN（按 S-0914-2352 先例方案独立成文，落地时再并入 §20）
-- 产出: 提交（哈希见 CHANGELOG 回填）——SKILL.md v1.1.0（6 处缺口+参数速查节，审计记录在 AGENT_EXTEND_PLAN §4）；AGENT_EXTEND_PLAN.md 全文（现状对照/A1-A8/B1-B3/待拍板 5/明确不做 4/两仓参考索引）
+- 产出: 提交 90f3ece——SKILL.md v1.1.0（6 处缺口+参数速查节，审计记录在 AGENT_EXTEND_PLAN §4）；AGENT_EXTEND_PLAN.md 全文（现状对照/A1-A8/B1-B3/待拍板 5/明确不做 4/两仓参考索引）
 - 遗留: 方案全部未执行（用户指派先落方案）；B1/B2 对应的 SKILL.md 后续小节随实施补
 - 状态: 已完成（2026-09-15 上午）
 
