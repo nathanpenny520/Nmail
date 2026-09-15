@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — Agent 扩展 A1-A3：触顶强制小结收尾+完成断言校验+保头尾截断（REDESIGN_PLAN §20 / AGENT_EXTEND_PLAN）
+- 用户拍板触顶行为=「小结+手动继续」（不加自动续段：纯读类循环不占每日动作限额，步数/时间是唯一成本闸，自动续跑无人踩刹车）；方案（deer-flow 2.0/smolagents 1.27 调研）见 docs/AGENT_EXTEND_PLAN.md，拍板与落地记 REDESIGN_PLAN §20
+- A1 触顶强制收尾：`_wrap_up_events` 步数/时间预算耗尽先临时注入收尾指令+禁工具要一段进度小结（指令无论成败弹出；小结 assistant 落库+流式下发）再 paused——scheduler 晨报无人值守跑满步数不再零产出空悬；resume 对触顶暂停注入「用户选择继续」锚点
+- A2 完成断言校验：最终回答声称已发送/已归档/已删除/已移动/已标记/已起草但本 run 无对应工具调用记录（`_attempted_tools` 从 messages 提取，native+JSON 双形态，跨续跑持久）→ 回灌纠正一次让模型改口或说明；二次不符原文放行+末尾系统注记（不静默不阻断）——防幻觉收尾，纠正消息允许「指历史记录」说明，误伤代价仅一次往返
+- A3 保头尾截断：`_feedback_text` 超预算由只保头改为头 60%+尾 25%——邮件线程最新回复在尾部不再丢失
+- 验证：pytest 218 全绿（+6：触顶小结/预算小结/纠正改口/二次警示/判定矩阵/头尾截断，原步数与预算暂停用例更新为 A1 形态）、ruff 通过
+
 ## 90f3ece — skills/SKILL.md v1.1.0 打磨（对齐 CLI 实际参数面）+ Agent 扩展方案落档
 - SKILL.md 审计：对照 `nmail_cli/cli.py` 实际参数面逐项核对，P3 成文时文档落后实现——补 6 处缺口：①草稿附件 `--attachment`（create/reply/forward 可重复，P1 端点+CLI 均有而文档未提）②`--cc/--bcc` ③分页 `--limit/--offset` + 「翻页保持原条件只增 offset」纪律 ④`watch --since-id/--account-id/--interval` ⑤`auth status/logout` 入命令清单 ⑥scope↔命令对照表（read/write/send 分工、只读 Key 撞 exit 3 的处理）；新增「参数速查」节 + 发送带附件两阶段示例；version 1.0.0→1.1.0
 - 核对无误未动：exit code 表与 CLI `EXIT_*` 全量一致、安全六条、两阶段唯一规则、正文规范；官网 /docs/agent/ 走 sync-docs 白名单同步 Agent接入指南.md（人类向简介），无需随动

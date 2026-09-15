@@ -6,7 +6,10 @@
 JSON 降级模式非流式（与 v1 一致）。
 
 循环（§17.2）：时间预算优先（TIME_BUDGET_S，超预算 tool_choice=none 强制文本收尾，
-仍要调工具则暂停），MAX_STEPS 兜底；步数/预算触顶 → paused 事件（前端「继续」续跑）。
+仍要调工具则暂停），MAX_STEPS 兜底；步数/预算触顶 → 先强制一段进度小结再 paused
+（A1，AGENT_EXTEND_PLAN，拍板：小结+手动继续，前端「继续」续跑）。最终回答过完成
+断言校验（A2：声称已完成的写操作在本 run 无工具执行记录 → 回灌纠正一次，仍不符原文
+放行+警示）。工具结果按预算保头尾截断（A3）。
 写类动作遇审批：落 ai_actions pending → run 置 waiting_approval → paused 结束本轮——
 批准/拒绝后经 /api/ai/agent/resume 续跑（拒绝同样回灌让模型改道），刷新/重启可续。
 
@@ -334,7 +337,11 @@ def _feedback_text(result: dict, tool: str = "") -> str:
         text = json.dumps(result, ensure_ascii=False)
     budget = FEEDBACK_BUDGETS.get(tool, FEEDBACK_MAX)
     if len(text) > budget:
-        text = text[:budget] + "…（结果过长已截断，可缩小范围/分批调用重新获取）"
+        # 保头尾截断（AGENT_EXTEND_PLAN A3）：邮件线程的最新回复在尾部，只保头会丢
+        head = int(budget * 0.6)
+        tail = int(budget * 0.25)
+        text = (text[:head] + "…（中间过长已省略）…" + text[-tail:]
+                + "（结果过长已截断，可缩小范围/分批调用重新获取）")
     return text
 
 
@@ -592,6 +599,101 @@ def _maybe_autocompact(state: RunState, base_url: str, model: str, api_key: str 
         _autocompact(state, base_url, model, api_key)
 
 
+# ── A2 最终回答完成断言校验（AGENT_EXTEND_PLAN §2-A2）───────────────
+# 目标：防「没调工具就声称已完成」的幻觉收尾。断言 ↔ 本 run 出现过的工具调用
+# （从 messages 提取，跨审批/步数续跑天然持久）比对；不一致回灌纠正一次，
+# 仍不一致原文放行 + 末尾警示（拍板项 4 推荐值）。纯读断言/历史陈述不拦——
+# 纠正消息允许模型说明「指历史记录」，误伤代价只是一次额外往返。
+
+_COMPLETION_PATTERNS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
+    (re.compile(r"已发送|已发出|已回复|已答复|已转发"), ("send_draft",)),
+    (re.compile(r"已创建草稿|已起草|草稿已创建|草稿已建好"),
+     ("create_draft", "update_draft", "send_draft")),
+    (re.compile(r"已归档"), ("archive_emails",)),
+    (re.compile(r"已移入废纸篓|已删除"), ("trash_emails", "delete_folder")),
+    (re.compile(r"已移动|已移到|已移至"), ("move_emails", "archive_emails")),
+    (re.compile(r"已标为已读|已标记为已读|已标成已读|已标为未读|已加星标|已取消星标|已标星"),
+     ("mark_emails", "star_emails")),
+)
+_JSON_TOOL_RE = re.compile(r'"tool"\s*:\s*"([^"]+)"')
+
+
+def _attempted_tools(state: RunState) -> set[str]:
+    """本 run 内出现过的工具调用名（assistant.tool_calls + JSON 降级协议回显）。"""
+    names: set[str] = set()
+    for m in state.messages:
+        if m.get("role") != "assistant":
+            continue
+        for tc in m.get("tool_calls") or []:
+            name = (tc.get("function") or {}).get("name")
+            if name:
+                names.add(str(name))
+        content = str(m.get("content") or "")
+        if content.startswith("{"):
+            jm = _JSON_TOOL_RE.search(content)
+            if jm:
+                names.add(jm.group(1))
+    return names
+
+
+def _completion_mismatch(state: RunState, text: str) -> str:
+    """最终回答完成断言 ↔ 已尝试工具比对；不一致返回纠正提示，否则空串。"""
+    attempted = _attempted_tools(state)
+    for pattern, tools in _COMPLETION_PATTERNS:
+        if pattern.search(text) and not (attempted & set(tools)):
+            return ("（系统提示：你刚才的回答声称已完成某些操作，但本次运行中没有对应的工具执行记录。"
+                    "如确实未执行，请如实告知用户或先执行再汇报；如指历史记录，请改口说明。"
+                    "不要虚构完成状态。）")
+    return ""
+
+
+# ── A1 触顶强制收尾（AGENT_EXTEND_PLAN §2-A1，拍板：小结+手动继续）──
+
+_WRAP_UP_PROMPT = ("（系统提示：本轮运行预算已到（{reason}），请停止调用任何工具，"
+                   "直接给用户一段简短的中文进度小结：已完成什么、结论是什么；"
+                   "任务未完成时说明还差什么。不要提工具名、参数或内部术语。）")
+
+
+def _wrap_up_events(state: RunState, reason: str, base_url: str, model: str,
+                    api_key: str | None) -> Generator[dict, None, str]:
+    """触顶强制收尾：临时注入收尾指令 + 禁工具要一段小结。
+    yield text_delta（仅原生模式）；return 小结文本（空串=模型仍要调工具/调用失败）。
+    收尾指令是临时消息（无论成败弹出，防续跑时模型困惑）；小结作为 assistant 消息留存。"""
+    state.messages.append({"role": "user", "content": _WRAP_UP_PROMPT.format(reason=reason)})
+    text = ""
+    try:
+        if state.native:
+            parts: list[str] = []
+            try:
+                gen = llm.iter_chat_step(base_url, model, api_key, state.messages,
+                                         tools=None, tool_choice=None)
+                while True:
+                    try:
+                        piece = next(gen)
+                    except StopIteration as stop:
+                        content, calls, _usage, _finish = stop.value
+                        text = "" if calls else (content or "".join(parts))
+                        break
+                    parts.append(piece[1])
+                    yield {"type": "text_delta", "delta": piece[1]}
+            except Exception:  # noqa: BLE001 — 收尾失败不阻断暂停路径
+                text = ""
+        else:
+            try:
+                raw, _usage = llm.chat_messages(base_url, model, api_key, state.messages)
+            except Exception:  # noqa: BLE001
+                raw = ""
+            action = _parse_model_action(raw or "")
+            text = "" if (isinstance(action, dict) and action.get("tool")) else (raw or "")
+    finally:
+        state.messages.pop()
+    text = text.strip()
+    if text:
+        state.messages.append({"role": "assistant", "content": text})
+        yield {"type": "text", "text": text}
+    return text
+
+
 def _approval_reason(state: RunState, tool_name: str, args: dict) -> str:
     """写类动作的审批判定（§6.4/§6.5/§6.6/§17.6-2）。空串=可直接执行（读类恒空）。"""
     spec = T.TOOLS.get(tool_name)
@@ -640,10 +742,24 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
         for t in tool_specs
     ]
     note_pending = False
+    check_used = False  # A2 纠正只给一次，防来回拉扯
     overflow_retry_left = 1  # 溢出自愈只重试一次（§17.8）
     try:
         while True:
             if state.steps >= MAX_STEPS:
+                # A1：触顶不空悬——先强制一段进度小结（拍板：小结+手动继续），再暂停可续
+                summary = ""
+                gen = _wrap_up_events(state, "步数预算", base_url, model, api_key)
+                try:
+                    while True:
+                        try:
+                            piece = next(gen)
+                        except StopIteration as stop:
+                            summary = stop.value
+                            break
+                        yield piece
+                finally:
+                    gen.close()
                 _save_run(state, "paused_max_steps")
                 yield {"type": "paused", "reason": "max_steps", "run_id": state.run_id}
                 yield {"type": "done"}
@@ -730,16 +846,38 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
                     # 二次防御（压测 2026-09-15）：解析失败的工具标记绝不原样下发
                     text = "（模型输出了一段内部调用标记，已拦截、未执行任何操作。请重试或换个说法。）"
                 if text:
+                    # A2 完成断言校验：声称已完成但本 run 无对应工具调用 → 回灌纠正一次
+                    if not check_used:
+                        hint = _completion_mismatch(state, text)
+                        if hint:
+                            check_used = True
+                            state.messages.append({"role": "assistant", "content": text})
+                            state.messages.append({"role": "user", "content": hint})
+                            _save_run(state, "running")
+                            continue
+                    # 二次仍不一致：原文放行 + 警示行（AGENT_EXTEND_PLAN 拍板项 4 推荐值）
+                    shown = text
+                    if check_used and _completion_mismatch(state, text):
+                        shown = text + "\n\n（系统注记：以上提到的操作在本轮运行中没有对应的执行记录，请注意核实。）"
                     # 最终回答也要落 messages（run 记录完整性；JSON 降级路径同样回显）
                     state.messages.append({"role": "assistant", "content": text})
-                _save_run(state, "done")
-                if text:
-                    yield {"type": "text", "text": text}  # 全量事件（旧前端/对外 API 兼容）
-                yield {"type": "done"}
-                return
+                    _save_run(state, "done")
+                    yield {"type": "text", "text": shown}  # 全量事件（旧前端/对外 API 兼容）
+                    yield {"type": "done"}
+                    return
 
             if force_text:
-                # 预算耗尽模型仍要调工具 → 暂停，等用户点继续（新一轮预算）
+                # 预算耗尽模型仍要调工具 → A1 强制小结后暂停，等用户点继续（新一轮预算）
+                gen = _wrap_up_events(state, "时间预算", base_url, model, api_key)
+                try:
+                    while True:
+                        try:
+                            piece = next(gen)
+                        except StopIteration:
+                            break
+                        yield piece
+                finally:
+                    gen.close()
                 _save_run(state, "paused_budget")
                 yield {"type": "paused", "reason": "budget", "run_id": state.run_id}
                 yield {"type": "done"}
@@ -986,6 +1124,11 @@ def resume_stream(run_id: int) -> Generator[dict, None, None]:
                         "content": "（同批并行调用：因等待审批未执行，已跳过。如仍需要请重新调用，会再走审批。）",
                     })
             break
+    if resuming_from in ("paused_max_steps", "paused_budget"):
+        # A1 续跑锚点：小结后继续，给模型明确指令而非只靠隐式上下文
+        state.messages.append({"role": "user",
+                               "content": "（系统提示：你刚给出了进度小结，用户选择继续。"
+                                          "请在已有进展上继续完成任务；已全部完成则直接说明。）"})
     yield from _loop(state)
 
 

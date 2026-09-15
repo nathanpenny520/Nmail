@@ -170,7 +170,8 @@ def test_reject_feeds_back_and_run_completes(monkeypatch):
 
 
 def test_max_steps_pause_and_continue(monkeypatch):
-    """步数兜底触顶 → paused_max_steps；续跑授予新的一段步数（可再次暂停）。"""
+    """步数兜底触顶 → paused_max_steps；续跑授予新的一段步数（可再次暂停）。
+    打桩脚本最后一格是「仍要调工具」形态 → 无小结，行为与 A1 前一致（回归）。"""
     aid = _aid()
     monkeypatch.setattr(agent, "MAX_STEPS", 2)
     _native_script(monkeypatch, [
@@ -189,8 +190,38 @@ def test_max_steps_pause_and_continue(monkeypatch):
     assert _collect(events2, "paused")[0]["reason"] == "max_steps"
 
 
+def test_max_steps_wrapup_summary_before_pause(monkeypatch):
+    """A1 触顶收尾：步数耗尽先强制小结（assistant 落 messages、text 事件下发）
+    再 paused_max_steps；小结前注入的收尾指令是临时消息（不留在历史）。"""
+    aid = _aid()
+    monkeypatch.setattr(agent, "MAX_STEPS", 2)
+    rec = _native_script(monkeypatch, [
+        ([], [{"id": "c1", "name": "digest_stats", "arguments": {}}]),
+        ([], [{"id": "c2", "name": "digest_stats", "arguments": {}}]),
+        (["小结：已查两轮概况，收件箱无异常。"], []),  # 第 3 次调用=触顶收尾小结
+        ([], [{"id": "c4", "name": "digest_stats", "arguments": {}}]),
+        ([], [{"id": "c5", "name": "digest_stats", "arguments": {}}]),
+    ])
+    events = list(agent.run_stream("概况", None, None, [aid], "approval", None))
+    paused = _collect(events, "paused")
+    assert paused and paused[0]["reason"] == "max_steps"
+    assert _collect(events, "text")[-1]["text"].startswith("小结：已查两轮概况")
+    run_id = events[0]["run_id"]
+    assert _run_row(run_id)["status"] == "paused_max_steps"
+    messages = json.loads(_run_row(run_id)["messages_json"])
+    assert messages[-1]["role"] == "assistant" and "小结" in messages[-1]["content"]
+    assert not any("预算已到" in str(m.get("content")) for m in messages)  # 收尾指令已弹出
+
+    # 续跑：新的一段步数 + 继续锚点注入 → 再跑两步后再次触顶（无小结形态，脚本钳位）
+    events2 = list(agent.resume_stream(run_id))
+    assert len(_collect(events2, "tool_result")) == 2
+    assert _collect(events2, "paused")[0]["reason"] == "max_steps"
+    messages2 = json.loads(_run_row(run_id)["messages_json"])
+    assert any("用户选择继续" in str(m.get("content")) for m in messages2)
+
+
 def test_budget_forces_text_then_pauses_if_ignored(monkeypatch):
-    """预算耗尽：先 tool_choice=none 强制收尾；模型仍要调工具 → paused_budget；
+    """预算耗尽：先 tool_choice=none 强制收尾；模型仍要调工具 → A1 小结后 paused_budget；
     续跑（预算重置）后正常文本收尾。"""
     aid = _aid()
     rec = _native_script(monkeypatch, [
@@ -205,15 +236,84 @@ def test_budget_forces_text_then_pauses_if_ignored(monkeypatch):
     state.run_id = agent._create_run(state)
     events = list(agent._loop(state))
     assert rec["tool_choices"][0] == "none"  # 预算收尾：禁用工具
+    assert rec["tool_choices"][1] is None    # A1 收尾小结：禁工具的普通调用
+    assert _collect(events, "text")[-1]["text"].startswith("预算到点了")  # 小结已下发
     paused = _collect(events, "paused")
-    assert paused and paused[0]["reason"] == "budget"  # 模型不理会 → 暂停
+    assert paused and paused[0]["reason"] == "budget"  # 小结后仍暂停可续
     run_id = state.run_id
     assert _run_row(run_id)["status"] == "paused_budget"
 
     events2 = list(agent.resume_stream(run_id))
-    assert rec["tool_choices"][1] is None  # 续跑=新预算，不再强制
+    assert rec["tool_choices"][2] is None  # 续跑=新预算，不再强制
     assert _collect(events2, "text")[-1]["text"].startswith("预算到点了")
     assert _run_row(run_id)["status"] == "done"
+
+
+def test_final_answer_mismatch_gets_corrected(monkeypatch):
+    """A2 完成断言校验：本 run 零工具调用却声称「已发送」→ 回灌纠正一次，
+    模型改口后正常收尾（无警示行、无虚构）。"""
+    aid = _aid()
+    _native_script(monkeypatch, [
+        (["已发送给 boss@x.com 了。"], []),
+        (["刚才那封还没有发送，需要我现在起草吗？"], []),
+    ])
+    events = list(agent.run_stream("帮我发给老板", None, None, [aid], "approval", None))
+    texts = [e["text"] for e in _collect(events, "text")]
+    assert texts[-1].startswith("刚才那封还没有发送")  # 改口后的回答
+    assert "系统注记" not in texts[-1]  # 一次纠正即改正 → 不加警示
+    row = _run_row(events[0]["run_id"])
+    assert row["status"] == "done"
+    messages = json.loads(row["messages_json"])
+    assert any("没有对应的工具执行记录" in str(m.get("content")) for m in messages)  # 纠正已回灌
+    assert events[-1]["type"] == "done"
+
+
+def test_final_answer_mismatch_twice_warns_not_blocks(monkeypatch):
+    """A2 二次仍不一致：原文放行 + 末尾警示行（不静默、不阻断，拍板项 4 推荐值）。"""
+    aid = _aid()
+    _native_script(monkeypatch, [
+        (["已发送给 boss@x.com 了。"], []),
+    ])
+    events = list(agent.run_stream("帮我发给老板", None, None, [aid], "approval", None))
+    final = _collect(events, "text")[-1]["text"]
+    assert final.startswith("已发送给")  # 原文保留
+    assert "没有对应的执行记录" in final  # 警示行附加
+    assert _run_row(events[0]["run_id"])["status"] == "done"
+
+
+def test_completion_mismatch_matrix():
+    """A2 判定矩阵：有本 run 工具调用记录的断言放行；无关断言/否定句不拦。"""
+    aid = _aid()
+    state = agent.RunState(session_id=None, account_ids=[aid], mode="auto",
+                           profile_id=None, origin="ui")
+    # 空历史：发送断言 → 不一致
+    assert agent._completion_mismatch(state, "已发送给 a@b.com") != ""
+    # 有 send_draft 调用记录（native 形态）→ 放行
+    state.messages = [{"role": "assistant", "content": "",
+                       "tool_calls": [{"id": "c1", "type": "function",
+                                       "function": {"name": "send_draft", "arguments": "{}"}}]}]
+    assert agent._completion_mismatch(state, "已发送给 a@b.com") == ""
+    # JSON 降级协议回显形态同样被识别
+    state.messages = [{"role": "assistant", "content": '{"tool": "send_draft", "args": {}}'}]
+    assert agent._completion_mismatch(state, "已回复对方了") == ""
+    # 无关断言（只读类动词）不拦
+    assert agent._completion_mismatch(state, "搜到了 3 封邮件") == ""
+    # 归档断言只有搜索记录 → 不一致
+    state.messages = [{"role": "assistant", "content": "",
+                       "tool_calls": [{"id": "c2", "type": "function",
+                                       "function": {"name": "search_emails", "arguments": "{}"}}]}]
+    assert agent._completion_mismatch(state, "已归档 5 封") != ""
+
+
+def test_feedback_truncation_keeps_head_and_tail():
+    """A3 保头尾截断：超预算时开头与最新（尾部）内容都在，中间标注省略。"""
+    lines = [{"id": i, "subject": f"标题{'长' * 40}{i}", "from": "x@y.com",
+              "date": "2026-09-15", "unread": False} for i in range(30)]
+    text = agent._feedback_text({"emails": lines, "count": 30}, "search_emails")
+    assert len(text) < agent.FEEDBACK_MAX + 100
+    assert text.startswith("{\"count\"")  # 头部保留
+    assert "id=29" in text                # 尾部（最新邮件）保留
+    assert "中间过长已省略" in text and "重新获取" in text
 
 
 def test_native_json_text_fallback_parse(monkeypatch):

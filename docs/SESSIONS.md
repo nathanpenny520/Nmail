@@ -16,6 +16,14 @@
 
 ## 进行中
 
+### S-0915-1030-Agent扩展A1-A3
+- 目标: AGENT_EXTEND_PLAN 快赢包落地——A1 步数/预算触顶强制小结收尾（用户拍板：小结+手动继续，不加自动续段）、A2 final answer 确定性校验闸门（防无执行记录的完成断言幻觉，按推荐值：二次不一致原文放行+警示行）、A3 工具结果保头尾截断
+- 范围: backend(app/ai/agent.py, tests/test_agent_loop.py) + docs(REDESIGN_PLAN §20 新增, CHANGELOG, SESSIONS)；与晨报会话（scheduler/digest/前端）零文件重叠
+- 产出: 提交（哈希见 CHANGELOG 回填）——_wrap_up_events（临时收尾指令+禁工具小结，两条触顶路径共用；resume 注入继续锚点）、_COMPLETION_PATTERNS×_attempted_tools（messages 提取跨续跑持久；纠正一次→警示放行）、_feedback_text 头 60%+尾 25%
+- 验收: pytest 218 全绿（+6，原步数/预算用例更新为 A1 形态）、ruff 通过、8720 已重启 /api/health ok；触顶/幻觉断言为低频路径，真实模型行为待用户日常任务观察
+- 遗留: 无（下一步 A4 只读并行 → A5 ask_user，见 AGENT_EXTEND_PLAN §5）
+- 状态: 已完成（2026-09-15 上午）
+
 ### S-0915-0923-Agent扩展方案与SKILL打磨
 - 目标: 用户指派两项——①打磨 skills/SKILL.md（对照 nmail-cli 实际参数面补缺口，可直接改）②deer-flow/smolagents 调研出的 agent 扩展方向落成方案文档（docs/AGENT_EXTEND_PLAN.md，不动代码）
 - 范围: skills/SKILL.md 重写版 + docs/AGENT_EXTEND_PLAN.md 新增 + docs(CHANGELOG, SESSIONS)；明确避让工作树内并行会话 WIP（scheduler.py/NotificationBell.tsx 晨报通知）与 REDESIGN_PLAN（按 S-0914-2352 先例方案独立成文，落地时再并入 §20）
