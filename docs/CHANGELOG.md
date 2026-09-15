@@ -3,6 +3,18 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交3 — fix: 冻结单文件缺 `__main__` 入口保护，静默退出（brew 渠道不可用根因）
+- cli.py 补 `if __name__ == "__main__": main()`——PyInstaller 冻结单文件以本文件为入口脚本执行，此前无任何调用点，二进制加载完 stdlib 即 exit 0（无输出无报错），Homebrew/Release 分发的 macOS/Linux 二进制自发布以来从未真正运行过；源码（run.py）与 PyPI console script 入口不受影响
+- 排障记录：用户 brew 安装后 `nmail --version` 静默无输出；逐步排除法——同机构建 hello-world 冻结二进制正常（排除 PyInstaller 与 macOS 27 兼容性）→ 分步导入诊断二进制正常（排除依赖）→ 唯差异为入口脚本本身 → 发现缺 `__main__` 保护
+- 验证：重打包实测 `--version` 输出 `Nmail 0.4.1`（Homebrew formula 测试断言同样通过）；ruff 通过、pytest 247 全绿
+- 会话：S-0915-2305-brew安装排查
+
+## 待提交4 — docs: Homebrew 安装命令改 tap 全名 + 补 `brew trust` 步骤
+- 实测发现两处安装坑：①homebrew/core 早已收录 **同名但完全无关** 的 nmail（d99kris 的 C++ 终端邮箱客户端，当前 5.15.8）——裸 `brew install nmail` 经 API 命中 core 公式，装上的是别人的软件（用户本机已实际误装）②Homebrew 7.0 起第三方 tap 默认不信任，须先 `brew trust nathanpenny520/nmail`，否则公式拒载（tap 还会被判 invalid 自动删库，报错误导性极强）
+- docs/INSTALL.md：安装表与 ③ Homebrew 节命令改为 `brew tap … && brew trust nathanpenny520/nmail && brew install nathanpenny520/nmail/nmail`（tap 全名限定，避开 core 撞名）；升级命令同步改全名
+- 后续建议（未实施，待拍板）：tap 公式可改名 `nmail-app`（与 PyPI 包名一致）彻底规避撞名心智负担，涉及 release.sh tap 同步与 CI，下轮处理
+- 会话：S-0915-2305-brew安装排查
+
 ## 待提交2 — feat: 应用内「立即更新」与一键重启（binary/pip 渠道自更新）
 - core/update_apply.py 更新执行层：Release 资产流式下载（进度节流落 KV）→ SHA256 校验（GitHub 资产 digest）→ **换身**（运行中的可执行文件可 rename 不可覆写：当前二进制 rename 为 *.old 后原路径原子落位新文件，旧进程跑旧 inode 不受影响，失败自动回滚还原）→ `ready`；pip 渠道走 `{sys.executable} -m pip install --upgrade nmail-app` 原地升级
 - `POST /api/update-apply` 启动后台更新（进行中幂等）、`GET /api/update-apply` 渠道能力+进度状态、`POST /api/update-apply/restart?port=` 一键重启：新进程 `--wait-port` 接管同一端口后旧进程退出，浏览器页面地址不变

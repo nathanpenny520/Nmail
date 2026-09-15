@@ -8,7 +8,7 @@ Nmail 是本地优先的单机应用：任何安装方式都只在本机跑一�
 |---|---|---|---|
 | ① 单文件可执行 | 大多数用户（推荐） | Win / macOS / Linux | 到 [Releases](https://github.com/nathanpenny520/Nmail/releases) 下载，双击运行 |
 | ② winget | Windows 想要免维护升级 | Windows | `winget install nathanpenny520.Nmail` |
-| ③ Homebrew | macOS (Apple Silicon) | macOS | `brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail && brew install nmail` |
+| ③ Homebrew | macOS (Apple Silicon) | macOS | `brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail && brew trust nathanpenny520/nmail && brew install nathanpenny520/nmail/nmail` |
 | ④ uvx / pip | 命令行熟手，不想手动换文件 | 全平台 | `uvx --from nmail-app nmail` |
 | ⑤ 源码开发 | 开发者 | 全平台 | 见 [README 开发模式](../README.zh-CN.md#开发模式) |
 
@@ -44,8 +44,11 @@ winget uninstall nathanpenny520.Nmail # 卸载
 
 ```bash
 brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail
-brew install nmail          # 升级: brew upgrade nmail；卸载: brew uninstall nmail
+brew trust nathanpenny520/nmail            # Homebrew 7 起第三方 tap 须显式信任
+brew install nathanpenny520/nmail/nmail    # 升级: brew upgrade nathanpenny520/nmail/nmail；卸载: brew uninstall nathanpenny520/nmail/nmail
 ```
+
+> **为什么必须用带 tap 前缀的全名**：homebrew/core 里有 **同名但无关** 的 `nmail`（另一个终端邮箱客户端项目），裸 `brew install nmail` 装到的是它。信任步骤同理——不信任时第三方公式拒绝加载，tap 命令也会报「invalid syntax」并删除克隆（报错误导性强，实为信任问题）。
 
 Linux 用户请用方式 ④（tap 不分发 Linux 二进制）。
 
@@ -75,7 +78,7 @@ pip install nmail-app                # 升级: pip install -U nmail-app；卸载
 ## 更新
 
 - **应用内检查**（默认开启，设置-通用 可关）：每 24 小时向 GitHub 做一次匿名版本号对比（请求只带 UA，不含任何本机数据），发现新版本会在通知中心提醒；设置页可手动「检查更新」。
-- **升级命令**：`winget upgrade nathanpenny520.Nmail` ｜ `brew upgrade nmail` ｜ `uv tool upgrade nmail-app` ｜ uvx：`uvx --refresh --from nmail-app nmail`（uvx 首次运行取最新版、之后沿用缓存版本，新发布不会自动跟上，`--refresh` 刷新缓存即取最新）｜ 单文件：下载新版覆盖旧文件。
+- **升级命令**：`winget upgrade nathanpenny520.Nmail` ｜ `brew upgrade nathanpenny520/nmail/nmail` ｜ `uv tool upgrade nmail-app` ｜ uvx：`uvx --refresh --from nmail-app nmail`（uvx 首次运行取最新版、之后沿用缓存版本，新发布不会自动跟上，`--refresh` 刷新缓存即取最新）｜ 单文件：下载新版覆盖旧文件。
 - **升级不丢数据**：邮件库、密钥、配置在独立数据目录（见下），新版本首次启动自动执行数据库迁移。
 
 ## 数据位置、备份与卸载

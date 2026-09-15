@@ -16,6 +16,15 @@
 
 ## 进行中
 
+### S-0915-2305-brew安装排查 ✅
+- 目标: 用户 brew 安装报错排查——连环挖出三个问题：①Homebrew 7.0 起第三方 tap 须 `brew trust`（tap 报「invalid syntax」且自动删克隆，报错误导性极强）②裸 `brew install nmail` 经 API 命中 homebrew/core **同名无关公式**（d99kris 的 C++ 终端邮箱 5.15.8），用户本机已实际误装并卸载替换 ③tap 0.4.1 二进制 `--version`/启动全部静默 exit 0
+- 排障与根因: 逐步排除法锁定 ③ 的根因——hello-world 冻结二进制正常（排除 PyInstaller/macOS 27 兼容）→ 分步导入诊断二进制正常（排除依赖）→ 唯差异为入口脚本：**cli.py 缺 `if __name__ == "__main__":` 保护**，PyInstaller 入口脚本加载完即退出，发布版 macOS/Linux 二进制从未真正运行过
+- 范围: backend(app/cli.py 一行守卫) + docs(INSTALL.md brew 命令改 tap 全名+trust 步骤, CHANGELOG, SESSIONS) + 独立仓 homebrew-nmail（README 补 trust 与全名安装）
+- 产出: 提交（哈希见 CHANGELOG 待提交3/4）——①cli.py 补 `__main__` 守卫 ②INSTALL.md 两处安装命令+升级命令改 `nathanpenny520/nmail/nmail` 全名并加 trust 与撞名说明 ③homebrew-nmail README 同步
+- 验证: 重打包 `--version` 输出 `Nmail 0.4.1`（formula 测试断言同口径）；ruff 通过；pytest 247 全绿；本机 tap 已信任、公式可载
+- 遗留: ①brew 渠道实际可用需下个 release（0.4.1 资产即坏，修复随 0.4.2）②tap 公式改名 `nmail-app` 彻底避撞名（涉 release.sh+CI，待用户拍板）③homebrew core 的 nmail 撞名无法绕过——文档口径已固定为全名安装 ④误装的 core nmail 及其依赖（libmagic/ncurses/xapian）本机待清（autoremove）
+- 时间: 2026-09-15 23:05 开工，23:20 完成
+
 ### S-0915-2225-更新与桌面图标
 - 目标: 用户两项拍板落地——①应用内更新：检查到新版本后台静默下载+换身（binary/pip 渠道），提示「重启即更新，下次打开自动生效」，设置页可关（auto_update_enabled 默认开）+「立即更新/立即重启」按钮；brew/winget/uvx 渠道展示升级命令不自换身 ②每种安装方式都有桌面图标：设置页一键安装（Win .lnk / mac Nmail.app / Linux .desktop）+ `nmail install-shortcut` 子命令 + cli 单实例探测 + `--wait-port` 重启参数；发版 CI 追加 Nmail.app.zip 资产（用户已同意）
 - 范围: backend(app/core/channel.py 新增, core/desktop.py 新增, core/update_apply.py 新增, cli.py, api/system.py, api/settings.py, main.py, scheduler.py, nmail.spec, backend/app/assets/ 新增) + frontend(SettingsPage, types, client, Layout 浮条, openapi 快照) + .github/workflows/release.yml + scripts/gen_icons.py + docs(UPDATE_AND_DESKTOP 新增, INSTALL, ARCHITECTURE, CHANGELOG, SESSIONS) + CLAUDE.md 决策#2 修订

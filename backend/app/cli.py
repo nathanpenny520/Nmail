@@ -139,3 +139,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # 直接传 app 对象而非导入字符串：PyInstaller 冻结环境里字符串导入不可靠
     uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info")
+
+
+if __name__ == "__main__":  # 冻结单文件的入口即本文件，缺此保护则加载完即静默退出
+    main()
