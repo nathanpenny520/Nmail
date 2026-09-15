@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 5638375 — 测试基建：前端 Vitest+RTL 首批用例挂入 build 门禁（审计 B1/B3）
+- ExtApiSection 8 用例：密钥默认遮蔽/眼睛显隐/吊销确认与取消/重置/创建 payload（trimmed+默认 read+空上限=null）/总开关（不携带日志开关字段，后端保持原值）——对外 API 管理面交互语义固化
+- `npm run build` 链路增 vitest run（字号 lint → vitest → tsc → vite build）；新增 npm test / test:watch；vite.config 增 test 段（jsdom + globals + setup）
+
+## 7a74836 — 文档：数据目录禁入云盘同步范围警示（审计 A2/A3 收尾）
+- A2 密钥面扫描零发现：无 print/logger 泄漏点；api_calls 仅存 key_id/method/path/status；ai_actions params 为邮件操作参数；AI 写信 HTML 预览后端已消毒（sanitize_outgoing_html）；前端唯一 dangerouslySetInnerHTML 消费消毒后 HTML；react-markdown 未启 rehype-raw
+- A3 SQL 注入扫描零发现：8 处 f-string 拼接全为白名单列名/占位符模式，值一律参数化
+
 ## 3621831 — 安全加固：公网隧道管理面拦截（CF-* 边缘头 403，审计 A1）
 - 审计背景：文档推荐的 cloudflared 公网隧道默认把转发请求的 Host 重写为 origin 地址、curl 类客户端不带 Origin——Host/Origin 两道本机校验双双失效，管理面明文回显端点（/api/accounts、/api/extkeys）经公网域名无需任何 Key 即可达（本机探针实证；方案与证据链在 personal-data/审计方案-2026-09-15.md，不入库）
 - 修复（main.py 来源守卫第三层）：非 `/api/ext/*` 请求携带 CF-* 头（Cloudflare 边缘特征，cloudflared 原样转发）一律 403——SSH 隧道（无附加头）与 Tailscale serve（仅 X-Forwarded-*）不受影响；`/api/ext/*` 在守卫之前已放行，持 Key 公网调用不变

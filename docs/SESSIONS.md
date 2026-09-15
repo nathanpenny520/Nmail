@@ -16,11 +16,14 @@
 
 ## 进行中
 
-### S-0915-1420-安全审计修补
+### S-0915-1420-安全审计修补 ✅
 - 目标: 四项审计短板的 A+B 阶段修补——A1 隧道管理面暴露修复（CF-* 边缘头拒绝）+ A2 密钥面加固（日志泄漏/XSS 链路扫描）+ A3 SQL 拼接抽查 + B 测试基建（前端 Vitest 首批冒烟、后端覆盖率报告）
-- 范围: backend(app/main.py, tests/test_source_guard.py) + frontend(测试基建: package.json, vite.config, 首批组件测试) + docs(隐私与安全, 对外API使用指南, ARCHITECTURE, CHANGELOG, SESSIONS)
+- 范围: backend(app/main.py, tests/test_source_guard.py, tests/test_agent_loop.py) + frontend(测试基建: package.json, vite.config, 首批组件测试) + docs(隐私与安全, 对外API使用指南, ARCHITECTURE, CHANGELOG, SESSIONS)
 - 方案: personal-data/审计方案-2026-09-15.md（不入库——公开仓库不发布未修补漏洞细节；用户已确认范围 A+B、修后允许 quick tunnel 实测、代码级修复取向）
-- 状态: 进行中（2026-09-15 下午，等并行会话 S-0915-1130 收官后开工）
+- 产出: 提交 3621831（A1 CF-* 管理面拦截+4 用例+三层校验文档）、7a74836（A2/A3 收尾警示）、5638375（B1/B3 Vitest 基建+ExtApiSection 8 用例挂入 build 门禁）
+- 验收: pytest 228 全绿（+4）、ruff app 通过、npm build（字号→vitest→tsc→vite）通过、8720 重启后本地探针（CF 头 403 / X-Forwarded 200 / ext 200）、真实 quick tunnel 实测（公网访问 /api/accounts·extkeys·profiles 全 403、ext health 200、SPA 静态 403，测后即关）
+- 遗留: C 阶段大文件拆分未做（用户确认本轮范围 A+B）；覆盖率报告在 personal-data/覆盖率报告-2026-09-15.md（总 64%，建议补 llm/scheduler/sync/pipeline）；后端进程已由本会话重启为 uvicorn 直启（替换原 run.py 进程）；A2 发现的 4 处 tests/ 既有 ruff 项（F841/SIM117/B017/SIM300）未清——不在 CLAUDE.md 门禁口径，留给后续
+- 状态: 已完成（2026-09-15 下午）
 
 ### S-0915-1130-Agent扩展收官A6-B3 ✅
 - 目标: 用户指示「全部完成」——AGENT_EXTEND_PLAN 剩余六项一次收尾：A6 运行观测+跨刷新恢复继续入口、A7 内置技能层（read_skill+索引注入，四个内置技能）、A8 步级可观测（并入 runs/{id}）、B1 CLI folders、B2 版本协商 _notice.update、B3 CLI 总管家通道（agent ask/decide/resume）；SKILL.md v1.2.0
