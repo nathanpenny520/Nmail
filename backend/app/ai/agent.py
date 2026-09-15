@@ -909,6 +909,22 @@ def resume_stream(run_id: int) -> Generator[dict, None, None]:
             yield {"type": "done"}
             return
         state.pending = None
+    # 配对补全（压测 2026-09-15 发现）：审批暂停落在并行调用批中间时，同批未执行的
+    # call 没有 tool 回应——OpenAI 兼容端点严格校验 tool_calls 逐 id 回应，缺一个
+    # 即 400（deepseek 实测）。续跑前对暂停批里未回应的 call 补跳过说明，模型可
+    # 重新发起（仍走全部门控）。预算暂停的批在追加前即被丢弃，天然无此问题。
+    answered = {m.get("tool_call_id") for m in state.messages if m.get("role") == "tool"}
+    for m in reversed(state.messages):
+        tcs = m.get("tool_calls") or []
+        if tcs:
+            for tc in tcs:
+                tid = tc.get("id")
+                if tid and tid not in answered:
+                    state.messages.append({
+                        "role": "tool", "tool_call_id": tid,
+                        "content": "（同批并行调用：因等待审批未执行，已跳过。如仍需要请重新调用，会再走审批。）",
+                    })
+            break
     yield from _loop(state)
 
 

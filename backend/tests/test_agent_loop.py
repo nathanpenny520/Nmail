@@ -122,6 +122,33 @@ def test_native_approval_pause_then_resume(monkeypatch):
     assert "draft_id" in tool_msg["content"]
 
 
+def test_parallel_calls_approval_resume_fills_siblings(monkeypatch):
+    """压测回归（2026-09-15）：审批暂停落在并行调用批中间——同批未执行的 call 续跑时
+    必须补 tool 回应，否则 OpenAI 兼容端点 400（tool_calls 须逐 id 回应，deepseek 实测）。"""
+    aid = _aid()
+    eid = _seed_email(aid, 71, "待整理")
+    _native_script(monkeypatch, [
+        ([], [{"id": "c_del", "name": "star_emails", "arguments": {"ids": [eid], "star": True}},
+              {"id": "c_skip", "name": "digest_stats", "arguments": {}}]),
+        (["好的，已按批准结果收尾。"], []),
+    ])
+    events = list(agent.run_stream("并行批", None, None, [aid], "approval", None))
+    approvals = _collect(events, "approval_required")
+    assert approvals and approvals[0]["call_id"] == "c_del"  # 批里第一个写类出卡即暂停
+    run_id = events[0]["run_id"]
+    agent.execute_action(approvals[0]["action_id"], "approve")
+
+    events2 = list(agent.resume_stream(run_id))
+    assert events2[-1]["type"] == "done" and _collect(events2, "error") == []
+    messages = json.loads(_run_row(run_id)["messages_json"])
+    tool_ids = [m.get("tool_call_id") for m in messages if m.get("role") == "tool"]
+    assert "c_del" in tool_ids and "c_skip" in tool_ids  # 同批 sibling 也被回应
+    skip = next(m for m in messages if m.get("tool_call_id") == "c_skip")
+    assert "跳过" in skip["content"]
+    call_ids = {tc["id"] for m in messages for tc in (m.get("tool_calls") or [])}
+    assert call_ids == set(tool_ids)  # 配对完整：每个 call 恰有回应
+
+
 def test_reject_feeds_back_and_run_completes(monkeypatch):
     """拒绝续跑：拒绝原因回灌（模型改道），最终 run 置 done 而非卡死。"""
     aid = _aid()

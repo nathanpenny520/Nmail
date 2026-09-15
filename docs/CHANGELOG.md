@@ -55,6 +55,12 @@
 - 数据库 v23：chat_sessions.memory_json、agent_runs.archived_json/summary_json；AI 档案 API/设置页新增 context_window（0=恢复默认）
 - 验证：pytest 188 全绿（+12 专项：估算器/折叠边界/纪要/摘要解析/记忆读写/分工具预算/循环级 AutoCompact/溢出自愈/记忆注入）、ruff 通过、npm build（tsc+字号门禁）通过；8720 重启（v23 迁移上真库）后真实 e2e——context_window 临时档案往返零残留、DeepSeek 真实两轮对话：台账即时落 memory_json、第二轮传干扰 history 仍凭服务端历史正确复述首轮问答、system 尾部确认注入「# 会话记忆」块；openapi/schema 快照再生
 
+## 待提交 — fix: Agent 并行调用批遇审批暂停后续跑 400（压测发现）
+- 用户压测任务 4 实测打出：模型并行发两个工具调用（丢弃草稿+重写草稿），第一个写类出审批卡即暂停——同批未执行的 call 没有 tool 回应；批准续跑只回灌了批准的那个，DeepSeek 严格校验 tool_calls 逐 id 回应，缺一即 400（"insufficient tool messages following tool_calls message"）
+- 修复（agent.py resume_stream）：续跑前扫描暂停批（最后一个带 tool_calls 的 assistant），对未回应的 call 逐个补「因等待审批未执行已跳过，如仍需要请重新调用」的 tool 回应——模型可重新发起且仍走全部门控；预算暂停的批在追加 messages 前即被丢弃，天然无此问题
+- 回归：test_parallel_calls_approval_resume_fills_siblings（并行批出卡→批准→续跑 sibling 补回应→配对完整断言）
+- 验证：pytest 205 全绿、ruff 通过；8720 重启加载修复
+
 ## df9c86b — Agent 修复与简化：用户提问落库+极简过程行+提示词防猜账号
 - 用户实测反馈三连修（8721 旧标签页/旧 bundle 造成的混淆一并厘清）：①「对话历史只剩 AI 的」——agent 流从 P6 起从不落库用户提问（仅 chat-manager 流落），刷新/重开后只剩 AI 内容且会话永远叫「新对话」：agent_stream 端点在流启动前 `require_session`+`ai_config_or_400` 后 `append_message(user)`（标题自动生成顺带生效）；②「审批内容不见了」——审批暂停轮的 segments 其实已落库，是旧 bundle 渲染不出（见下使用提示），另把该轮 content 兜底文案保留；③「写完草稿要有总结」——新代码批准/拒绝后自动续跑由模型收尾总结，旧实例/旧页面无此行为
 - 过程展示极简化（Claude 式单行）：ProcessBlock 去边框块——运行中=「正在执行…（已 N 步）」spinner 一行、待审批=琥珀「待审批 · 已执行 N 步」、有失败=红色「N 步 · M 步失败」、全部成功=淡灰「已执行 N 步」；点击才展开步骤明细，默认不占版面
