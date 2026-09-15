@@ -1151,7 +1151,31 @@ export interface paths {
         get: operations["agent_actions_api_ai_agent_actions_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Agent Actions Clear
+         * @description 批量清理操作记录：scope=old（90 天前，已发送审计保留）/failed（失败与拒绝）/all（全部）。
+         */
+        delete: operations["agent_actions_clear_api_ai_agent_actions_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/agent/actions/{action_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Agent Action Delete
+         * @description 删除单条操作记录（历史管理 §18.3：纯审计行删除，与撤销无关）。
+         */
+        delete: operations["agent_action_delete_api_ai_agent_actions__action_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2030,8 +2054,12 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Revoke Key */
-        delete: operations["revoke_key_api_extkeys__key_id__delete"];
+        /**
+         * Delete Key
+         * @description 两段语义：活跃行 DELETE=吊销（软删，行保留供调用日志对账）；已吊销行再删
+         *     =彻底删除记录（调用日志该 key 回退显示「已删」，行内不再占列表）。
+         */
+        delete: operations["delete_key_api_extkeys__key_id__delete"];
         options?: never;
         head?: never;
         /** Update Key */
@@ -5026,6 +5054,72 @@ export interface operations {
             };
         };
     };
+    agent_actions_clear_api_ai_agent_actions_delete: {
+        parameters: {
+            query?: {
+                scope?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_action_delete_api_ai_agent_actions__action_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     organize_api_ai_organize_post: {
         parameters: {
             query?: never;
@@ -6868,7 +6962,7 @@ export interface operations {
             };
         };
     };
-    revoke_key_api_extkeys__key_id__delete: {
+    delete_key_api_extkeys__key_id__delete: {
         parameters: {
             query?: never;
             header?: never;

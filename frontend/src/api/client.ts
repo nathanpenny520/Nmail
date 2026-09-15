@@ -272,6 +272,10 @@ export const api = {
     request<{ actions: AgentAction[] }>(
       `/api/ai/agent/actions${status ? `?status=${encodeURIComponent(status)}` : ''}`,
     ),
+  deleteAgentAction: (id: number) =>
+    request<{ deleted?: number; error?: string }>(`/api/ai/agent/actions/${id}`, { method: 'DELETE' }),
+  clearAgentActions: (scope: 'old' | 'failed' | 'all') =>
+    request<{ deleted: number }>(`/api/ai/agent/actions?scope=${scope}`, { method: 'DELETE' }),
   updateAiGrants: (id: number, payload: {
     read: boolean; draft: boolean; organize: boolean; send: boolean; delete: boolean
     is_ai_mailbox?: boolean

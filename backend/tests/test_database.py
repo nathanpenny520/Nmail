@@ -73,3 +73,63 @@ def test_close_thread_conn_resets():
     second = database.get_conn()
     assert second is not first  # 旧连接已关、下次取到新连接
     assert database.get_setting("smoke_after_reopen", 1) == 1  # 新连接可用
+
+
+# ── 保留期与僵尸对账（REDESIGN_PLAN §18.2/§18.3）──────────────────
+
+def test_cleanup_retention_audit_and_runs():
+    """ai_actions 分层保留（发送类已执行永久）+ agent_runs 终态清理与 running 对账。"""
+    conn = database.get_conn()
+    conn.execute("DELETE FROM ai_actions")
+    conn.execute("DELETE FROM agent_runs")
+    conn.commit()
+    for tool, status, days in [
+        ("mark_emails", "failed", 31),
+        ("mark_emails", "failed", 3),
+        ("move_emails", "executed", 91),
+        ("send_draft", "executed", 365),
+        ("send_draft", "failed", 40),
+        ("mark_emails", "executed", 10),
+        ("mark_emails", "undone", 91),
+    ]:
+        conn.execute(
+            f"INSERT INTO ai_actions (tool, status, created_at)"
+            f" VALUES (?, ?, datetime('now', '-{days} days'))",
+            (tool, status),
+        )
+    for status, age in [("done", "-31 days"), ("waiting_approval", "-100 days"),
+                        ("paused_budget", "-100 days"), ("running", "-11 minutes"),
+                        ("running", "-2 minutes")]:
+        conn.execute(
+            f"INSERT INTO agent_runs (mode, status, created_at, updated_at)"
+            f" VALUES ('approval', ?, datetime('now', '{age}'), datetime('now', '{age}'))",
+            (status,),
+        )
+    conn.commit()
+    database.cleanup_retention()
+    # ai_actions：30 天档清失败类（含发送失败）；90 天档清执行类但发送永久
+    assert conn.execute(
+        "SELECT COUNT(*) n FROM ai_actions WHERE tool = 'mark_emails' AND status = 'failed'"
+    ).fetchone()["n"] == 1  # 只剩 3 天那条
+    assert conn.execute(
+        "SELECT COUNT(*) n FROM ai_actions WHERE tool = 'move_emails' AND status = 'executed'"
+    ).fetchone()["n"] == 0
+    assert conn.execute(
+        "SELECT COUNT(*) n FROM ai_actions WHERE tool = 'send_draft' AND status = 'executed'"
+    ).fetchone()["n"] == 1  # 365 天仍保留
+    assert conn.execute(
+        "SELECT COUNT(*) n FROM ai_actions WHERE tool = 'send_draft' AND status = 'failed'"
+    ).fetchone()["n"] == 0
+    assert conn.execute(
+        "SELECT COUNT(*) n FROM ai_actions WHERE tool = 'mark_emails' AND status = 'executed'"
+    ).fetchone()["n"] == 1  # 10 天保留
+    assert conn.execute(
+        "SELECT COUNT(*) n FROM ai_actions WHERE tool = 'mark_emails' AND status = 'undone'"
+    ).fetchone()["n"] == 0
+    # agent_runs：终态 30 天清；waiting/paused 保留；running 10 分钟外对账 cancelled
+    for status, want in [("done", 0), ("waiting_approval", 1), ("paused_budget", 1),
+                         ("cancelled", 1), ("running", 1)]:
+        n = conn.execute(
+            "SELECT COUNT(*) n FROM agent_runs WHERE status = ?", (status,)
+        ).fetchone()["n"]
+        assert n == want, f"agent_runs {status} 期望 {want} 实际 {n}"

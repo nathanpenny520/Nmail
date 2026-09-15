@@ -1028,3 +1028,32 @@ def _current_folder(email_id: int) -> str:
 
 def _current_uid(email_id: int) -> int:
     return get_conn().execute("SELECT uid FROM emails WHERE id = ?", (email_id,)).fetchone()["uid"]
+
+
+# ── 操作历史管理（§18.3 瘦身版）：审计行可追溯可删除 ────────────────
+
+def delete_action(action_id: int) -> dict:
+    """删除单条操作记录（纯审计行删除，与撤销无关；发送记录也可手动删）。"""
+    conn = get_conn()
+    cur = conn.execute("DELETE FROM ai_actions WHERE id = ?", (action_id,))
+    conn.commit()
+    if cur.rowcount == 0:
+        return {"error": "记录不存在"}
+    return {"deleted": 1}
+
+
+def clear_actions(scope: str) -> dict:
+    """批量清理操作记录：old=90 天前（已发送审计保留）/ failed=失败与拒绝 / all=全部。"""
+    if scope == "old":
+        sql = ("DELETE FROM ai_actions WHERE created_at < datetime('now', '-90 days')"
+               " AND NOT (tool = 'send_draft' AND status = 'executed')")
+    elif scope == "failed":
+        sql = "DELETE FROM ai_actions WHERE status IN ('failed', 'rejected')"
+    elif scope == "all":
+        sql = "DELETE FROM ai_actions"
+    else:
+        return {"error": "scope 需为 old/failed/all"}
+    conn = get_conn()
+    cur = conn.execute(sql)
+    conn.commit()
+    return {"deleted": cur.rowcount}

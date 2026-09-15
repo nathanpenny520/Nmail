@@ -2148,13 +2148,43 @@ function AgentActionsList() {
     mutationFn: (id: number) => api.agentUndo(id),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['ai-actions'] }),
   })
+  const delMutation = useMutation({
+    mutationFn: (id: number) => api.deleteAgentAction(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['ai-actions'] }),
+  })
+  const [clearScope, setClearScope] = useState('')
+  const clearMutation = useMutation({
+    mutationFn: (scope: 'old' | 'failed' | 'all') => api.clearAgentActions(scope),
+    onSuccess: () => {
+      setClearScope('')
+      void queryClient.invalidateQueries({ queryKey: ['ai-actions'] })
+    },
+  })
+  const onClear = (scope: string) => {
+    if (!scope) return
+    if (scope === 'all' && !window.confirm('确定清空全部操作记录？已发送记录也会删除，不可恢复。')) {
+      setClearScope('')
+      return
+    }
+    clearMutation.mutate(scope as 'old' | 'failed' | 'all')
+  }
 
   return (
     <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
       <div className="flex items-center gap-2">
         <span className="t-sm font-medium text-gray-700">操作记录</span>
-        <span className="t-xs text-gray-400">总管家写动作全量留痕，可撤销项一键回滚</span>
+        <span className="t-xs text-gray-400">总管家写动作全量留痕，支持撤销与删除追溯</span>
         <span className="flex-1" />
+        <select
+          className="rounded-lg border border-gray-200 px-2 py-1 t-xs text-gray-600 outline-none"
+          value={clearScope}
+          onChange={(e) => onClear(e.target.value)}
+        >
+          <option value="">清理…</option>
+          <option value="old">90 天前记录</option>
+          <option value="failed">失败与拒绝</option>
+          <option value="all">全部记录</option>
+        </select>
         <select
           className="rounded-lg border border-gray-200 px-2 py-1 t-xs text-gray-600 outline-none"
           value={status}
@@ -2174,7 +2204,11 @@ function AgentActionsList() {
           <div className="py-3 t-sm text-gray-300">还没有记录</div>
         )}
         {actions.map((a) => (
-          <div key={a.id} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 t-xs">
+          <div
+            key={a.id}
+            title={a.status === 'executed' && !a.undoable ? '该类型不支持撤销' : undefined}
+            className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 t-xs"
+          >
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
               a.status === 'executed' ? 'bg-emerald-500'
                 : a.status === 'pending' ? 'bg-amber-400'
@@ -2185,7 +2219,10 @@ function AgentActionsList() {
             <span className="min-w-0 flex-1 truncate text-gray-500">
               {a.error ?? JSON.stringify(a.result ?? a.params ?? {}).slice(0, 80)}
             </span>
-            <span className="shrink-0 rounded bg-gray-100 px-1 py-px text-gray-400">
+            <span
+              className="shrink-0 text-gray-300"
+              title={a.mode === 'auto' ? '自动模式：授权约束内直接执行' : '审批模式：写操作经你批准后执行'}
+            >
               {a.mode === 'auto' ? '自动' : '审批'}
             </span>
             <span className="w-24 shrink-0 text-right text-gray-300">{a.created_at.slice(5, 16)}</span>
@@ -2198,6 +2235,13 @@ function AgentActionsList() {
                 撤销
               </button>
             )}
+            <button
+              className="shrink-0 text-gray-300 hover:text-red-500"
+              title="删除该记录"
+              onClick={() => delMutation.mutate(a.id)}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
           </div>
         ))}
       </div>

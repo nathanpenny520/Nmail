@@ -325,3 +325,33 @@ def test_recipient_allowed_parses_display_name():
     assert allowed and not why
     denied, why2 = T.recipient_allowed("Stranger <stranger@evil.com>", aid)
     assert not denied and "不在通讯录" in why2
+
+
+# ── 操作历史管理（REDESIGN_PLAN §18.3 瘦身版）：审计行可删可清 ──
+
+def test_delete_and_clear_actions():
+    """单条删除 + 批量清理三档（old 保留已发送审计 / failed / all）。"""
+    conn = database.get_conn()
+    a_fail = agent._record_action(None, None, "mark_emails", {}, "auto", "ui", "failed", error="x")
+    a_send = agent._record_action(None, None, "send_draft", {}, "auto", "ui", "executed",
+                                  result={"sent": True})
+    a_mark = agent._record_action(None, None, "mark_emails", {}, "auto", "ui", "executed",
+                                  result={"updated": 1})
+    conn.execute("UPDATE ai_actions SET created_at = datetime('now', '-100 days') WHERE id IN (?, ?)",
+                 (a_send, a_mark))
+    conn.commit()
+
+    assert agent.delete_action(a_fail) == {"deleted": 1}
+    assert agent.delete_action(999999) == {"error": "记录不存在"}
+
+    # old：90 天前清掉，但 send_draft executed 审计永久保留
+    assert agent.clear_actions("old") == {"deleted": 1}
+    assert conn.execute("SELECT COUNT(*) n FROM ai_actions WHERE id = ?", (a_send,)).fetchone()["n"] == 1
+    assert conn.execute("SELECT COUNT(*) n FROM ai_actions WHERE id = ?", (a_mark,)).fetchone()["n"] == 0
+
+    assert "error" in agent.clear_actions("bad")
+    agent._record_action(None, None, "mark_emails", {}, "auto", "ui", "rejected")
+    assert agent.clear_actions("failed")["deleted"] >= 1
+    total = conn.execute("SELECT COUNT(*) n FROM ai_actions").fetchone()["n"]
+    assert agent.clear_actions("all") == {"deleted": total}
+    assert conn.execute("SELECT COUNT(*) n FROM ai_actions").fetchone()["n"] == 0

@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — P7-A：AI 操作历史管理——记录可删除+审计保留期+僵尸对账（REDESIGN_PLAN §18.3 瘦身版）
+- 用户拍板「回滚意义不大不做，历史可追溯可删除」：原撤销补全三项（create_draft/trash/update_draft 撤销）砍掉，既有撤销能力（标记/星标/分类/归档/移动/重命名）保持
+- 记录可删：DELETE /api/ai/agent/actions/{id} 单条 + DELETE /api/ai/agent/actions?scope=old|failed|all 批量（old=90 天前且保留已发送审计）；操作记录行删除按钮 +「清理」下拉（全部清空需 confirm）
+- 保留期落地 cleanup_retention：ai_actions 失败/拒绝/过期/批准未执行 30 天、已执行(非发送)与已撤销 90 天、发送类已执行永久；agent_runs 终态 30 天；启动对账 running>10 分钟→cancelled（上线即清掉 09-14 僵尸 id=1）
+- UI：mode「审批/自动」徽章弱化为纯文本+hover 模式说明（不再像按钮）；不可撤销行 hover 说明
+- 顺带修复：GET /agent/actions?status= 筛选路径 WHERE status 裸列名歧义 500（accounts 同名列，潜伏 bug，本次 e2e 暴露）→ WHERE a.status
+- 数据卫生：_FakeMB 测试残留 8 条清除（1 条经 API 删除验证 + 7 条 SQL）
+- 验证：pytest 200 全绿（+2：delete/clear 三档、retention 分层+僵尸对账）、ruff 通过、npm build（tsc+字号门禁）通过、openapi/schema 快照再生；8720 重启后真实实例 e2e——筛选/单删/缺失/old 零命中/bad scope 全过
+
 ## d437145 — fix: API 密钥支持彻底删除（已吊销行不再永久滞留）+ 站点 /docs/agent/ 重部署成功
 - 用户反馈：已吊销密钥一直留在列表里（原设计只吊销不删——供调用日志对账）。extkeys DELETE 改两段语义：活跃行=吊销（行为不变），已吊销行再删=彻底删除记录（返回 {ok,purged}；调用日志该 key 回退显示「已删」，随 30 天保留期清走）
 - 前端 ExtApiSection：已吊销行新增「彻底删除记录」按钮（确认弹窗说明日志回退显示）；client.ts revokeExtKey 返回类型带 purged

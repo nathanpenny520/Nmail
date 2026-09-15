@@ -590,8 +590,15 @@ def run_migrations() -> None:
 
 
 def cleanup_retention() -> None:
-    """启动时保留策略（IMPROVEMENT_PLAN R7）：notifications 最多 500 条、
-    ai_logs 最多 90 天——本地单机库防无界增长。幂等，随启动执行。"""
+    """启动时保留策略（IMPROVEMENT_PLAN R7 + REDESIGN_PLAN §18.2/§18.3）：
+    本地单机库防无界增长，幂等，随启动执行。
+
+    notifications 最多 500 条；ai_logs 90 天；api_calls 30 天；
+    ai_actions 失败/拒绝/过期/批准未执行 30 天、已执行(非发送)与已撤销 90 天
+    （发送类已执行永久保留——AI 发信审计凭证）；agent_runs 终态 30 天
+    （waiting/paused 保留可续跑）；running 超 10 分钟对账为 cancelled
+    （进程重启后的僵尸运行，不可续跑）。
+    """
     conn = get_conn()
     conn.execute(
         "DELETE FROM notifications WHERE id NOT IN"
@@ -600,6 +607,24 @@ def cleanup_retention() -> None:
     conn.execute("DELETE FROM ai_logs WHERE created_at < datetime('now', '-90 days')")
     # P7 对外 API 调用日志：30 天（限流计数以 api_calls 当日行为准，30 天足够排查）
     conn.execute("DELETE FROM api_calls WHERE created_at < datetime('now', '-30 days')")
+    # 审计保留期（§18.2）：发送类已执行不在清理之列
+    conn.execute(
+        "DELETE FROM ai_actions WHERE status IN ('failed', 'rejected', 'expired', 'approved')"
+        " AND created_at < datetime('now', '-30 days')"
+    )
+    conn.execute(
+        "DELETE FROM ai_actions WHERE status IN ('executed', 'undone') AND tool != 'send_draft'"
+        " AND created_at < datetime('now', '-90 days')"
+    )
+    # 运行记录（§18.2）：终态 30 天；僵尸对账（§18.3）：重启后 running 不可能复活
+    conn.execute(
+        "DELETE FROM agent_runs WHERE status IN ('done', 'failed', 'cancelled')"
+        " AND updated_at < datetime('now', '-30 days')"
+    )
+    conn.execute(
+        "UPDATE agent_runs SET status = 'cancelled'"
+        " WHERE status = 'running' AND updated_at < datetime('now', '-10 minutes')"
+    )
 
 
 def get_setting(key: str, default: Any = None) -> Any:

@@ -740,15 +740,23 @@ messages_json ≤5KB）/ 全库 14MB（大头是邮件正文）——当前完�
 行数」（清理），正交；P7-C 跨会话记忆=用户长期偏好（agent_memory），区别于 §17.8 L3 会话内
 任务简报（memory_json）。
 
-### 18.3 P7-A 撤销与审计补全（小，最先做）
+### 18.3 P7-A AI 操作历史管理（2026-09-15 用户拍板瘦身：回滚意义不大不做，历史可追溯可删除）
 
-1. create_draft 可撤销：undo_json 记 draft_id；撤销=草稿仍 pending_review 时自动 discard；
-2. trash_emails 可恢复：undo=IMAP 从 Trash 移回原文件夹+本地行重建（uid 变更）；文案改「移入废纸篓（可恢复）」；
-3. update_draft 可回滚：undo 记旧 to/subject/body；
-4. 操作记录 UI：「审批/自动」徽章弱化防误读；不可撤销的已执行行 hover 说明；
-5. 一次性清除 8 条 _FakeMB 残留（2026-09-12 03:24 测试桩直连真实库的一次性产物，非线上 bug）。
+> 原撤销补全三项（create_draft/trash/update_draft 撤销）**砍掉不实施**——trash 恢复需动 IMAP 层、
+> 真实使用率低；既有撤销能力（mark/star/set_category/archive/move/rename_folder）保持原样。
 
-验收：undo 用例扩展（create_draft→discard、trash→恢复用 IMAP 桩）+ 真实账号撤销往返。
+1. 记录可删：`DELETE /api/ai/agent/actions/{id}` 单条 + `DELETE /api/ai/agent/actions?scope=` 批量
+   （old=90 天前且保留已发送审计 / failed=失败与拒绝 / all=全部）；操作记录行删除按钮+「清理」下拉；
+2. 保留期（18.2 表）落地 `cleanup_retention()`：ai_actions 失败/拒绝/过期/批准未执行 30 天、
+   已执行(非发送)与已撤销 90 天、发送类已执行永久；agent_runs 终态 30 天、waiting/paused 保留；
+3. 僵尸对账：启动时 running 超 10 分钟 → cancelled（重启遗留运行不可续跑；上线即清掉 id=1 僵尸）；
+4. 操作记录 UI：mode 徽章弱化为纯文本（hover 说明两模式）、不可撤销行 hover 说明、行删除按钮；
+5. 数据卫生：_FakeMB 残留 8 条已清（1 条经 API 删除验证、7 条 SQL 清除）；
+6. 顺带修复：GET /agent/actions?status= 筛选路径 `WHERE status` 裸列名歧义 500（accounts 同名
+   列，潜伏 bug，本次 e2e 暴露）→ `WHERE a.status`。
+
+验收：pytest 200 全绿（+2：delete/clear 三档、retention 分层+对账）；真实实例 e2e——筛选/单删/
+缺失/old 零命中/bad scope 全过；npm build（tsc+字号门禁）通过。状态：已实施（2026-09-15）。
 
 ### 18.4 P7-B 感知增强（读类）
 

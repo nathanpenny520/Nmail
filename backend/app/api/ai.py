@@ -462,7 +462,7 @@ def agent_actions(status: str | None = None, limit: int = 100) -> dict:
     limit = max(1, min(limit, 500))
     where, params = "", []
     if status:
-        where = " WHERE status = ?"
+        where = " WHERE a.status = ?"  # 限定主表：accounts 同名列会让裸 status 歧义（500）
         params = [status]
     rows = get_conn().execute(
         f"SELECT a.*, ac.email AS account_email FROM ai_actions a"
@@ -482,6 +482,18 @@ def agent_actions(status: str | None = None, limit: int = 100) -> dict:
         }
         for r in rows
     ]}
+
+
+@router.delete("/agent/actions/{action_id}")
+def agent_action_delete(action_id: int) -> dict:
+    """删除单条操作记录（历史管理 §18.3：纯审计行删除，与撤销无关）。"""
+    return agent.delete_action(action_id)
+
+
+@router.delete("/agent/actions")
+def agent_actions_clear(scope: str = "failed") -> dict:
+    """批量清理操作记录：scope=old（90 天前，已发送审计保留）/failed（失败与拒绝）/all（全部）。"""
+    return agent.clear_actions(scope)
 
 
 @router.post("/organize")
