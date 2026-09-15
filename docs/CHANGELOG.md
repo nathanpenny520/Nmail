@@ -3,6 +3,11 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: AI 晨报接入每日摘要页（回应「与摘要重合」反馈，两者合一定型）
+- 用户指出晨报与每日摘要目的重合：原实现晨报只落通知、摘要页当天会空——现定形为「晨报=摘要的 AI 形态」：ai/digest.py 新增 store_agent_brief，晨报成功后写入当日 digest_history（结构化统计照常收集，AI 综述=晨报正文，摘要页完整渲染；agent 拟的草稿经 has_draft 自然出现在「需要回复」列表闭环）
+- 运行失败/无产出自动回退旧版 build_digest，当天摘要不缺席；通知文案改为引导到「每日摘要」页
+- 验证：pytest 212 全绿（+1：store_agent_brief 落库形状）；ruff 通过；真实 e2e——scheduler 触发晨报后 GET /api/digest 返回当日完整摘要（ai_overview=晨报正文+overview/trend/need_reply 结构齐全）；测试开关已还原默认关
+
 ## ecd3789 — P7-D：AI 晨报（调度定时运行+工具白名单硬边界）+ 规则提议（REDESIGN_PLAN §18.5/§18.6）
 - 规则提议（§18.5 拍板落地）：core/rule_proposals 观察用户手动归档/删除（imap_batch 任务体回写，rule_observations 按 email_id 去重），同发件人 14 天 ≥3 次 → pending 提议（agent_proposals；已在名单/已有 pending/rejected 不再提、上限 5 防骚扰）；设置-AI 用量「规则提议」卡采纳/忽略；采纳转调 add_sender_list 既有黑名单管线（不入 agent 审计——用户手动决定），忽略后同发件人不再提；GET 列表懒触发兜底
 - AI 晨报（§18.6，用户拍板：与每日摘要调度骨架结合）：设置-通用新增开关（agent_brief_enabled 默认关），开启后 digest_time 到点由 scheduler 触发 agent 定时运行替代当日摘要（当天标记 KV agent_brief_last_run；独立线程不阻塞 tick）；origin=scheduler+auto 模式+固定指令（总结未读+create_draft 拟稿+set_category 标记）

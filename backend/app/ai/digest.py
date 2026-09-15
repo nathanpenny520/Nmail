@@ -176,3 +176,30 @@ def build_digest(force: bool = False) -> dict:
     conn.commit()
     add_notification("digest", "今日邮件摘要已生成", "到「每日摘要」页查看", today)
     return stats
+
+
+def store_agent_brief(brief_text: str) -> dict:
+    """AI 晨报产出落摘要页（§18.6）：结构化统计照常收集，AI 综述直接用晨报
+    文本，不再单独调 LLM——摘要页当日完整渲染（agent 拟的草稿经 has_draft
+    自然出现在「需要回复」）。通知由调用方（scheduler）负责，此处不发。"""
+    today = date.today().isoformat()
+    conn = get_conn()
+    existing = conn.execute(
+        "SELECT content_json FROM digest_history WHERE date = ?", (today,)
+    ).fetchone()
+    stats = _collect_stats()
+    # 与 build_digest 同规则：保留用户手动清除的重要邮件记录，不让 ✕ 掉的复活
+    if existing:
+        dismissed = set(json.loads(existing["content_json"]).get("dismissed_important") or [])
+        if dismissed:
+            stats["important"] = [i for i in stats["important"] if i["email_id"] not in dismissed]
+            stats["dismissed_important"] = sorted(dismissed)
+    stats["ai_overview"] = brief_text
+    conn.execute(
+        "INSERT INTO digest_history (date, content_json) VALUES (?, ?)"
+        " ON CONFLICT(date) DO UPDATE SET content_json = excluded.content_json,"
+        " created_at = datetime('now')",
+        (today, json.dumps(stats, ensure_ascii=False)),
+    )
+    conn.commit()
+    return stats

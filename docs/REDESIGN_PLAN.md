@@ -790,7 +790,10 @@ scheduler 触发一次 agent 定时运行**替代**当日每日摘要（当天�
 set_category），schema 过滤+执行层双拦（模型无视清单点名也被拒、不落审计），agent_runs 新增
 allowed_json 持久化（续跑不丢边界）；send/trash/move/文件夹/通讯录/名单/记忆写一律不可用，
 草稿只进待审列表由用户确认发送——无人值守场景以白名单替代逐项审批。运行在独立线程（180s
-预算不阻塞调度 tick），产出写通知中心。验收：pytest 211 全绿（+3：提议全流程/白名单拒绝且
+预算不阻塞调度 tick）。**与摘要页的关系（用户拍板合一）**：晨报不是并行物而是摘要的 AI 形态——
+成功后经 `digest.store_agent_brief` 写入当日 digest_history（结构化统计照常收集，AI 综述=晨报
+正文，摘要页完整渲染；agent 拟的草稿经 has_draft 自然出现在「需要回复」列表）；失败/无产出自动
+回退旧版 build_digest，当天摘要不缺席。验收：pytest 211 全绿（+3：提议全流程/白名单拒绝且
 不落审计/allowed_json 持久化）；真实实例 e2e 见 CHANGELOG。
 
 ### 18.7 P7-E 语义检索 / P7-F 安全增强

@@ -72,9 +72,13 @@ def _run_daily_brief() -> None:
 
     origin=scheduler 落操作记录；SCHEDULER_ALLOWED 工具白名单是硬边界——
     send/trash/move 等即使 auto 模式也不可用；草稿只进待审列表。
+    成功后晨报文本经 digest.store_agent_brief 写入「每日摘要」页当日内容
+    （结构化统计照常，AI 综述=晨报正文）——晨报是摘要的 AI 形态而非并行物；
+    运行失败或无产出时回退旧版 build_digest，保证当天摘要不缺席。
     """
     try:
         from app.ai import agent as ai_agent
+        from app.ai.digest import build_digest, store_agent_brief
 
         account_ids = [r["id"] for r in
                        get_conn().execute("SELECT id FROM accounts ORDER BY id").fetchall()]
@@ -84,13 +88,29 @@ def _run_daily_brief() -> None:
             SCHEDULER_BRIEF_QUESTION, None, None, account_ids, "auto", None,
             origin="scheduler", allowed_tools=ai_agent.SCHEDULER_ALLOWED))
         text = "".join(e.get("text", "") for e in events if e.get("type") == "text").strip()
-        if not text:
-            text = "晨报运行未产出文本（步数/预算触顶或失败），详见 设置-AI 用量-操作记录。"
-        add_notification("digest", "AI 晨报已生成", text[:800])
-        logger.info("agent daily brief finished (chars=%d)", len(text))
+        if text:
+            store_agent_brief(text)
+            add_notification("digest", "AI 晨报已生成",
+                             "今日晨报已写入「每日摘要」页；拟好的回复草稿在待审列表等你确认")
+            logger.info("agent daily brief finished (chars=%d)", len(text))
+        else:
+            # 无产出（步数/预算触顶等）：回退旧版摘要，当天内容不缺席
+            build_digest()
+            add_notification("digest", "AI 晨报未产出，已回退每日摘要",
+                             "详见 设置-AI 用量-操作记录；今日摘要按常规生成")
+            logger.info("agent daily brief empty, fallback digest generated")
     except Exception:  # noqa: BLE001 — 定时任务失败不影响调度循环
         logger.exception("agent daily brief crashed")
-        add_notification("digest", "AI 晨报失败", "定时晨报运行出错，详见 设置-AI 用量-操作记录")
+        try:
+            from app.ai.digest import build_digest
+
+            build_digest()
+            add_notification("digest", "AI 晨报失败，已回退每日摘要",
+                             "晨报运行出错（详见 操作记录）；今日摘要按常规生成")
+        except Exception:  # noqa: BLE001
+            logger.exception("fallback digest after brief crash also failed")
+            add_notification("digest", "AI 晨报失败",
+                             "晨报与摘要均生成失败，详见日志与 设置-AI 用量-操作记录")
 
 
 def _parse_iso(value: str | None) -> datetime | None:

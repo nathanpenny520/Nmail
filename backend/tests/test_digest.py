@@ -4,6 +4,7 @@ _collect_stats 直查共享测试库；账号/邮件用随机 uuid 账号隔离�
 """
 from __future__ import annotations
 
+import json
 import uuid
 
 from fastapi.testclient import TestClient
@@ -115,3 +116,17 @@ def test_dismiss_important_persists_and_survives_rebuild():
 
 def test_dismiss_important_unknown_id_404():
     assert client.post("/api/digest/important/99999999/dismiss").status_code == 404
+
+
+def test_store_agent_brief():
+    """§18.6：晨报文本写入当日摘要——ai_overview=晨报正文，结构化统计照常。"""
+    aid = _aid()
+    _seed_email(aid, 1, "晨报测试邮件")
+    stats = digest.store_agent_brief("**晨报**：一切正常。")
+    assert stats["ai_overview"] == "**晨报**：一切正常。"
+    row = database.get_conn().execute(
+        "SELECT content_json FROM digest_history WHERE date = date('now', 'localtime')"
+    ).fetchone()
+    assert row is not None
+    data = json.loads(row["content_json"])
+    assert data["ai_overview"] == "**晨报**：一切正常。" and "need_reply" in data
