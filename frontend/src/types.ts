@@ -37,6 +37,8 @@ export interface Settings {
   notify_types: Partial<Record<NotifyTypeKey, boolean>>
   /** 写信/回复自动带该账号签名（设置页「写信」管理签名内容） */
   auto_insert_signature: boolean
+  /** AI 晨报（§18.6）：到摘要时间自动总结未读并拟好回复草稿，替代每日摘要 */
+  agent_brief_enabled: boolean
 }
 
 export interface SettingsPayload {
@@ -50,6 +52,7 @@ export interface SettingsPayload {
   desktop_notifications_enabled?: boolean
   notify_types?: Partial<Record<NotifyTypeKey, boolean>>
   auto_insert_signature?: boolean
+  agent_brief_enabled?: boolean
 }
 
 /** 本机路径（设置页「关于」展示软件本地性；均为运行进程实时解析的真实值） */
@@ -325,6 +328,17 @@ export interface UserDraft {
 }
 
 /** AI Agent 动作审计行（v0.4 P6，ai_actions 表） */
+export interface AgentProposal {
+  id: number
+  kind: string
+  pattern: string
+  evidence_count: number
+  sample_subjects: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+  decided_at: string | null
+}
+
 export interface AgentMemory {
   id: number
   content: string

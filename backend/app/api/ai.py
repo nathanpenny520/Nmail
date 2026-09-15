@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from app.ai import agent, profiles, tasks
 from app.api.chats import append_message, require_session
 from app.api.deps import ai_config_or_400, ai_result_or_http
-from app.core import jobs
+from app.core import jobs, rule_proposals
 from app.core.mail_html import markdown_body_html, sanitize_outgoing_html
 from app.db.database import get_conn
 
@@ -514,6 +514,52 @@ def memory_delete(memory_id: int) -> dict:
     if cur.rowcount == 0:
         return {"error": "记忆不存在"}
     return {"ok": True, "deleted": memory_id}
+
+
+class ProposalDecisionIn(BaseModel):
+    decision: str                   # approve | reject
+
+
+@router.get("/proposals")
+def proposals_list() -> dict:
+    """规则提议列表（§18.5）：返回前懒触发一次提议检查（防观察后错过生成）。"""
+    rule_proposals.propose()
+    rows = get_conn().execute(
+        "SELECT * FROM agent_proposals ORDER BY id DESC LIMIT 50"
+    ).fetchall()
+    return {"proposals": [dict(r) for r in rows]}
+
+
+@router.post("/proposals/{proposal_id}/decide")
+def proposals_decide(proposal_id: int, payload: ProposalDecisionIn) -> dict:
+    """提议决定：采纳=写入黑名单（sender_lists 既有管线）；忽略=该发件人不再提。"""
+    if payload.decision not in ("approve", "reject"):
+        raise HTTPException(400, "decision 需为 approve/reject")
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM agent_proposals WHERE id = ?", (proposal_id,)).fetchone()
+    if row is None:
+        return {"error": "提议不存在"}
+    if row["status"] != "pending":
+        return {"error": f"该提议已是 {row['status']} 状态"}
+    if payload.decision == "reject":
+        conn.execute(
+            "UPDATE agent_proposals SET status = 'rejected', decided_at = datetime('now')"
+            " WHERE id = ?", (proposal_id,),
+        )
+        conn.commit()
+        return {"status": "rejected"}
+    from app.ai import tools as T  # 复用既有黑名单管线（函数级导入避免循环）
+
+    applied = T.execute("add_sender_list",
+                        {"pattern": row["pattern"], "list_type": "blacklist"}, 0)
+    if "error" in applied:
+        return applied
+    conn.execute(
+        "UPDATE agent_proposals SET status = 'approved', decided_at = datetime('now')"
+        " WHERE id = ?", (proposal_id,),
+    )
+    conn.commit()
+    return {"status": "approved", "applied": applied}
 
 
 @router.post("/organize")

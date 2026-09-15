@@ -27,6 +27,9 @@ DEFAULT_SETTINGS: dict[str, object] = {
     # 桌面通知按类型细分（读侧与默认合并，缺省键视为开）；其余系统通知（更新/黑名单归档）不受控
     "notify_types": {"new_mail": True, "ai_draft": True, "digest": True, "account_error": True},
     "auto_insert_signature": False,  # 写信/回复自动带该账号签名（设置页「写信」管理签名内容）
+    # AI 晨报（§18.6）：digest_time 到点由调度触发 agent 运行（总结未读+拟稿进待审），
+    # 开启时替代每日摘要；工具白名单硬边界（SCHEDULER_ALLOWED）
+    "agent_brief_enabled": False,
 }
 
 NOTIFY_TYPE_KEYS = ("new_mail", "ai_draft", "digest", "account_error")
@@ -43,6 +46,7 @@ class SettingsIn(BaseModel):
     desktop_notifications_enabled: bool | None = None
     notify_types: dict[str, bool] | None = None
     auto_insert_signature: bool | None = None
+    agent_brief_enabled: bool | None = None
 
     @field_validator("digest_time")
     @classmethod
@@ -112,6 +116,9 @@ def read_settings() -> dict:
         "auto_insert_signature": get_setting(
             "auto_insert_signature", DEFAULT_SETTINGS["auto_insert_signature"]
         ),
+        "agent_brief_enabled": get_setting(
+            "agent_brief_enabled", DEFAULT_SETTINGS["agent_brief_enabled"]
+        ),
     }
 
 
@@ -137,6 +144,8 @@ def update_settings(payload: SettingsIn) -> dict:
         set_setting("notify_types", payload.notify_types)
     if payload.auto_insert_signature is not None:
         set_setting("auto_insert_signature", payload.auto_insert_signature)
+    if payload.agent_brief_enabled is not None:
+        set_setting("agent_brief_enabled", payload.agent_brief_enabled)
     return read_settings()
 
 

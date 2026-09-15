@@ -4,6 +4,7 @@ import type {
   Account,
   AgentAction,
   AgentMemory,
+  AgentProposal,
   AccountAddPayload,
   AIProfile,
   AIProfilesResp,
@@ -280,6 +281,11 @@ export const api = {
   getAgentMemory: () => request<{ memories: AgentMemory[] }>('/api/ai/memory'),
   deleteAgentMemory: (id: number) =>
     request<{ ok?: boolean; error?: string }>(`/api/ai/memory/${id}`, { method: 'DELETE' }),
+  getAgentProposals: () => request<{ proposals: AgentProposal[] }>('/api/ai/proposals'),
+  decideAgentProposal: (id: number, decision: 'approve' | 'reject') =>
+    request<{ status?: string; applied?: Record<string, unknown>; error?: string }>(
+      `/api/ai/proposals/${id}/decide`, { method: 'POST', body: JSON.stringify({ decision }) },
+    ),
   updateAiGrants: (id: number, payload: {
     read: boolean; draft: boolean; organize: boolean; send: boolean; delete: boolean
     is_ai_mailbox?: boolean

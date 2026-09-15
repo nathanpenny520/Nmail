@@ -46,6 +46,15 @@ MAX_STEPS = 25
 TIME_BUDGET_S = 180.0
 DAILY_SEND_LIMIT = 20
 DAILY_ACTION_LIMIT = 200
+
+# 调度器定时运行（AI 晨报，§18.6）的工具白名单：只读 + 本地标记 + 拟草稿。
+# 硬边界——send/trash/move/文件夹/通讯录/名单/记忆写一律不可用，防无人值守误操作；
+# 草稿进待审列表由用户确认发送，绝不直接外发。
+SCHEDULER_ALLOWED = frozenset({
+    "search_emails", "list_recent_emails", "read_email", "list_folders",
+    "list_contacts", "digest_stats", "list_memory",
+    "create_draft", "set_category",
+})
 FEEDBACK_MAX = 1200        # 单条工具结果回灌上限（字符；read_email 见 FEEDBACK_BUDGETS）
 FEEDBACK_BUDGETS = {"read_email": 4000}  # 分工具预算：读详情类放宽（起草回复需要正文）
 COMPACT_AFTER = 12         # 步数超过后开始压缩早期工具结果（L2 步数门；token 门在 context.py）

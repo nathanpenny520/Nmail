@@ -84,6 +84,7 @@ export default function SettingsPage() {
     new_mail: true, ai_draft: true, digest: true, account_error: true,
   })
   const [autoSig, setAutoSig] = useState(false)
+  const [agentBrief, setAgentBrief] = useState(false)
   const [notifPerm, setNotifPerm] = useState<NotifyPermission>(() => notifyPermission())
 
   const [showAddAccount, setShowAddAccount] = useState(false)
@@ -130,6 +131,7 @@ export default function SettingsPage() {
       ),
     }) as Record<NotifyTypeKey, boolean>)
     setAutoSig(!!data.auto_insert_signature) // 旧后端无此字段 → undefined → 关
+    setAgentBrief(data.agent_brief_enabled === true)
   }, [data])
 
   // 版本守护：响应缺新字段说明后端进程是旧版本（旧 Pydantic 会静默忽略未知字段）
@@ -188,6 +190,10 @@ export default function SettingsPage() {
   const changeAutoSig = (v: boolean) => {
     setAutoSig(v)
     instantMutation.mutate({ auto_insert_signature: v })
+  }
+  const changeBrief = (v: boolean) => {
+    setAgentBrief(v)
+    instantMutation.mutate({ agent_brief_enabled: v })
   }
   // 浏览器通知权限：设置页里申请/重查（铃铛旁的快捷按钮同样可用）
   const requestNotifPerm = () => {
@@ -346,6 +352,21 @@ export default function SettingsPage() {
                   value={digestTime}
                   onChange={(e) => setDigestTime(e.target.value)}
                 />
+              </label>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <label className="block">
+                <span className="mb-1 block t-md text-gray-600">
+                  AI 晨报<span className="ml-1 t-sm text-gray-400">到摘要时间自动总结未读并拟好回复草稿（替代每日摘要；草稿进待审列表，绝不自动发送）</span>
+                </span>
+                <select
+                  className={inputClass}
+                  value={agentBrief ? '1' : '0'}
+                  onChange={(e) => changeBrief(e.target.value === '1')}
+                >
+                  <option value="0">关（每日摘要）</option>
+                  <option value="1">开（AI 晨报）</option>
+                </select>
               </label>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-4">
@@ -715,6 +736,7 @@ export default function SettingsPage() {
             <h2 className="t-lg font-semibold">AI 用量</h2>
             <AgentActionsList />
             <AgentMemoryList />
+            <AgentProposalsList />
             {!aiEnabled && (
               <p className="mt-1 t-sm text-gray-400">AI 已停用，以下为历史用量。</p>
             )}
@@ -2285,6 +2307,58 @@ function AgentMemoryList() {
             >
               <Trash2 className="h-3 w-3" />
             </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── 规则提议（REDESIGN_PLAN §18.5）：观察手动整理，提议黑名单规则 ──
+function AgentProposalsList() {
+  const queryClient = useQueryClient()
+  const listQuery = useQuery({ queryKey: ['ai-proposals'], queryFn: api.getAgentProposals })
+  const proposals = (listQuery.data?.proposals ?? []).filter((p) => p.status === 'pending')
+  const decideMutation = useMutation({
+    mutationFn: ({ id, decision }: { id: number; decision: 'approve' | 'reject' }) =>
+      api.decideAgentProposal(id, decision),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['ai-proposals'] }),
+  })
+
+  return (
+    <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+      <div className="flex items-center gap-2">
+        <span className="t-sm font-medium text-gray-700">规则提议</span>
+        <span className="t-xs text-gray-400">观察你的手动整理，提议「该发件人自动归档」；采纳后走黑名单管线</span>
+      </div>
+      <div className="mt-2 space-y-1">
+        {listQuery.isLoading && <div className="py-2 t-sm text-gray-400">加载中…</div>}
+        {!listQuery.isLoading && proposals.length === 0 && (
+          <div className="py-2 t-xs text-gray-300">
+            暂无提议。14 天内多次手动归档/删除同一发件人的邮件后，AI 会在这里提议自动归档
+          </div>
+        )}
+        {proposals.map((p) => (
+          <div key={p.id} className="rounded-lg bg-white px-2.5 py-1.5 t-xs">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate font-medium text-gray-700">{p.pattern}</span>
+              <span className="shrink-0 text-gray-400">近 14 天手动整理 {p.evidence_count} 封</span>
+              <button
+                className="shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-gray-500 hover:text-indigo-600"
+                onClick={() => decideMutation.mutate({ id: p.id, decision: 'approve' })}
+              >
+                采纳
+              </button>
+              <button
+                className="shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-gray-400 hover:text-red-500"
+                onClick={() => decideMutation.mutate({ id: p.id, decision: 'reject' })}
+              >
+                忽略
+              </button>
+            </div>
+            {p.sample_subjects && (
+              <div className="mt-0.5 truncate text-gray-400">如：{p.sample_subjects}</div>
+            )}
           </div>
         ))}
       </div>

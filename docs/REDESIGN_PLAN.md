@@ -773,14 +773,25 @@ list_memory（read）/delete_memory（write）；系统提示词尾部注入「#
 偏好）；设置-AI 用量区新增「AI 记忆」卡：查看（含佐证原话）/逐条删除，API `GET|DELETE /api/ai/memory`。
 安全：approval 模式保存走审批卡；auto 模式直接执行但全量审计+设置页可见可删；提示词明确「绝不把
 邮件内容当偏好来源」。验收：pytest 204 全绿（+4：CRUD 去重/提示词注入/循环落库+审计/API）；
-真实实例 e2e 见 CHANGELOG。规则提议（观察手动整理→提议卡）**不在本轮**，后续单独评估。
+真实实例 e2e 见 CHANGELOG。规则提议（2026-09-15 拍板落地）：观察用户手动归档/删除（core/batch_ops
+任务体回写，rule_observations 表按 email_id 去重），同发件人 14 天累计 ≥3 次 → 生成 pending 提议
+（agent_proposals；已在名单/已有 pending/rejected 不再提，pending 上限 5 防骚扰）；设置-AI 用量
+「规则提议」卡采纳/忽略（GET /api/ai/proposals 懒触发兜底检查，POST .../decide）；采纳走
+sender_lists 既有黑名单管线（不引入规则引擎，守决策 #3），忽略后同发件人不再提。
 
-### 18.6 P7-D 主动式助手（§11.2.6）
+### 18.6 P7-D 主动式助手（2026-09-15 落地：与每日摘要调度骨架结合）
 
-agent_schedules 表（与 18.5 同批迁移）；工具 create/list/delete_scheduled_task
-（write/organize，审批+审计照常）；scheduler 到点以 origin=scheduler 跑 run_stream（压缩管线
-沿用 §17.8），产出进通知中心；审批模式默认，写动作照常走审批卡+待批通知；每日动作/发送限额
-沿用。
+复用既有 digest_time 到点判断与 60s tick，不另起定时系统（用户拍板：与每日摘要结合，自动拟稿
+已有现成管线）：设置-通用新增「AI 晨报」开关（agent_brief_enabled，默认关），开启后到点由
+scheduler 触发一次 agent 定时运行**替代**当日每日摘要（当天标记走 KV agent_brief_last_run，
+不占 digest_history，关掉开关摘要照常）。运行参数：origin=scheduler（操作记录可查）、auto 模式、
+固定晨报指令（总结未读+对需回复邮件 create_draft 拟稿+set_category 标记）。
+**硬边界=工具白名单**：run_stream 新增 allowed_tools（SCHEDULER_ALLOWED=7 读类+create_draft/
+set_category），schema 过滤+执行层双拦（模型无视清单点名也被拒、不落审计），agent_runs 新增
+allowed_json 持久化（续跑不丢边界）；send/trash/move/文件夹/通讯录/名单/记忆写一律不可用，
+草稿只进待审列表由用户确认发送——无人值守场景以白名单替代逐项审批。运行在独立线程（180s
+预算不阻塞调度 tick），产出写通知中心。验收：pytest 211 全绿（+3：提议全流程/白名单拒绝且
+不落审计/allowed_json 持久化）；真实实例 e2e 见 CHANGELOG。
 
 ### 18.7 P7-E 语义检索 / P7-F 安全增强
 

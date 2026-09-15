@@ -8,7 +8,7 @@ unarchive=移回收件箱。
 """
 from __future__ import annotations
 
-from app.core import folders, imap_client, jobs, mailbox
+from app.core import folders, imap_client, jobs, mailbox, rule_proposals
 from app.db.database import get_conn
 
 
@@ -19,7 +19,7 @@ def imap_batch_job(job_id: int, ids: list[int], action: str, folder: str | None 
     conn = get_conn()
     placeholders = ",".join("?" for _ in ids)
     rows = conn.execute(
-        f"SELECT e.id, e.account_id, e.folder, e.uid FROM emails e"
+        f"SELECT e.id, e.account_id, e.folder, e.uid, e.sender_email FROM emails e"
         f" WHERE e.id IN ({placeholders})",
         ids,
     ).fetchall()
@@ -88,6 +88,11 @@ def imap_batch_job(job_id: int, ids: list[int], action: str, folder: str | None 
                             )
             conn.commit()
             updated += len(account_rows)
+            if action in ("archive", "trash"):
+                # §18.5 规则提议：观察用户手动归档/删除（sender 已在移动/删除前快照）
+                rule_proposals.observe(
+                    [{"id": r["id"], "account_id": aid, "sender_email": r["sender_email"]}
+                     for r in account_rows], action)
         except Exception:  # noqa: BLE001 — 单账号失败不影响其他账号
             failed += len(account_rows)
         jobs.report(job_id, stage=action, progress=(index + 1) / total,

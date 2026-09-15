@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.ai import agent
 from app.ai import tools as T
+from app.core import rule_proposals
 from app.db import database
 from app.main import app
 
@@ -441,3 +442,101 @@ def test_memory_api():
     assert resp.status_code == 200 and resp.json()["ok"] is True
     resp = client.delete(f"/api/ai/memory/{r['saved']}")
     assert resp.json().get("error") == "记忆不存在"
+
+
+# ── 规则提议与调度晨报（REDESIGN_PLAN §18.5/§18.6）────────────────
+
+def test_rule_proposals_flow():
+    """观察→阈值提议→采纳入黑名单 / 忽略后不再提。"""
+    conn = database.get_conn()
+    conn.execute("DELETE FROM rule_observations")
+    conn.execute("DELETE FROM agent_proposals")
+    conn.execute("DELETE FROM sender_lists WHERE pattern IN ('promo@spam.com', 'ads@x.com')")
+    conn.commit()
+    for i in range(3):
+        conn.execute(
+            "INSERT OR IGNORE INTO rule_observations (email_id, account_id, sender_email, action)"
+            " VALUES (?, 1, 'promo@spam.com', 'archive')", (9000 + i,),
+        )
+    conn.commit()
+    rule_proposals.observe(
+        [{"id": 9003, "account_id": 1, "sender_email": "promo@spam.com"}], "archive")
+    row = conn.execute(
+        "SELECT id, evidence_count FROM agent_proposals"
+        " WHERE pattern = 'promo@spam.com' AND status = 'pending'").fetchone()
+    assert row is not None and row["evidence_count"] >= 3
+    # 已在名单/已有 pending → 不重复提
+    rule_proposals.propose()
+    assert conn.execute(
+        "SELECT COUNT(*) n FROM agent_proposals WHERE pattern = 'promo@spam.com'"
+    ).fetchone()["n"] == 1
+
+    resp = client.post(f"/api/ai/proposals/{row['id']}/decide", json={"decision": "approve"})
+    assert resp.json()["status"] == "approved"
+    assert conn.execute(
+        "SELECT 1 FROM sender_lists WHERE pattern = 'promo@spam.com' AND list_type = 'blacklist'"
+    ).fetchone()
+    resp = client.post(f"/api/ai/proposals/{row['id']}/decide", json={"decision": "approve"})
+    assert "error" in resp.json()  # 已决定不能重复操作
+
+    # 忽略路径：reject 后同发件人不复活提议
+    for i in range(4):
+        conn.execute(
+            "INSERT OR IGNORE INTO rule_observations (email_id, account_id, sender_email, action)"
+            " VALUES (?, 1, 'ads@x.com', 'trash')", (9100 + i,),
+        )
+    conn.commit()
+    rule_proposals.propose()
+    prow = conn.execute(
+        "SELECT id FROM agent_proposals WHERE pattern = 'ads@x.com' AND status = 'pending'"
+    ).fetchone()
+    assert prow is not None
+    resp = client.post(f"/api/ai/proposals/{prow['id']}/decide", json={"decision": "reject"})
+    assert resp.json()["status"] == "rejected"
+    conn.execute(
+        "INSERT OR IGNORE INTO rule_observations (email_id, account_id, sender_email, action)"
+        " VALUES (9200, 1, 'ads@x.com', 'trash')"
+    )
+    conn.commit()
+    rule_proposals.propose()
+    assert conn.execute(
+        "SELECT COUNT(*) n FROM agent_proposals WHERE pattern = 'ads@x.com' AND status = 'pending'"
+    ).fetchone()["n"] == 0
+    conn.execute("DELETE FROM rule_observations")
+    conn.execute("DELETE FROM agent_proposals")
+    conn.execute("DELETE FROM sender_lists WHERE pattern IN ('promo@spam.com', 'ads@x.com')")
+    conn.commit()
+
+
+def test_scheduler_allowed_tools(monkeypatch):
+    """白名单硬边界：allowed 外工具（schema 已过滤仍被模型点名）执行层拒绝并回灌。"""
+    aid = _aid(grants='{"read":true,"draft":true,"organize":true,"send":true}')
+    _script(monkeypatch, [
+        json.dumps({"tool": "send_draft", "args": {"draft_id": 1}}),
+        "定时运行不做发送。",
+    ])
+    events = list(agent.run_stream("把草稿 1 发出去", None, None, [aid], "auto", None,
+                                   origin="scheduler",
+                                   allowed_tools=agent.SCHEDULER_ALLOWED))
+    tr = _collect(events, "tool_result")[0]
+    assert tr["ok"] is False and "不在本次定时运行" in tr["summary"]
+    assert not _collect(events, "approval_required")  # 拒绝发生在审批判定之前
+    assert database.get_conn().execute(
+        "SELECT COUNT(*) c FROM ai_actions WHERE account_id = ?", (aid,)
+    ).fetchone()["c"] == 0  # 被拒调用不落审计
+
+
+def test_allowed_persisted_for_resume():
+    """allowed_json 落库 → _load_run 恢复（续跑时硬边界不丢失）。"""
+    aid = _aid()
+    state = agent.RunState(session_id=None, account_ids=[aid], mode="auto",
+                           profile_id=None, origin="scheduler")
+    state.allowed = agent.SCHEDULER_ALLOWED
+    state.run_id = agent._create_run(state)
+    loaded = agent._load_run(state.run_id)
+    assert loaded.allowed == agent.SCHEDULER_ALLOWED
+    state2 = agent.RunState(session_id=None, account_ids=[aid], mode="auto",
+                            profile_id=None, origin="ui")
+    state2.run_id = agent._create_run(state2)
+    loaded2 = agent._load_run(state2.run_id)
+    assert loaded2.allowed is None  # 未设白名单 = 不限

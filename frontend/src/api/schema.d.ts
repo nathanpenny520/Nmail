@@ -1221,6 +1221,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Proposals List
+         * @description 规则提议列表（§18.5）：返回前懒触发一次提议检查（防观察后错过生成）。
+         */
+        get: operations["proposals_list_api_ai_proposals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/proposals/{proposal_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Proposals Decide
+         * @description 提议决定：采纳=写入黑名单（sender_lists 既有管线）；忽略=该发件人不再提。
+         */
+        post: operations["proposals_decide_api_ai_proposals__proposal_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/organize": {
         parameters: {
             query?: never;
@@ -2674,6 +2714,11 @@ export interface components {
             /** Context Window */
             context_window?: number | null;
         };
+        /** ProposalDecisionIn */
+        ProposalDecisionIn: {
+            /** Decision */
+            decision: string;
+        };
         /** RegenerateForEmailIn */
         RegenerateForEmailIn: {
             /** Email Id */
@@ -2722,6 +2767,8 @@ export interface components {
             } | null;
             /** Auto Insert Signature */
             auto_insert_signature?: boolean | null;
+            /** Agent Brief Enabled */
+            agent_brief_enabled?: boolean | null;
         };
         /** SignatureItem */
         SignatureItem: {
@@ -5192,6 +5239,65 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    proposals_list_api_ai_proposals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    proposals_decide_api_ai_proposals__proposal_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalDecisionIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

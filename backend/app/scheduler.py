@@ -2,23 +2,35 @@
 
 每 60 秒 tick 一次：
 - 检查各账号是否到达轮询间隔（settings.poll_interval_minutes），到期则增量同步 INBOX；
-- 检查每日摘要（settings.digest_time）当天是否已到点且未生成，到点则生成。
+- 检查每日摘要（settings.digest_time）当天是否已到点且未生成，到点则生成；
+- AI 晨报（settings.agent_brief_enabled，§18.6）：开启时到点改由调度触发一次
+  agent 定时运行（工具白名单硬边界），替代每日摘要——产出通知+草稿进待审列表。
 """
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import suppress
 from datetime import datetime, timedelta, UTC
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.core.outbox import send_user_draft
-from app.core.sync import start_sync
-from app.db.database import get_conn, get_setting
+from app.core.sync import add_notification, start_sync
+from app.db.database import get_conn, get_setting, set_setting
 
 logger = logging.getLogger(__name__)
 
 TICK_SECONDS = 60
+
+# AI 晨报固定指令（§18.6）：写动作只有拟稿/本地标记（白名单硬边界在 agent 循环），
+# 草稿一律进待审列表等用户确认，绝不直接发送
+SCHEDULER_BRIEF_QUESTION = (
+    "这是每日定时晨报任务（无人值守自动运行）：请检查各账号今天以来的未读邮件，"
+    "按重要性总结要点；对明显需要回复的邮件直接调用 create_draft 拟好回复草稿"
+    "（会进入待审列表，由用户确认后才发送，你不能发送）；可用 set_category 标记"
+    "重要性或需要回复。不要执行其他写操作。最后用简洁的中文输出晨报正文。"
+)
 
 
 def _digest_due() -> bool:
@@ -34,6 +46,51 @@ def _digest_due() -> bool:
         "SELECT 1 FROM digest_history WHERE date = ?", (now.date().isoformat(),)
     ).fetchone()
     return not row
+
+
+def _brief_enabled_and_due() -> bool:
+    """AI 晨报开关 + 到点判断（§18.6）：复用 digest_time；当天未跑过才触发。
+
+    与每日摘要互斥（开启即替代）；当天触发标记走 KV agent_brief_last_run，
+    不占 digest_history（关闭开关后摘要照常按 digest_history 判断）。
+    """
+    if not bool(get_setting("agent_brief_enabled", False)):
+        return False
+    target = str(get_setting("digest_time", "08:30") or "08:30")
+    try:
+        target_h, target_m = (int(x) for x in target.split(":"))
+    except ValueError:
+        return False
+    now = datetime.now()
+    if (now.hour, now.minute) < (target_h, target_m):
+        return False
+    return str(get_setting("agent_brief_last_run", "")) != now.date().isoformat()
+
+
+def _run_daily_brief() -> None:
+    """AI 晨报运行体（独立线程，避免 180s 预算阻塞调度 tick）。
+
+    origin=scheduler 落操作记录；SCHEDULER_ALLOWED 工具白名单是硬边界——
+    send/trash/move 等即使 auto 模式也不可用；草稿只进待审列表。
+    """
+    try:
+        from app.ai import agent as ai_agent
+
+        account_ids = [r["id"] for r in
+                       get_conn().execute("SELECT id FROM accounts ORDER BY id").fetchall()]
+        if not account_ids:
+            return
+        events = list(ai_agent.run_stream(
+            SCHEDULER_BRIEF_QUESTION, None, None, account_ids, "auto", None,
+            origin="scheduler", allowed_tools=ai_agent.SCHEDULER_ALLOWED))
+        text = "".join(e.get("text", "") for e in events if e.get("type") == "text").strip()
+        if not text:
+            text = "晨报运行未产出文本（步数/预算触顶或失败），详见 设置-AI 用量-操作记录。"
+        add_notification("digest", "AI 晨报已生成", text[:800])
+        logger.info("agent daily brief finished (chars=%d)", len(text))
+    except Exception:  # noqa: BLE001 — 定时任务失败不影响调度循环
+        logger.exception("agent daily brief crashed")
+        add_notification("digest", "AI 晨报失败", "定时晨报运行出错，详见 设置-AI 用量-操作记录")
 
 
 def _parse_iso(value: str | None) -> datetime | None:
@@ -135,7 +192,11 @@ def poll_due_accounts() -> None:
     except Exception:  # noqa: BLE001
         logger.exception("ai_actions expiry scan crashed")
 
-    if _digest_due():
+    if _brief_enabled_and_due():
+        # AI 晨报（§18.6）：先落当天标记防 60s tick 重复触发，线程内跑 agent
+        set_setting("agent_brief_last_run", datetime.now().date().isoformat())
+        threading.Thread(target=_run_daily_brief, daemon=True, name="agent-brief").start()
+    elif _digest_due():
         try:
             from app.ai.digest import build_digest
 

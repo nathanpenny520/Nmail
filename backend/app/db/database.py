@@ -521,6 +521,35 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        25,
+        """
+        -- 主动式助手与规则提议（REDESIGN_PLAN §18.5/§18.6，2026-09-15）：
+        -- rule_observations 记录用户手动归档/删除（提议证据，email_id 去重）；
+        -- agent_proposals 存「把发件人加入黑名单」提议（批准后走 sender_lists
+        -- 既有管线，不引入规则引擎）；agent_runs.allowed_json 持久化调度运行
+        -- 的工具白名单（续跑时恢复硬边界）。
+        CREATE TABLE IF NOT EXISTS rule_observations (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_id     INTEGER NOT NULL UNIQUE,
+            account_id   INTEGER,
+            sender_email TEXT NOT NULL,
+            action       TEXT NOT NULL,
+            created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS agent_proposals (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind            TEXT NOT NULL DEFAULT 'sender_blacklist',
+            pattern         TEXT NOT NULL,
+            evidence_count  INTEGER NOT NULL DEFAULT 0,
+            sample_subjects TEXT,
+            status          TEXT NOT NULL DEFAULT 'pending',
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            decided_at      TEXT
+        );
+        ALTER TABLE agent_runs ADD COLUMN allowed_json TEXT;
+        """,
+    ),
 ]
 
 

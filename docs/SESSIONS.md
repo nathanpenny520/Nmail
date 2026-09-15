@@ -16,6 +16,14 @@
 
 ## 进行中
 
+### S-0915-0930-规则提议与AI晨报 ✅
+- 目标: 用户拍板两项——①规则提议（§18.5 遗留）：观察手动归档/删除，同发件人 14 天≥3 次提议「加入黑名单自动归档」，采纳走 sender_lists 既有管线 ②主动式助手（§18.6）与每日摘要调度骨架结合：digest_time 到点（开关开启时）由 scheduler 触发 agent 运行（origin=scheduler，auto 模式+SCHEDULER_ALLOWED 工具白名单硬边界：只读+create_draft/set_category），产出通知+草稿进待审列表
+- 范围: backend(db/database.py v25, ai/agent.py allowed 机制, core/rule_proposals.py 新增, core/batch_ops.py 观察钩子, api/ai.py, api/settings.py, scheduler.py, tests) + frontend(types, client, SettingsPage 通用开关+提议卡) + docs(§18.5/§18.6, ARCHITECTURE, PRODUCT_PLAN §11.2, CHANGELOG, SESSIONS)
+- 产出: 提交（哈希见 CHANGELOG）——v25 迁移/白名单双拦机制/观察钩子/提议卡与晨报开关（注意：settings 端点为逐键显式，新键需同时进 read/PUT 两处，本轮补过）
+- 验收: pytest 211 全绿、ruff、npm build、快照 112 端点；真实 e2e——scheduler 触发晨报运行（allowed_json 落库、通知收到晨报正文、set_category 混 1 失败被循环兜住）、提议以真实最高频发件人全流程实测后忽略；测试数据零残留、开关还原默认关
+- 遗留: 晨报失败 1 次 set_category 未深究（模型对已删/越界邮件标记被范围守卫拒，属预期兜底路径）
+- 状态: 已完成（2026-09-15 上午）
+
 ### S-0915-0829-跨会话记忆 ✅
 - 目标: P7-C 落地（REDESIGN_PLAN §18.5）——agent_memory 表（v24，evidence 用户原话硬要求防脑补）+ save/list/delete_memory 三工具（写类 organize 审批审计照常）+ 系统提示词尾部「# 用户长期偏好」注入（与 §17.8 L3 会话内记忆分层）+ 设置页 AI 用量区「AI 记忆」卡查看/逐条删
 - 范围: backend(app/ai/tools.py, agent.py, api/ai.py, db/database.py, tests/test_agent.py) + frontend(types.ts, api/client.ts, pages/SettingsPage.tsx, 快照) + docs(REDESIGN_PLAN §18.5, ARCHITECTURE, PRODUCT_PLAN §11.2, CHANGELOG, SESSIONS)

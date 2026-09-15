@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — P7-D：AI 晨报（调度定时运行+工具白名单硬边界）+ 规则提议（REDESIGN_PLAN §18.5/§18.6）
+- 规则提议（§18.5 拍板落地）：core/rule_proposals 观察用户手动归档/删除（imap_batch 任务体回写，rule_observations 按 email_id 去重），同发件人 14 天 ≥3 次 → pending 提议（agent_proposals；已在名单/已有 pending/rejected 不再提、上限 5 防骚扰）；设置-AI 用量「规则提议」卡采纳/忽略；采纳转调 add_sender_list 既有黑名单管线（不入 agent 审计——用户手动决定），忽略后同发件人不再提；GET 列表懒触发兜底
+- AI 晨报（§18.6，用户拍板：与每日摘要调度骨架结合）：设置-通用新增开关（agent_brief_enabled 默认关），开启后 digest_time 到点由 scheduler 触发 agent 定时运行替代当日摘要（当天标记 KV agent_brief_last_run；独立线程不阻塞 tick）；origin=scheduler+auto 模式+固定指令（总结未读+create_draft 拟稿+set_category 标记）
+- 硬边界=工具白名单：run_stream 新增 allowed_tools（SCHEDULER_ALLOWED=7 读类+create_draft/set_category），schema 过滤+执行层双拦（点名白名单外工具直接拒绝且不落审计），agent_runs.allowed_json 持久化（续跑不丢）；草稿只进待审列表由用户确认发送
+- v25 迁移：rule_observations + agent_proposals + agent_runs.allowed_json
+- 验证：pytest 211 全绿（+3：提议全流程/白名单拒绝且不落审计/allowed_json 持久化）、ruff 通过、npm build（tsc+字号门禁）通过、openapi 快照再生（112 端点）；真实实例 e2e——开启开关后 scheduler 60s 内触发晨报（agent_runs origin=scheduler/auto/allowed_json 落库，3 次 set_category 执行+1 次失败被循环兜住，通知中心收到晨报正文）；提议流程以真实最高频发件人实测——3 次观察→GET 懒触发生成 pending→decide 忽略→不再复活；测试数据零残留、开关已还原默认关
+
 ## cf39666 — P7-C：跨会话记忆——AI 记住你的长期偏好（REDESIGN_PLAN §18.5）
 - agent_memory 表（v24：content/evidence 必填/source/时间戳）；工具 26→29——save_memory（write/organize，evidence 硬要求=用户原话逐字引用防从邮件内容脑补，同文去重更新，上限 100 条）/list_memory（读）/delete_memory（写）
 - 系统提示词尾部注入「# 用户长期偏好」块（最近 30 条，每条附原话佐证；与 §17.8 L3 会话内记忆 memory_json 分层——run 级简报 vs 跨会话持久偏好）
