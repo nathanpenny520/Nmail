@@ -14,7 +14,7 @@ Nmail 是本地优先的单机应用：任何安装方式都只在本机跑一�
 
 > PyPI 发行名为 `nmail-app`（`nmail` 在 PyPI 已被无关项目占用）；产品名与命令名都是 Nmail / `nmail`，不受影响。
 
-> **启动与再次使用（③ Homebrew / ④ uvx 通用）**：安装完成即得到启动命令——Homebrew 装完在终端敲 `nmail`；uvx 则运行 `uvx --from nmail-app nmail`（这条本身就是启动命令，在哪运行都一样，不在当前目录留任何文件）。启动后出现控制台窗口（程序本体，显示日志），几秒后浏览器自动打开 `http://127.0.0.1:8720`（端口被占用会自动顺延，以控制台打印为准）。退出：关闭窗口或 `Ctrl+C`。**下次使用：再运行同一条启动命令即可**（包已在本地缓存，第二次起秒级启动）；不产生系统残留，介意缓存可用 `uv cache clean` 清空。首次配置见下文「首次使用」。
+> **启动与再次使用（③ Homebrew / ④ uvx 通用）**：安装完成即得到启动命令——Homebrew 装完在终端敲 `nmail`；uvx 则运行 `uvx --from nmail-app nmail`（这条本身就是启动命令，在哪运行都一样，不在当前目录留任何文件）。启动后出现控制台窗口（程序本体，显示日志），几秒后浏览器自动打开 `http://127.0.0.1:8720`（端口被占用会自动顺延，以控制台打印为准）。退出：关闭窗口或 `Ctrl+C`。**下次使用：再运行同一条启动命令即可**（包已在本地缓存，第二次起秒级启动）；不产生系统残留，介意缓存可用 `uv cache clean` 清空。首次配置见下文「首次使用」，升级方式见下文「更新」。
 
 ### ① 单文件可执行
 
@@ -75,7 +75,7 @@ pip install nmail-app                # 升级: pip install -U nmail-app；卸载
 ## 更新
 
 - **应用内检查**（默认开启，设置-通用 可关）：每 24 小时向 GitHub 做一次匿名版本号对比（请求只带 UA，不含任何本机数据），发现新版本会在通知中心提醒；设置页可手动「检查更新」。
-- **升级命令**：`winget upgrade nathanpenny520.Nmail` ｜ `brew upgrade nmail` ｜ `uv tool upgrade nmail-app` ｜ 单文件：下载新版覆盖旧文件。
+- **升级命令**：`winget upgrade nathanpenny520.Nmail` ｜ `brew upgrade nmail` ｜ `uv tool upgrade nmail-app` ｜ uvx：`uvx --refresh --from nmail-app nmail`（uvx 首次运行取最新版、之后沿用缓存版本，新发布不会自动跟上，`--refresh` 刷新缓存即取最新）｜ 单文件：下载新版覆盖旧文件。
 - **升级不丢数据**：邮件库、密钥、配置在独立数据目录（见下），新版本首次启动自动执行数据库迁移。
 
 ## 数据位置、备份与卸载

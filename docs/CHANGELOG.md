@@ -3,6 +3,10 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — docs: INSTALL 补 uvx 方式升级命令与「更新」指引
+- uv 官方文档核实语义：`uvx` 首次运行取最新版、之后沿用缓存环境，新版本发布不会自动跟上，升级需 `--refresh` 刷新缓存。「更新 → 升级命令」补 uvx 条目 `uvx --refresh --from nmail-app nmail`（原仅 winget/brew/uv tool upgrade/单文件四渠道）；「启动与再次使用」注尾补「升级方式见下文更新」指引
+- 动机：官网下载页要向 uvx 用户写清更新方式，主仓文档此前对 uvx 渠道升级无官方口径；本机实测 `uvx --refresh --from ruff@latest ruff` 语法通过
+
 ## d8fad4c — 修复: 归档后邮件不可见（skill 实测发现）+ 版本线统一自动化 + CLI 补 drafts delete/folders sync/watch 自动退出（v0.4.1 内容）
 - **archive/unarchive 修复（skill 全量实测发现的核心 bug）**：QQ 等不回 COPYUID 的服务商上，归档/移动拿不到新 UID → 本地删行（R2 语义）→ 归档夹不在轮询范围 → 邮件无限期"消失"、unarchive 静默 updated:0。修复三件套：①移动类动作发生删行后，`batch_ops` 就地复用同一 IMAP 连接增量同步目标文件夹（`sync.resync_folder_with_mb`，动作后立即可读）；②按 message_id 找回新 id，job 结果返回 `rebuilt: {旧id: 新id}`（CLI/skill 换新 id 续操作）；③调度轮询带上归档夹（仅当账号文件夹缓存已有它），其余文件夹维持按需同步不全量轮询。真机回归：archive→rebuilt 映射→立即 read→unarchive→恢复原状全链路通过
 - **版本管理统一 + 自动化**：app / nmail-cli / skill 此前三条版本线（0.4.0 / 0.1.0 / 1.2.0）互不相关，CLI 版本协商 `_notice.update` 拿无关版本线做比较→每次调用必误报"落后建议升级"。统一为同一条版本线（唯一来源=根 pyproject）：新增 `scripts/sync_version.py` 一键同步四处（根 pyproject / nmail-cli pyproject / `__init__.__version__` / SKILL.md frontmatter），release.sh 发版自动调用，`test_version_sync.py` CI 兜底防漂移；skill 版本 1.2.0→0.4.0 对齐
