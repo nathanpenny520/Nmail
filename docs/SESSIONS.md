@@ -19,7 +19,7 @@
 ### S-0915-1100-Agent扩展A4-A5 ✅
 - 目标: AGENT_EXTEND_PLAN 第二包——A4 同批只读并行（≤4 workers，原序回灌保配对；混合批/写类串行）、A5 ask_user 澄清中断（waiting_input 暂停+前端确认卡+answer 续跑；scheduler 白名单硬拒）
 - 范围: backend(app/ai/tools.py, app/ai/agent.py, app/api/ai.py, app/api/ext.py, tests/test_agent_loop.py) + frontend(types.ts, pages/ManagerPage.tsx, openapi/schema 快照) + docs(REDESIGN_PLAN §20.2, CHANGELOG, SESSIONS)
-- 产出: 提交（哈希见 CHANGELOG 回填）——tools 增 ask_user+strs 归一化、agent 循环 A4 并行块+waiting_input 状态机（缺 answer 不入态防卡 running）、api/ext resume 增 answer、前端 AskCard
+- 产出: 提交 e45f184——tools 增 ask_user+strs 归一化、agent 循环 A4 并行块+waiting_input 状态机（缺 answer 不入态防卡 running）、api/ext resume 增 answer、前端 AskCard
 - 验收: pytest 223 全绿（+5）、ruff 通过、npm build（tsc+字号门禁）通过、快照再生（resume 增 answer）、8720 重启 /api/health ok（期间与并行会话撞 8720 重启一次，已拉回）
 - 遗留: A5 真实模型触发澄清为低频路径，UI e2e 待用户日常观察；下一步 A6 事件回填 → A7 技能包 → A8 → B1/B2
 - 状态: 已完成（2026-09-15 中午）

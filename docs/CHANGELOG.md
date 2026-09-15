@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — Agent 扩展 A4-A5：同批只读并行执行 + ask_user 澄清中断（REDESIGN_PLAN §20 / AGENT_EXTEND_PLAN）
+## e45f184 — Agent 扩展 A4-A5：同批只读并行执行 + ask_user 澄清中断（REDESIGN_PLAN §20 / AGENT_EXTEND_PLAN）
 - A4 同批只读并行：`_loop` 同批全为已授权只读工具时 ThreadPoolExecutor（≤4 workers）并行执行、结果按原序回灌（保 tool_call_id 配对）；混合批/写类维持串行（顺序敏感+可遇审批暂停）；日限额按批预检，SQLite 每线程连接保证并发读安全
 - A5 澄清中断：新工具 `ask_user(question, options?≤6)`（kind=meta——不入审计、不可直执行、scheduler 白名单天然排除即无人值守硬拒不挂起）；触发置 waiting_input 暂停，前端「向你确认」卡（选项按钮+自由输入）回答后带 answer 经 /agent/resume 续跑，回答以 ask_user 调用的 tool 回应回灌（兼保 tool_calls 配对）；缺 answer 续跑明确报错且 run 保持可续不卡死
 - 配套：内部与 ext 的 `/agent/resume` 增可选 `answer`；`_build_segments` 增 ask_user 分段（刷新后还原一致）；前端 AskCard + 事件处理（types/ManagerPage）
