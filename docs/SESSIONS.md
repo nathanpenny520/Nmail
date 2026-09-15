@@ -16,6 +16,15 @@
 
 ## 进行中
 
+### S-0915-2150-页签恢复修复 ✅
+- 目标: 用户反馈三修——①非 dirty 写信页签关闭也弹「保留/丢弃」确认（方案A：关标签≠关草稿，否则启动恢复把页签拉回）②写信页签拖拽顺序跨刷新保留（恢复复用 draftId→tabId 映射）③nmail_tab_order 死键清理；另核实 uvx @latest 语义（官方文档）并在 SKILL.md 更新检查补缓存清理提议
+- 范围: frontend(components/compose/ComposeContext.tsx, components/compose/ComposeWorkbench.tsx, components/Layout.tsx) + skills/SKILL.md + docs(CHANGELOG, SESSIONS)
+- 产出: 提交（哈希见 CHANGELOG）——requestClose 对已落库草稿（含非 dirty）一律弹确认、空白未落库标签维持直接关；确认弹窗上移 Layout 常驻（原 dirty 非激活页签点 × 无反应的潜伏 bug 一并修）；恢复复用 sessionStorage 的 nmail_compose_tab_ids 映射（缺失/冲突回退新 id）；tabOrder 死键恢复完成后即剪；SKILL.md 更新检查补 uv cache prune 提议
+- 验证: npm build（字号→vitest→tsc→vite）三轮全过；真实实例 chrome 隔离页 e2e——恢复 2 条测试草稿成页签、非 dirty 点 × 出弹窗、丢弃→页签消失+草稿 55 删除、保留→页签消失+草稿 56 仍在、tabId 跨三次刷新复用不变、预置 tab_order 刷新后顺序保持、死键全清；测试数据零残留（50/51/52 用户真实草稿未动）
+- 关键决策: 挂载期两处竞态（映射先清后读、死键先剪后恢复）均为「恢复是异步的」这一事实的衍生坑，统一以「恢复前同步取映射 + restored 标记」根治；关闭再恢复的页签排末尾（浏览器语义，顺序记忆只服务开着跨刷新的页签）
+- 遗留: 8720 由本会话 uvicorn 直启（启动时原实例已停）；本机 ~/.claude/skills/nmail 副本仍为旧版，待 `npx skills add nathanpenny520/Nmail -g -y` 更新
+- 时间: 2026-09-15 21:50 开工，22:35 完成
+
 ### S-0915-2105-README精简与演示图 ✅
 - 目标: README 双语精简——「快速开始」收敛两渠道、uvx 补「命令即启动命令/--refresh 升级」口径、「首次使用」独立成节、删「自行打包」节与 v0.4.0 特性长枚举、源码与开发模式合并；嵌入 assets/Nmail-demo.gif（3.7MB 1280×720）
 - 范围: README.md, README.zh-CN.md, assets/Nmail-demo.gif(新增入库), docs(CHANGELOG, SESSIONS)

@@ -279,7 +279,8 @@ nmail-cli emails read 254 --save-attachments ./downloads
 本机 CLI 落后于已发布版本），**完成当前请求后主动提议更新**：
 
 1. 告知用户 CLI 版本（`_notice.update.cli`）与服务端版本（`_notice.update.server`）；
-2. 提议执行：`uvx nmail-cli@latest`（升级 CLI）与 `npx skills add nathanpenny520/Nmail -g -y`（更新本 skill）；
+2. 提议执行：`uvx nmail-cli@latest`（升级 CLI）与 `npx skills add nathanpenny520/Nmail -g -y`（更新本 skill），
+   顺带提议 `uv cache prune`（清理 uv 缓存里不再使用的各历史版本条目）；
 3. 提醒用户更新后**重启 AI Agent** 以加载最新 skill。
 
 **规则：不要静默忽略更新提示。**

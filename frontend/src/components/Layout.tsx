@@ -37,7 +37,7 @@ type TabKey = string
 
 /** 主区顶部的标签条：邮件基座（固定）+ 已开启的页面页签 + 写信页签，右侧图标按钮区。 */
 function WorkspaceTabs() {
-  const { tabs, activeTabId, setActiveTab, openNew, requestClose } = useCompose()
+  const { tabs, activeTabId, setActiveTab, openNew, requestClose, restored } = useCompose()
   const location = useLocation()
   const navigate = useNavigate()
   const aiEnabled = useAIEnabled()
@@ -104,6 +104,18 @@ function WorkspaceTabs() {
     ...[...new Set(tabOrder)].filter((k) => alive.has(k)),
     ...[...pageKeys, ...composeKeys].filter((k) => !tabOrder.includes(k)),
   ]
+
+  // tabOrder 死键清理：页签关闭/恢复换绑后及时剔除失效键（渲染本就过滤，这里保证
+  // state 与 sessionStorage 的顺序记忆不积灰）；alive 与 aliveSig 同源同变。
+  // 恢复完成前不剪——启动恢复是异步的，期间 compose 键缺席≠页签已关
+  const aliveSig = [...alive].sort().join('\n')
+  useEffect(() => {
+    if (!restored) return
+    setTabOrder((prev) => {
+      const next = prev.filter((k) => alive.has(k))
+      return next.length === prev.length ? prev : next
+    })
+  }, [aliveSig, restored])
 
   // 拖拽排序状态：dragKey=拖动中页签（渲染半透明）；dropHint.before=插入点（null=追加到末尾）
   const [dragKey, setDragKey] = useState<TabKey | null>(null)
@@ -338,6 +350,7 @@ function IconTab({
 
 export default function Layout() {
   const composing = useCompose().activeTabId !== null
+  const { pendingCloseTabId, settleClose } = useCompose()
 
   return (
     <div className="flex h-full flex-col bg-gray-50 text-gray-900">
@@ -355,6 +368,32 @@ export default function Layout() {
           </div>
         )}
       </div>
+      {/* 关闭写信页签的确认——挂在 Layout 常驻渲染：工作台仅激活态挂载，
+          放里面则非激活页签点 × 永远见不到弹窗 */}
+      {pendingCloseTabId != null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-6">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 className="t-md font-semibold">关闭页签，草稿怎么处理？</h3>
+            <p className="mt-1.5 t-sm text-gray-500">
+              保留后草稿仍在草稿箱，下次启动会在工作台自动恢复；丢弃则彻底删除。
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50"
+                onClick={() => void settleClose(pendingCloseTabId, false)}
+              >
+                保留草稿
+              </button>
+              <button
+                className="rounded-lg border border-red-200 px-3 py-1.5 t-sm text-red-600 hover:bg-red-50"
+                onClick={() => void settleClose(pendingCloseTabId, true)}
+              >
+                丢弃草稿
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

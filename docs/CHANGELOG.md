@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 写信页签关闭即问去留 + 页签顺序跨刷新保留
+- 非 dirty 写信页签关闭不再静默——已落库草稿（含已自动保存的）一律弹「保留草稿/丢弃草稿」确认：此前非 dirty 直接关、草稿留在服务端 status=editing，启动恢复会把页签原样拉回，页签条永远关不干净（用户反馈「删了刷新又出现」的根因）；仅空白未落库标签维持直接关（随手点开零成本）；确认弹窗标题措辞改为对 dirty/非 dirty 都成立
+- 确认弹窗从 ComposeWorkbench 上移到 Layout 常驻渲染——工作台仅激活态挂载，原先关 **dirty 非激活**页签时弹窗挂不上、点 × 无反应（潜伏 bug，一并修复）
+- 落地 e2e 中发现并修复两处挂载期竞态：tabId 映射落盘 effect 挂载时即以空 tabs 清写 sessionStorage，恢复 fetch 完成后才读必读到空——改为恢复 effect 发起请求前同步取映射；tabOrder 死键清理同理会在恢复完成前把 compose 键误当死键剪掉——ComposeContext 增 `restored` 完成标记，恢复完成前不剪
+- 写信页签拖拽顺序跨刷新保留：启动恢复此前每次生成新随机 tabId，nmail_tab_order 里的 compose: 键全部失配被过滤（顺序实际不生效）；现恢复时复用 sessionStorage 的 draftId→tabId 映射（新键 nmail_compose_tab_ids，随 tabs 变化自清理），映射缺失/冲突回退新 id
+- nmail_tab_order 死键清理：页签关闭/草稿删除后失效键及时从 state 剔除，落盘不再积灰（渲染层本就过滤，纯卫生）
+- skills/SKILL.md 更新检查补提议：升级 CLI 顺带 `uv cache prune` 清理 uv 缓存历史版本；uvx `@latest` 语义经官方文档核实=每次运行请求并使用最新版（裸包名才是首跑定版后沿用缓存），skill 全部命令为 @latest 形式，自动更新天然成立
+- 会话：S-0915-2150-页签恢复修复
+
 ## 768d5fa — docs: README 精简改版 + 嵌入演示 GIF
 - 嵌入 assets/Nmail-demo.gif（1280×720，3.7MB）；「快速开始」收敛为两渠道（单文件 / 一行命令），uvx 补「命令即启动命令：重跑同一条即再次打开，升级 --refresh」口径（对齐 INSTALL.md 与官网下载页）；「首次使用（约 5 分钟）」从源码段尾独立成节（所有渠道共用）；删「自行打包」节（并入「开发」一行指引 → docs/RELEASE.md）、删 v0.4.0 特性长枚举（指向 docs/CHANGELOG.md）；「源码开发」与「开发模式」合并为「开发」节去重；更新节各渠道升级补 uvx --refresh；README.md 与 README.zh-CN.md 同步改
 

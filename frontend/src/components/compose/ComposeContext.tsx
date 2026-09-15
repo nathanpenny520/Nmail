@@ -47,6 +47,8 @@ interface ComposeContextValue {
   settleClose: (tabId: string, discard: boolean) => Promise<void>
   /** 发送完成：移除标签、刷新邮件列表 */
   finishSent: (tabId: string) => void
+  /** 启动恢复是否已完成——恢复是异步的，期间 tabs 为空不代表页签已关 */
+  restored: boolean
 }
 
 const ComposeContext = createContext<ComposeContextValue | null>(null)
@@ -76,6 +78,22 @@ function newTabId(): string {
   return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 }
 
+/** 页签 id 跨刷新映射（draftId→tabId，sessionStorage）：启动恢复复用上次的 tabId，
+ *  Layout 的页签顺序记忆（compose:<tabId>）才能跨刷新对上，写信页签顺序不丢。 */
+const TAB_IDS_KEY = 'nmail_compose_tab_ids'
+
+function readSavedTabIds(): Record<string, string> {
+  try {
+    const saved: unknown = JSON.parse(sessionStorage.getItem(TAB_IDS_KEY) ?? '{}')
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {}
+    const out: Record<string, string> = {}
+    for (const [k, v] of Object.entries(saved)) if (typeof v === 'string') out[k] = v
+    return out
+  } catch {
+    return {}
+  }
+}
+
 /**
  * 写信工作台状态中枢（挂 App 级）。写信不走路由：打开标签只是在
  * Layout 主区上方盖一层工作台，收件箱等页面保持挂载（keep-alive）。
@@ -88,6 +106,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   const [drafts, setDrafts] = useState<Record<number, UserDraft>>({})
   const [pendingCloseTabId, setPendingCloseTabId] = useState<string | null>(null)
   const restoredRef = useRef(false)
+  const [restored, setRestored] = useState(false)
   const queryClient = useQueryClient()
 
   const accountsQuery = useQuery({ queryKey: ['accounts'], queryFn: api.getAccounts })
@@ -117,6 +136,8 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (restoredRef.current) return
     restoredRef.current = true
+    // 先同步取 tabId 映射——映射落盘 effect 挂载时即以空 tabs 清写一次，等 fetch 完成再读就只剩 {}
+    const savedTabIds = readSavedTabIds()
     Promise.all([api.getUserDrafts('editing'), api.getUserDrafts('scheduled')])
       .then(([editing, scheduled]) => {
         const list = [...scheduled.drafts, ...editing.drafts]
@@ -125,19 +146,38 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
           for (const d of list) next[d.id] = d
           return next
         })
+        // 复用上次的 tabId（映射缺失/冲突回退新 id）——页签顺序记忆跨刷新对得上
+        const seen = new Set<string>()
         setTabs(
-          list.map((d) => ({
-            tabId: newTabId(),
-            draftId: d.id,
-            mode: d.mode,
-            title: tabTitle(d),
-            dirty: false,
-            ephemeral: false,
-          })),
+          list.map((d) => {
+            const saved = savedTabIds[String(d.id)]
+            const tabId = saved && !seen.has(saved) ? saved : newTabId()
+            seen.add(tabId)
+            return {
+              tabId,
+              draftId: d.id,
+              mode: d.mode,
+              title: tabTitle(d),
+              dirty: false,
+              ephemeral: false,
+            }
+          }),
         )
       })
       .catch(() => {}) // 恢复失败不打断应用启动
+      .finally(() => setRestored(true))
   }, [])
+
+  // 页签 id 映射随 tabs 变化落 sessionStorage（只记已落库草稿；ephemeral 临时 id 无跨刷新意义）
+  useEffect(() => {
+    const map: Record<string, string> = {}
+    for (const t of tabs) if (t.draftId > 0) map[String(t.draftId)] = t.tabId
+    try {
+      sessionStorage.setItem(TAB_IDS_KEY, JSON.stringify(map))
+    } catch {
+      /* 隐私模式等不可用时仅顺序记忆失效 */
+    }
+  }, [tabs])
 
   const addTab = useCallback((draft: UserDraft, ephemeral = false) => {
     const tabId = newTabId()
@@ -290,7 +330,10 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     (tabId: string) => {
       // 读 tabsRef 而非闭包：存草稿按钮保存完成后立刻关闭时，状态刚更新
       const tab = tabsRef.current.find((t) => t.tabId === tabId)
-      if (tab?.dirty) setPendingCloseTabId(tabId)
+      // 已落库草稿一律询问去留（含已自动保存的非 dirty 页签）——关闭≠删草稿，
+      // 不问则草稿留在服务端，下次启动恢复会把页签原样拉回（2026-09-15 用户反馈）；
+      // 仅空白未落库标签直接关（随手点开零成本）
+      if (tab && (tab.dirty || tab.draftId > 0)) setPendingCloseTabId(tabId)
       else removeTab(tabId)
     },
     [removeTab],
@@ -356,6 +399,7 @@ export function ComposeProvider({ children }: { children: ReactNode }) {
     pendingCloseTabId,
     settleClose,
     finishSent,
+    restored,
   }
   return <ComposeContext.Provider value={value}>{children}</ComposeContext.Provider>
 }
