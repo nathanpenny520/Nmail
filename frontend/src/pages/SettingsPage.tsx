@@ -839,6 +839,7 @@ export default function SettingsPage() {
               ) : updateState?.checked_at ? (
                 <p className="mt-2 t-sm text-gray-400">上次检查：{backendLocalDate(updateState.checked_at)}</p>
               ) : null}
+              <UpdateApplyRow isNewer={!!updateState?.is_newer} oldVersion={updateState?.current_version ?? ''} />
               {updateToggleMutation.isPending && <span className="t-sm text-gray-400">保存中…</span>}
             </div>
 
@@ -897,6 +898,113 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/** 应用内更新执行区（UPDATE_AND_DESKTOP.md §3）：立即更新 → 后台下载换身 → 重启生效。
+ * 不可自更新渠道（brew/winget/uvx）显示升级命令；进行中每秒轮询进度。 */
+function UpdateApplyRow({ isNewer, oldVersion }: { isNewer: boolean; oldVersion: string }) {
+  const [copied, setCopied] = useState(false)
+  const [restarting, setRestarting] = useState(false)
+  const [restartError, setRestartError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const applyQuery = useQuery({
+    queryKey: ['update-apply'],
+    queryFn: api.getUpdateApply,
+    refetchInterval: (q) => {
+      const phase = q.state.data?.phase
+      return phase === 'downloading' || phase === 'verifying' || phase === 'pip_upgrading' ? 1000 : false
+    },
+  })
+  const startMutation = useMutation({
+    mutationFn: () => api.startUpdateApply(),
+    onSuccess: (r) => {
+      if (!r.ok && r.error) setRestartError(r.error)
+      void queryClient.invalidateQueries({ queryKey: ['update-apply'] })
+    },
+    onError: (err: Error) => setRestartError(err.message),
+  })
+  const restartMutation = useMutation({
+    mutationFn: () => api.restartForUpdate(),
+    onSuccess: () => {
+      setRestarting(true)
+      const started = Date.now()
+      const timer = setInterval(() => {
+        // 旧进程退出前 /api/health 仍应答：至少等 1.5s，且版本已变（或 15s 兜底）才刷新
+        fetch('/api/health').then((r) => r.json()).then((h) => {
+          if (h?.status === 'ok' && Date.now() - started > 1500
+            && (h.version !== oldVersion || Date.now() - started > 15000)) {
+            clearInterval(timer)
+            window.location.reload()
+          }
+        }).catch(() => {})
+        if (Date.now() - started > 45000) {
+          clearInterval(timer)
+          setRestarting(false)
+          setRestartError('重启超时，请手动刷新页面')
+        }
+      }, 600)
+    },
+    onError: (err: Error) => setRestartError(err.message),
+  })
+  const a = applyQuery.data
+  if (!a || (!isNewer && a.phase !== 'ready' && a.phase !== 'failed')) return null
+  const busy = a.phase === 'downloading' || a.phase === 'verifying' || a.phase === 'pip_upgrading'
+  return (
+    <div className="mt-2 t-sm">
+      {busy && (
+        <div className="flex items-center gap-2 text-gray-500">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>
+            {a.phase === 'downloading' ? `下载中 ${a.progress}%` : a.phase === 'verifying' ? '校验中…' : '正在通过 pip 升级…'}
+          </span>
+          {a.phase === 'downloading' && (
+            <span className="h-1 w-40 overflow-hidden rounded bg-gray-200">
+              <span className="block h-full bg-indigo-500 transition-all" style={{ width: `${a.progress}%` }} />
+            </span>
+          )}
+        </div>
+      )}
+      {a.phase === 'ready' && (
+        <div className="flex flex-wrap items-center gap-2 text-emerald-700">
+          <span>新版本 v{a.staged_version ?? a.current_version} 已就绪，重启即更新；下次打开也会自动生效。</span>
+          <button
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-white hover:bg-indigo-500 disabled:opacity-50"
+            onClick={() => restartMutation.mutate()}
+            disabled={restarting}
+          >
+            {restarting ? '重启中…' : '立即重启更新'}
+          </button>
+        </div>
+      )}
+      {a.phase === 'failed' && <p className="text-red-600">更新失败：{a.error}</p>}
+      {isNewer && !busy && a.phase !== 'ready' && a.can_self_update && (
+        <button
+          className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+          onClick={() => startMutation.mutate()}
+          disabled={startMutation.isPending}
+        >
+          {a.phase === 'failed' ? '重试更新' : '立即更新'}
+        </button>
+      )}
+      {isNewer && !a.can_self_update && a.upgrade_hint && (
+        <div className="flex items-center gap-2 text-gray-500">
+          <span>本渠道请在终端执行：</span>
+          <code className="rounded bg-gray-100 px-1.5 py-0.5">{a.upgrade_hint}</code>
+          <button
+            title="复制"
+            onClick={() => {
+              void navigator.clipboard.writeText(a.upgrade_hint ?? '')
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1500)
+            }}
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      )}
+      {restartError && <p className="mt-1 text-red-600">{restartError}</p>}
     </div>
   )
 }

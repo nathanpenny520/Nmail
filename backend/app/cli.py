@@ -30,16 +30,29 @@ def find_free_port(start: int) -> int:
 
 def wait_for_port(port: int, timeout: float = 30.0) -> int:
     """等 port 可绑定后精确回绑（更新重启专用：旧进程退出、新进程接同一端口，
-    浏览器页面地址不变）；超时才退回顺延策略。"""
+    浏览器页面地址不变）。
+
+    两段式：先探活——健康检查有人应答就说明旧进程还在，继续等；无人应答后
+    再带 SO_REUSEADDR 试绑——旧进程退出后的 TIME_WAIT 连接残留会让裸 bind
+    在 macOS 上报 EADDRINUSE 等满超时，进而错误地顺延换端口。超时才退回顺延。"""
+    import httpx
+
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            httpx.get(f"http://127.0.0.1:{port}/api/health", timeout=0.4)
+        except Exception:  # noqa: BLE001 — 无人应答即旧进程已退（或非 Nmail 服务）
+            break
+        time.sleep(0.2)
+    while time.monotonic() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
                 sock.bind(("127.0.0.1", port))
                 return port
-        except OSError:
-            time.sleep(0.2)
-    print(f"等待端口 {port} 释放超时（{timeout:.0f}s），改用顺延端口")
+            except OSError:
+                time.sleep(0.2)
+    print(f"等待端口 {port} 释放超时（{timeout:.0f}s），改用顺延端口", flush=True)
     return find_free_port(port)
 
 

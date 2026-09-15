@@ -273,7 +273,11 @@ def restart_app(port: int) -> dict:
     if getattr(sys, "frozen", False):
         cmd = [sys.executable, "--wait-port", str(port), "--no-browser"]
     else:
-        cmd = [sys.executable, "-c", "from app.cli import main; main()",
+        # 非冻结：新解释器 cwd 不可控，显式注入 backend 目录（app 包父目录）再导入；
+        # pip venv 场景该路径本就在 sys.path，注入无害
+        backend_root = str(Path(__file__).resolve().parents[2])
+        cmd = [sys.executable, "-c",
+               f"import sys; sys.path.insert(0, {backend_root!r}); from app.cli import main; main()",
                "--wait-port", str(port), "--no-browser"]
     kwargs: dict = {"close_fds": True}
     if sys.platform == "win32":

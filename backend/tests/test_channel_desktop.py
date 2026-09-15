@@ -130,3 +130,60 @@ def test_apply_state_shape_and_gate(monkeypatch):
 def test_platform_asset_mapping():
     assert update_apply._platform_key() in (
         None, ("windows", "amd64"), ("macos", "arm64"), ("linux", "amd64"))
+
+
+# ── update_apply：换身舞步（临时目录模拟冻结二进制）─────────────────────
+
+def _fake_binary(tmp_path: Path, content: str = "OLD") -> Path:
+    current = tmp_path / "nmail"
+    current.write_text(content)
+    current.chmod(0o755)
+    return current
+
+
+def test_swap_in_new_replaces_and_keeps_old(tmp_path, monkeypatch):
+    current = _fake_binary(tmp_path)
+    new_file = tmp_path / "download.bin"
+    new_file.write_text("NEW")
+    monkeypatch.setattr(update_apply, "_current_binary", lambda: current)
+    update_apply._swap_in_new(new_file)
+    assert current.read_text() == "NEW"
+    assert (tmp_path / "nmail.old").read_text() == "OLD"
+    assert not new_file.exists() and not (tmp_path / "nmail.tmp").exists()
+    assert current.stat().st_mode & 0o111  # 可执行位保留
+
+
+def test_swap_rollback_on_failure(tmp_path, monkeypatch):
+    current = _fake_binary(tmp_path)
+    monkeypatch.setattr(update_apply, "_current_binary", lambda: current)
+    try:
+        update_apply._swap_in_new(tmp_path / "missing.bin")  # copyfile 必失败
+        assert False, "应抛 OSError"
+    except OSError:
+        pass
+    # 原文件必须完好在原位，否则下次启动无程序可跑
+    assert current.exists() and current.read_text() == "OLD"
+    assert not (tmp_path / "nmail.old").exists()
+
+
+def test_finish_pending_swap_applies_newer(tmp_path, monkeypatch):
+    current = _fake_binary(tmp_path)
+    new_file = update_apply._update_dir() / "nmail.new"
+    new_file.write_text("NEW")
+    update_apply._set_state(
+        phase="downloading", pending_version="999.0.0",
+        digest="sha256:" + hashlib.sha256(b"NEW").hexdigest())
+    monkeypatch.setattr(update_apply, "_current_binary", lambda: current)
+    update_apply.finish_pending_swap()
+    assert current.read_text() == "NEW"
+    state = update_apply.get_state()
+    assert state["phase"] == "ready" and state["staged_version"] == "999.0.0"
+
+
+def test_finish_pending_swap_discards_stale(tmp_path, monkeypatch):
+    new_file = update_apply._update_dir() / "nmail.new"
+    new_file.write_text("X")
+    update_apply._set_state(phase="downloading", pending_version="0.0.1", digest=None)
+    monkeypatch.setattr(update_apply, "_current_binary", lambda: None)
+    update_apply.finish_pending_swap()
+    assert not new_file.exists() and update_apply.get_state()["phase"] == "idle"

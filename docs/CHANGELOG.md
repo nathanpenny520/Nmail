@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交2 — feat: 应用内「立即更新」与一键重启（binary/pip 渠道自更新）
+- core/update_apply.py 更新执行层：Release 资产流式下载（进度节流落 KV）→ SHA256 校验（GitHub 资产 digest）→ **换身**（运行中的可执行文件可 rename 不可覆写：当前二进制 rename 为 *.old 后原路径原子落位新文件，旧进程跑旧 inode 不受影响，失败自动回滚还原）→ `ready`；pip 渠道走 `{sys.executable} -m pip install --upgrade nmail-app` 原地升级
+- `POST /api/update-apply` 启动后台更新（进行中幂等）、`GET /api/update-apply` 渠道能力+进度状态、`POST /api/update-apply/restart?port=` 一键重启：新进程 `--wait-port` 接管同一端口后旧进程退出，浏览器页面地址不变
+- cli `wait_for_port` 两段式回绑：先探活确认旧进程退净，再带 SO_REUSEADDR 试绑——实测发现旧进程退出后的 TIME_WAIT 残留会让裸 bind 在 macOS 上报 EADDRINUSE 等满 30s 超时、错误顺延到 8721（浏览器页面就此丢失）
+- 设置页更新区块升级：发现新版本时出「立即更新」（下载进度条/校验中/pip 升级中/失败重试全状态），就绪后「立即重启更新」（前端轮询 /api/health 待版本变化自动刷新）；brew/winget/uvx 渠道显示对应升级命令 + 一键复制
+- 换身舞步/回滚/启动收尾（finish_pending_swap 处理下载中途退出的残局）补 4 项单元测试；重启链路 8720 真实实例 e2e（旧进程退净、单实例回绑同端口、health 恢复）
+- 会话：S-0915-2225-更新与桌面图标
+
 ## 待提交 — feat: 桌面图标一键安装（各安装方式）+ 渠道识别 + CLI 单实例探测
 - 新增 `core/channel.py`：启动时识别安装渠道（binary/brew/winget/pip/uvx）——自更新与桌面集成都按渠道分流；uvx 经 uv 缓存路径特征识别，brew/winget 冻结二进制按安装路径识别
 - 新增 `core/desktop.py`：一键生成桌面图标——Windows 桌面+开始菜单 .lnk（PowerShell COM）、macOS `~/Applications/Nmail.app` 包（Info.plist+icns）、Linux .desktop+hicolor 图标；状态检测/移除/重装；binary 渠道直接包装自身，pip/uvx 先落启动命令包装器再包装
