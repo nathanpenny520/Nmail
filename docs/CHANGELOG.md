@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — docs: INSTALL 补 uvx 方式升级命令与「更新」指引
+## 5cd023e — docs: INSTALL 补 uvx 方式升级命令与「更新」指引
 - uv 官方文档核实语义：`uvx` 首次运行取最新版、之后沿用缓存环境，新版本发布不会自动跟上，升级需 `--refresh` 刷新缓存。「更新 → 升级命令」补 uvx 条目 `uvx --refresh --from nmail-app nmail`（原仅 winget/brew/uv tool upgrade/单文件四渠道）；「启动与再次使用」注尾补「升级方式见下文更新」指引
 - 动机：官网下载页要向 uvx 用户写清更新方式，主仓文档此前对 uvx 渠道升级无官方口径；本机实测 `uvx --refresh --from ruff@latest ruff` 语法通过
 

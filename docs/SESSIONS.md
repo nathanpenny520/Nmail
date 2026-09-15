@@ -16,10 +16,13 @@
 
 ## 进行中
 
-### S-0915-2050-uvx升级口径与下载页说明 🔄
+### S-0915-2050-uvx升级口径与下载页说明 ✅
 - 目标: 主仓 INSTALL「更新」节补 uvx 升级命令（uv 官方语义：uvx 首跑取最新版、之后沿用缓存，升级需 --refresh）；官网下载页副标题点明「该命令即启动命令」并补下次打开/更新方式/常驻安装三行说明，uvx 仍为主推渠道
 - 范围: docs(INSTALL.md, CHANGELOG.md, SESSIONS.md) + nmail-site(独立仓): src/pages/download.astro, docs/CHANGELOG.md
-- 时间: 2026-09-15 20:52 开工
+- 产出: 主仓 5cd023e（INSTALL 升级命令补 uvx --refresh 条目 + 「启动与再次使用」注尾补升级指引）；官网 ef9426a（下载页副标题点明 + 下次打开/更新/常驻三行 + 单文件卡补更新=覆盖，push 即上线）
+- 验证: uv 官方文档核实 uvx 缓存语义（首跑取最新、之后沿用缓存、--refresh 取新）；本机实测 uvx --refresh --from ruff@latest ruff 语法通过；官网 npm run build 20 页通过、preview 实测 7 处新文案全部渲染
+- 遗留: 无
+- 时间: 2026-09-15 21:00 完成
 
 ### S-0915-2130-版本统一与CLI修复 ✅
 - 目标: ①skill 实测发现的 archive 后邮件不可见/unarchive 无效修复（移动类动作后就地增量同步目标文件夹+重建映射）②版本管理自动化+统一版本线（app=nmail-cli=skill，sync_version.py + release.sh 集成 + 一致性测试）③CLI 补 drafts delete / folders sync / watch --timeout/--max-emails ④SKILL.md 补镜像兜底与 watch agent 用法
