@@ -431,6 +431,28 @@ def test_ask_user_blocked_in_scheduler_whitelist(monkeypatch):
     assert _run_row(events[0]["run_id"])["status"] == "done"
 
 
+def test_read_skill_and_prompt_index(monkeypatch):
+    """A7 技能层：read_skill 取全文/未知名报错；系统提示词注入技能索引。"""
+    aid = _aid()
+    r = T.execute("read_skill", {"name": "weekly_report"}, aid, [aid])
+    assert "周报" in r["title"] and "create_draft" in r["content"]
+    assert "error" in T.execute("read_skill", {"name": "nope"}, aid, [aid])
+
+    seen = {}
+
+    def fake_iter(base_url, model, api_key, messages, tools=None, tool_choice=None,
+                  max_tokens=2000, temperature=0.3):
+        seen["system"] = messages[0]["content"]
+        return ("概况：正常。", [], {"prompt_tokens": 2, "completion_tokens": 2}, "stop")
+
+    monkeypatch.setattr(agent.tasks, "_ai_config", lambda pid=None: ("http://x", "test-model", None))
+    monkeypatch.setattr(agent, "_native_supported", lambda *a, **k: True)
+    monkeypatch.setattr(agent.llm, "iter_chat_step", fake_iter)
+    events = list(agent.run_stream("概况", None, None, [aid], "approval", None))
+    assert events[-1]["type"] == "done"
+    assert "可用工作流技能" in seen["system"] and "read_skill" in seen["system"]
+
+
 def test_native_json_text_fallback_parse(monkeypatch):
     """原生模式下模型无视 tools 输出裸 JSON 文本 → 兜底解析为工具调用，不泄漏给用户。"""
     aid = _aid()

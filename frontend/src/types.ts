@@ -388,6 +388,33 @@ export interface AgentEvent {
   status?: string
 }
 
+/** Agent 运行记录（A6/A8：agent_runs 行 + 步级观测，GET /api/ai/agent/runs） */
+export interface AgentRunRow {
+  id: number
+  session_id: number | null
+  mode: string
+  origin: string
+  status: string
+  steps: number
+  budget_used_ms: number
+  created_at: string
+  updated_at: string
+}
+
+export interface AgentRunDetail {
+  run: AgentRunRow
+  resumable: boolean
+  pending: { tool?: string; args?: Record<string, unknown>; kind?: string } | null
+  steps: {
+    step: number | string
+    model: string
+    prompt_tokens: number
+    completion_tokens: number
+    ok: boolean
+    at: string
+  }[]
+}
+
 /** Agent 消息分段（REDESIGN_PLAN §17.4，与后端 _build_segments 同构） */
 export interface AgentSegment {
   kind: 'text' | 'step' | 'approval' | 'ask_user' | 'error'

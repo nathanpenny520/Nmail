@@ -214,3 +214,59 @@ def test_watch基线不回放(capsys, monkeypatch):
     monkeypatch.setattr(cli.time, "sleep", lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     assert main(["watch", "--account-id", str(aid), "--interval", "0"]) == EXIT_OK
     assert _out_lines(capsys) == []  # 基线轮不输出历史邮件
+
+
+# ── B1 folders / B2 更新提示 / B3 agent 通道 ─────────────────
+
+def _seed_folder(account_id: int, name: str = "INBOX") -> None:
+    conn = database.get_conn()
+    conn.execute(
+        "INSERT INTO folders (account_id, name, delim, special_use, subscribed)"
+        " VALUES (?, ?, '/', '', 1)", (account_id, name),
+    )
+    conn.commit()
+
+
+def test_folders_list(capsys):
+    "B1：folders list 走文件夹缓存（不触发服务器 LIST）。"
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    save_config("http://127.0.0.1:8720", _make_key(["read"]))
+    aid = _seed_account()
+    _seed_folder(aid)
+    _seed_folder(aid, "Archived")
+    assert main(["folders", "list", "--account-id", str(aid)]) == EXIT_OK
+    envelope = _out_lines(capsys)[0]
+    assert envelope["ok"] is True and "folders" in envelope["data"]
+
+
+def test_agent_ask_未配置AI(capsys):
+    "B3：AI 未配置时 agent ask 返回明确错误（exit 2，agent 据此告知用户）。"
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    save_config("http://127.0.0.1:8720", _make_key(["agent"]))
+    assert main(["agent", "ask", "概况"]) == EXIT_BAD_PARAMS
+    envelope = _out_lines(capsys)[0]
+    assert envelope["ok"] is False
+
+
+def test_agent_decide参数互斥():
+    "B3：decide 必须二选一，缺省/双选都 exit 2（不发请求）。"
+    assert main(["agent", "decide", "1"]) == EXIT_BAD_PARAMS
+    assert main(["agent", "decide", "1", "--approve", "--reject"]) == EXIT_BAD_PARAMS
+
+
+def test_semver比较与更新提示(monkeypatch, capsys):
+    "B2：服务端版本高于 CLI 时输出附 _notice.update。"
+    import nmail_cli
+
+    assert cli._semver_tuple("0.10.0") > cli._semver_tuple("0.9.9") > cli._semver_tuple("0.9.8")
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    save_config("http://127.0.0.1:8720", _make_key(["read"]))
+    monkeypatch.setattr(nmail_cli, "__version__", "0.0.1")
+    cli._PENDING_NOTICE.clear()
+    cli._probe_update_notice()
+    assert cli._PENDING_NOTICE["update"]["server"].startswith("0.")
+    aid = _seed_account()
+    _seed_folder(aid)
+    assert main(["folders", "list", "--account-id", str(aid)]) == EXIT_OK
+    envelope = _out_lines(capsys)[-1]
+    assert envelope["ok"] is True and envelope["_notice"]["update"]["cli"] == "0.0.1"

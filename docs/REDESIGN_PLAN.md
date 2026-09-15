@@ -879,6 +879,9 @@ A（当天量级）→ C（记忆，体感最大）→ D（主动式）→ B（�
    paused（不空悬）；不加自动续段——纯读类失控循环不占每日动作限额（读类不落审计），步数/时间
    是唯一成本闸，自动续跑等于无人踩刹车。
 2. A2 二次不一致行为按推荐值：原文放行 + 末尾警示行（不静默、不阻断）。
+3. 2026-09-15 用户指示「全部完成」：B3（CLI 包装总管家通道）一并落地；A7 技能存放按推荐值
+   的内置层先行（Python 模块随包分发、冻结环境零依赖），用户自定义技能（数据目录/设置页）
+   为后续迭代。
 
 ### 20.2 落地状态
 
@@ -903,4 +906,22 @@ A（当天量级）→ C（记忆，体感最大）→ D（主动式）→ B（�
 - 验证（A1-A5 合并）：pytest 223 全绿（累计 +11）、ruff 通过、npm build（tsc+字号门禁）通过、
   openapi/schema 快照再生（resume 增 answer）；8720 已重启 /api/health ok；A5 真实模型触发澄清
   属低频路径，UI e2e 待用户日常使用观察。
-- 待做：A6 事件回填 → A7 技能包 → A8 步级可观测 → B1/B2（B3 缓发），顺序与验收见 AGENT_EXTEND_PLAN §5。
+- **A6 运行观测与跨刷新恢复 ✅（2026-09-15）**：`GET /api/ai/agent/runs`（列表，按 session 过滤）+
+  `/agent/runs/{id}`（状态/pending/ai_logs 步级 token——A8 同源）；前端 openSession 查最新运行，
+  停在 paused_max_steps/paused_budget 时恢复「继续」横幅（刷新不再丢续跑入口）；事件级回放按
+  拍板项 2 推荐值不建独立表——分段轨迹已随 chat_messages.segments_json 持久化。
+- **A7 内置技能层 ✅（2026-09-15）**：`ai/skills_builtin.py` 四个内置工作流技能（周报摘要/跟进提醒/
+  批量归档策略/报销发票整理，方法论提示词包零规则匹配）；系统提示词只注入索引（名字+一句话），
+  新工具 read_skill 按需取全文；SCHEDULER_ALLOWED 增 read_skill；用户自定义技能为后续迭代（拍板 3）。
+- **A8 步级可观测 ✅（2026-09-15）**：并入 /agent/runs/{id}（ai_logs task_type='agent' 的
+  'run {id} step {n}' 行聚合 token/模型/耗时，零新表）。
+- **B1 CLI folders 命令 ✅（2026-09-15）**：`nmail-cli folders list --account-id`（走文件夹缓存，
+  不触发服务器 LIST）；SKILL.md 命令清单与参数速查同步。
+- **B2 版本协商 ✅（2026-09-15）**：ext /health 返回 version；CLI 每命令尽力探测（失败静默），
+  落后时输出附 `_notice.update`（cli/server/upgrade/skill 提示）；SKILL.md 增「更新检查」节。
+- **B3 CLI 总管家通道 ✅（2026-09-15，拍板 3）**：`nmail-cli agent ask/decide/resume`
+  （scope=agent，包装 /agent/chat|decide|resume 非流式端点，紧凑输出 answer/approvals/paused）；
+  SKILL.md 增「内置总管家通道」节（委托-审批-续跑闭环）。
+- 验证（A6-B3 合并）：pytest 224 全绿（+1 read_skill/技能索引）+ CLI 契约 13 全绿（+4）、ruff 通过、
+  npm build（tsc+字号门禁）通过、openapi/schema 快照再生、8720 重启 /api/health ok；
+  SKILL.md v1.2.0（folders/总管家通道/更新检查）。**§20 全部条目至此落地完毕。**

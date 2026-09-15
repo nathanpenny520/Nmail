@@ -449,6 +449,68 @@ def agent_resume(payload: AgentResumeIn):
     return _AgentSSE(resume_run_id=payload.run_id, resume_answer=payload.answer).response()
 
 
+@router.get("/agent/runs")
+def agent_runs(session_id: int | None = None, limit: int = 20) -> dict:
+    """Agent 运行列表（A6/A8：跨刷新恢复「继续」入口 + 运行级观测）。"""
+    limit = max(1, min(limit, 100))
+    where, params = "", []
+    if session_id is not None:
+        where = " WHERE session_id = ?"
+        params = [session_id]
+    rows = get_conn().execute(
+        f"SELECT id, session_id, mode, origin, status, steps, budget_used_ms,"
+        f" created_at, updated_at FROM agent_runs{where} ORDER BY id DESC LIMIT ?",
+        [*params, limit],
+    ).fetchall()
+    return {"runs": [dict(r) for r in rows]}
+
+
+@router.get("/agent/runs/{run_id}")
+def agent_run_detail(run_id: int) -> dict:
+    """Agent 运行详情（A8 步级可观测）：状态 + pending + ai_logs 步级 token/摘要。
+
+    步级记录取自 ai_logs（task_type='agent'，summary='run {id} step {n}'，
+    tasks._logged 循环内逐步落库），不新增表。"""
+    row = get_conn().execute(
+        "SELECT id, session_id, mode, origin, status, steps, budget_used_ms,"
+        " pending_json, created_at, updated_at FROM agent_runs WHERE id = ?", (run_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "运行不存在")
+    prefix = f"run {run_id} step "
+    steps = []
+    for lg in get_conn().execute(
+        "SELECT summary, model, prompt_tokens, completion_tokens, ok, created_at"
+        " FROM ai_logs WHERE task_type = 'agent' AND summary LIKE ? ORDER BY id",
+        (prefix + "%",),
+    ):
+        suffix = lg["summary"][len(prefix):]
+        steps.append({
+            "step": int(suffix) if suffix.isdigit() else suffix,
+            "model": lg["model"],
+            "prompt_tokens": lg["prompt_tokens"],
+            "completion_tokens": lg["completion_tokens"],
+            "ok": bool(lg["ok"]),
+            "at": lg["created_at"],
+        })
+    pending = None
+    if row["pending_json"]:
+        try:
+            p = json.loads(row["pending_json"])
+            pending = {"tool": p.get("tool"), "args": p.get("args") or {},
+                       "kind": p.get("kind") or "approval"} if isinstance(p, dict) else None
+        except ValueError:
+            pending = None
+    return {
+        "run": {k: row[k] for k in
+                ("id", "session_id", "mode", "origin", "status", "steps",
+                 "budget_used_ms", "created_at", "updated_at")},
+        "resumable": row["status"] in agent._RESUMABLE,
+        "pending": pending,
+        "steps": steps,
+    }
+
+
 @router.post("/agent/action/{action_id}/decide")
 def agent_decide(action_id: int, payload: AgentDecisionIn) -> dict:
     """审批动作：批准执行（可改参数）或拒绝。"""

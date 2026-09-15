@@ -1,7 +1,7 @@
 ---
 name: nmail
-description: 通过 nmail-cli 命令行工具操作 Nmail 邮箱：搜索、读取、回复、转发、发送（两阶段确认）、附件收发、整理归档、新邮件监听。当用户需要进行任何邮件相关操作、或提到 Nmail 时使用此 skill。
-version: 1.1.0
+description: 通过 nmail-cli 命令行工具操作 Nmail 邮箱：搜索、读取、回复、转发、发送（两阶段确认）、附件收发、整理归档、新邮件监听，也可一条命令委托 Nmail 内置 AI 总管家。当用户需要进行任何邮件相关操作、或提到 Nmail 时使用此 skill。
+version: 1.2.0
 ---
 
 # Nmail
@@ -31,9 +31,10 @@ uvx nmail-cli@latest auth login --yes
 
 | scope | 允许的操作 |
 |-------|-----------|
-| `read` | 看账号/邮件/附件/联系人/摘要、新邮件监听（`+me`、`emails`、`contacts`、`digest`、`watch`） |
+| `read` | 看账号/邮件/附件/联系人/摘要/文件夹、新邮件监听（`+me`、`emails`、`contacts`、`digest`、`folders`、`watch`） |
 | `write` | 整理邮箱与写草稿（`emails action`、`drafts create/reply/forward`、附件上传） |
 | `send` | 真正发送（`drafts send`） |
+| `agent` | 委托内置 AI 总管家（`agent ask/decide/resume`，见「内置总管家通道」） |
 
 需要发邮件时显式扩权：`uvx nmail-cli@latest auth login --yes --scopes read,write,send`。
 只读 Key 调 write/send 类命令会得到 exit 3（见「exit code 错误处理」），扩权后重试即可。
@@ -67,7 +68,9 @@ uvx nmail-cli@latest +me
 | 新建草稿 | `nmail-cli drafts create --account-id <id> --to a@b.com --subject 标题 --body-file ./x.md` | 不发送 |
 | 发送 | `nmail-cli drafts send <id>` → `nmail-cli drafts send <id> --confirmed` | 两阶段确认，见下 |
 | 联系人 | `nmail-cli contacts search "名字"` | 写信补全用 |
+| 文件夹 | `nmail-cli folders list --account-id <id>` | 账号的文件夹列表（`move`/`--folder` 的目标名从此查） |
 | 摘要 | `nmail-cli digest` | 最新每日摘要 |
+| 总管家 | `nmail-cli agent ask "交办的事"` | 一条命令委托内置 AI 总管家（scope=agent，见「内置总管家通道」） |
 | 监听 | `nmail-cli watch` | NDJSON 每行一封新邮件，持续输出直到用户要求停止（Ctrl-C） |
 | 任务 | `nmail-cli jobs get <job_id>` | 后台任务进度（action 已自动轮询，一般不需要） |
 
@@ -123,10 +126,37 @@ uvx nmail-cli@latest +me
 
 `"关键词"`（可省略，列出全部）、`--limit N`（默认 50）。
 
+### folders list
+
+`--account-id <id>`（必填，`+me` 查看）；返回该账号的文件夹缓存列表（含未读数）。
+
 ### watch
 
 `--since-id <id>`（从该游标续听——长监听断线重连后用它继续，不回放更早历史）、
 `--account-id <id>`（只监听该账号）、`--interval 秒`（轮询间隔，默认 10）。
+
+## 内置总管家通道（agent scope）
+
+除了自己逐步调命令，也可以**一条命令把整件事交给 Nmail 内置 AI 总管家**（它有搜索/整理/
+拟稿/发送全套工具，且自带审批卡、操作审计与每日限额——适合多步骤整理类任务）：
+
+```bash
+nmail-cli agent ask "把收件箱里的营销邮件都归档，漏回的邮件各拟一份回复草稿" --mode approval
+```
+
+输出含 `answer`（回答/结论）、`approvals`（待审批动作清单，可为空）、`paused`（暂停态，可为空）。
+按返回决定下一步：
+
+- `approvals` 非空：把每个动作（工具/参数/影响）展示给用户，**用户明确许可后**执行
+  `nmail-cli agent decide <action_id> --approve`（或 `--reject`，总管家会改道），
+  再 `nmail-cli agent resume <run_id>` 续跑；
+- `paused.reason` 为 `max_steps`/`budget`：问用户是否继续，继续则 `nmail-cli agent resume <run_id>`；
+- `paused.reason` 为 `ask_user`：总管家在向你提问，展示问题（及选项），把用户的回答带上
+  `nmail-cli agent resume <run_id> --answer "回答"`；
+- 都为空：`answer` 就是最终结论，直接反馈用户。
+
+要求：Key 需带 `agent` scope（`auth login --yes --scopes read,write,send,agent`），
+且 Nmail 已配置 AI。写动作默认 `--mode approval` 逐条待人批准，与直连命令的两阶段确认同样安全。
 
 ## 发送前确认（两阶段）
 
@@ -215,6 +245,16 @@ nmail-cli watch --since-id 886  # 断线后从上次游标续听
 nmail-cli emails read 254 --save-attachments ./downloads
 # → data.saved_to 为实际保存路径列表
 ```
+
+## 更新检查
+
+命令输出 envelope 带 `_notice.update` 字段时（CLI 版本落后于服务端），**完成当前请求后主动提议更新**：
+
+1. 告知用户 CLI 版本（`_notice.update.cli`）与服务端版本（`_notice.update.server`）；
+2. 提议执行：`uvx nmail-cli@latest`（升级 CLI）与 `npx skills add nathanpenny520/Nmail -g -y`（更新本 skill）；
+3. 提醒用户更新后**重启 AI Agent** 以加载最新 skill。
+
+**规则：不要静默忽略更新提示。**
 
 ## 排错
 

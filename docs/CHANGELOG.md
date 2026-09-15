@@ -3,6 +3,16 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — Agent 扩展收官 A6-A8 + B1-B3：运行观测/技能层/CLI 全量对齐（REDESIGN_PLAN §20 / AGENT_EXTEND_PLAN 全部落地）
+- 用户指示「全部完成」——§20 剩余六项一次收尾；B3 按拍板 3 落地，A7 技能存放按推荐值内置层先行
+- A6+A8 运行观测：`GET /api/ai/agent/runs`（列表）+ `/agent/runs/{id}`（状态/pending/步级 token——聚合 ai_logs 'run {id} step {n}' 行，零新表）；前端 openSession 查最新运行、停在触顶态时恢复「继续」横幅（刷新不再丢续跑入口）
+- A7 技能层：`ai/skills_builtin.py` 四个内置工作流技能（周报摘要/跟进提醒/批量归档策略/报销发票整理——方法论提示词包，零规则匹配不违背决策 3）；系统提示词只注入索引（prompt 缓存友好），新工具 read_skill 按需取全文（工具 29→31）；SCHEDULER_ALLOWED 增 read_skill
+- B1 CLI：`nmail-cli folders list --account-id`（文件夹缓存列表，move/--folder 目标名有处可查）
+- B2 版本协商：ext /health 返回 version；CLI 每命令尽力探测（失败静默），落后时 envelope 附 `_notice.update`（cli/server/upgrade/skill）；SKILL.md 增「更新检查」节
+- B3 CLI 总管家通道：`nmail-cli agent ask/decide/resume`（scope=agent 包装既有端点，紧凑输出 answer/approvals/paused——外部 agent 一条命令复用内置审批/审计/限额闭环）；SKILL.md 增「内置总管家通道」节
+- SKILL.md v1.1.0→v1.2.0（folders 行+参数速查/总管家通道/更新检查）；ARCHITECTURE 同步（api/ai、ai/tools、ai/agent、api/ext 四行）
+- 验证：pytest 224 全绿（+1）、CLI 契约 13 全绿（+4：folders/agent 未配置/decide 互斥/semver+notice）、ruff 通过、npm build（tsc+字号门禁）通过、openapi/schema 快照再生、8720 重启 /api/health ok
+
 ## e45f184 — Agent 扩展 A4-A5：同批只读并行执行 + ask_user 澄清中断（REDESIGN_PLAN §20 / AGENT_EXTEND_PLAN）
 - A4 同批只读并行：`_loop` 同批全为已授权只读工具时 ThreadPoolExecutor（≤4 workers）并行执行、结果按原序回灌（保 tool_call_id 配对）；混合批/写类维持串行（顺序敏感+可遇审批暂停）；日限额按批预检，SQLite 每线程连接保证并发读安全
 - A5 澄清中断：新工具 `ask_user(question, options?≤6)`（kind=meta——不入审计、不可直执行、scheduler 白名单天然排除即无人值守硬拒不挂起）；触发置 waiting_input 暂停，前端「向你确认」卡（选项按钮+自由输入）回答后带 answer 经 /agent/resume 续跑，回答以 ask_user 调用的 tool 回应回灌（兼保 tool_calls 配对）；缺 answer 续跑明确报错且 run 保持可续不卡死

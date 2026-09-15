@@ -30,6 +30,8 @@ import type {
   OauthStatusResp,
   ProbeResult,
   ProvidersResp,
+  AgentRunDetail,
+  AgentRunRow,
   SenderListEntry,
   Settings,
   SettingsPayload,
@@ -274,6 +276,12 @@ export const api = {
     request<{ actions: AgentAction[] }>(
       `/api/ai/agent/actions${status ? `?status=${encodeURIComponent(status)}` : ''}`,
     ),
+  getAgentRuns: (sessionId?: number, limit?: number) =>
+    request<{ runs: AgentRunRow[] }>(
+      `/api/ai/agent/runs?${sessionId ? `session_id=${sessionId}&` : ''}limit=${limit ?? 20}`,
+    ),
+  getAgentRunDetail: (runId: number) =>
+    request<AgentRunDetail>(`/api/ai/agent/runs/${runId}`),
   deleteAgentAction: (id: number) =>
     request<{ deleted?: number; error?: string }>(`/api/ai/agent/actions/${id}`, { method: 'DELETE' }),
   clearAgentActions: (scope: 'old' | 'failed' | 'all') =>

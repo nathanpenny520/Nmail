@@ -148,7 +148,10 @@ def log_ext_call(request: Request, status: int) -> None:
 
 @router.get("/health")
 def ext_health() -> dict:
-    return {"ok": True}
+    """连通性自测；version 供 nmail-cli 版本协商（AGENT_EXTEND_PLAN B2，_notice.update）。"""
+    from app.config import APP_VERSION
+
+    return {"ok": True, "version": APP_VERSION}
 
 
 # ── 端点：read ──────────────────────────────────────────────

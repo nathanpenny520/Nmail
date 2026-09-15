@@ -1097,6 +1097,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/agent/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent Runs
+         * @description Agent 运行列表（A6/A8：跨刷新恢复「继续」入口 + 运行级观测）。
+         */
+        get: operations["agent_runs_api_ai_agent_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/agent/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent Run Detail
+         * @description Agent 运行详情（A8 步级可观测）：状态 + pending + ai_logs 步级 token/摘要。
+         *
+         *     步级记录取自 ai_logs（task_type='agent'，summary='run {id} step {n}'，
+         *     tasks._logged 循环内逐步落库），不新增表。
+         */
+        get: operations["agent_run_detail_api_ai_agent_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/agent/action/{action_id}/decide": {
         parameters: {
             query?: never;
@@ -1671,7 +1714,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Ext Health */
+        /**
+         * Ext Health
+         * @description 连通性自测；version 供 nmail-cli 版本协商（AGENT_EXTEND_PLAN B2，_notice.update）。
+         */
         get: operations["ext_health_api_ext_v1_health_get"];
         put?: never;
         post?: never;
@@ -5028,6 +5074,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_runs_api_ai_agent_runs_get: {
+        parameters: {
+            query?: {
+                session_id?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_run_detail_api_ai_agent_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

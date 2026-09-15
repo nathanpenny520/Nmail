@@ -130,6 +130,19 @@ export default function ManagerPage() {
       })))
       setAccountId(data.session.account_id ?? null)
       setError('')
+      // A6：跨刷新恢复「继续」入口——最新运行若停在步数/预算触顶态，恢复横幅
+      // （审批/澄清卡随历史分段还原，无需此处理）
+      try {
+        const runs = await api.getAgentRuns(session.id, 1)
+        const latest = runs.runs[0]
+        if (latest && (latest.status === 'paused_max_steps' || latest.status === 'paused_budget')) {
+          setPausedRun({ runId: latest.id, reason: latest.status === 'paused_max_steps' ? 'max_steps' : 'budget' })
+        } else {
+          setPausedRun(null)
+        }
+      } catch {
+        /* 运行查询失败不影响会话加载 */
+      }
     } catch (err) {
       setError((err as Error).message || '加载会话失败')
     }

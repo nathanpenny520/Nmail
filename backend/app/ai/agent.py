@@ -57,7 +57,7 @@ DAILY_ACTION_LIMIT = 200
 SCHEDULER_ALLOWED = frozenset({
     "search_emails", "list_recent_emails", "read_email", "list_folders",
     "list_contacts", "digest_stats", "list_memory",
-    "create_draft", "set_category",
+    "create_draft", "set_category", "read_skill",
 })
 FEEDBACK_MAX = 1200        # 单条工具结果回灌上限（字符；read_email 见 FEEDBACK_BUDGETS）
 FEEDBACK_BUDGETS = {"read_email": 4000}  # 分工具预算：读详情类放宽（起草回复需要正文）
@@ -133,6 +133,16 @@ def _memory_prompt_block() -> str:
             + "\n".join(lines))
 
 
+def _skills_prompt_block() -> str:
+    """内置工作流技能索引（AGENT_EXTEND_PLAN A7）：只注入名字+一句话（prompt 缓存
+    友好），全文由模型经 read_skill 按需取——方法论提示词层，非规则引擎（决策 3）。"""
+    from app.ai.skills_builtin import BUILTIN_SKILLS
+
+    lines = [f"- {name}（{title}）：{desc}" for name, (title, desc, _c) in BUILTIN_SKILLS.items()]
+    return ("\n\n# 可用工作流技能（接到这类任务时，先调 read_skill 获取完整方法再动手）\n"
+            + "\n".join(lines))
+
+
 def _system_prompt(account_ids: list[int], native: bool,
                    allowed: frozenset[str] | None = None) -> str:
     conn = get_conn()
@@ -144,13 +154,14 @@ def _system_prompt(account_ids: list[int], native: bool,
         scope_desc = "（无可用账号）"
     if native:
         return (_SYSTEM_NATIVE.format(scope_desc=scope_desc, today=time.strftime("%Y-%m-%d"))
-                + _memory_prompt_block())
+                + _memory_prompt_block() + _skills_prompt_block())
     tool_specs = [t for t in T.TOOLS.values() if allowed is None or t.name in allowed]
     tool_lines = "\n".join(
         f"- {t.name} | {t.description} | 参数: {t.params}" for t in tool_specs
     )
     return (_SYSTEM_FALLBACK.format(tools=tool_lines, scope_desc=scope_desc,
-                                    today=time.strftime("%Y-%m-%d")) + _memory_prompt_block())
+                                    today=time.strftime("%Y-%m-%d"))
+            + _memory_prompt_block() + _skills_prompt_block())
 
 
 # 原生工具调用能力探测（§17.1）：按 base_url+model 缓存 KV；首次乐观尝试，

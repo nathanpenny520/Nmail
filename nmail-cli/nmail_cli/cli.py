@@ -64,8 +64,54 @@ def _stderr(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
 
 
+_PENDING_NOTICE: dict = {}  # 更新检查提示（_probe_update_notice 填充，_emit 消费）
+
+
 def _emit(data) -> None:  # noqa: ANN001 — envelope data 为任意 JSON 值
-    print(json.dumps({"ok": True, "data": data}, ensure_ascii=False), flush=True)
+    envelope: dict = {"ok": True, "data": data}
+    if _PENDING_NOTICE:
+        envelope["_notice"] = _PENDING_NOTICE  # 更新检查（SKILL.md「更新检查」节消费）
+    print(json.dumps(envelope, ensure_ascii=False), flush=True)
+
+
+def _semver_tuple(v: str) -> tuple[int, ...]:
+    parts: list[int] = []
+    for seg in v.strip().lstrip("v").split("."):
+        digits = ""
+        for ch in seg:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        parts.append(int(digits or 0))
+    return tuple(parts[:3]) if parts else (0, 0, 0)
+
+
+def _probe_update_notice() -> None:
+    """B2 版本协商：服务端 /health 带 version，CLI 落后时在输出附 _notice.update。
+    尽力而为——任何失败都静默跳过（旧服务端无 version、离线、隧道断均不扰主流程）。"""
+    import nmail_cli
+
+    base_url = None
+    try:
+        base_url = os.environ.get("NMAIL_BASE_URL") or _load_config().get("base_url")
+    except Exception:  # noqa: BLE001
+        return
+    if not base_url:
+        return
+    try:
+        client = Client(str(base_url))
+        status, body, _ = client._call("GET", "/api/ext/v1/health", None, None, None, None)
+        server = str((body or {}).get("version") or "").strip()
+        if status < 400 and server and _semver_tuple(server) > _semver_tuple(nmail_cli.__version__):
+            globals()["_PENDING_NOTICE"] = {
+                "update": {"cli": nmail_cli.__version__, "server": server,
+                           "hint": "CLI 落后于服务端，建议升级后重新安装 skill",
+                           "upgrade": "uvx nmail-cli@latest",
+                           "skill": "npx skills add nathanpenny520/Nmail -g -y"},
+            }
+    except Exception:  # noqa: BLE001 — 更新检查失败不影响命令本身
+        return
 
 
 # ── 配置 ────────────────────────────────────────────────────
@@ -183,6 +229,8 @@ def _fail(exc: CliError) -> int:
 def main(argv: list[str] | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
+        if getattr(args, "command", None) != "auth":
+            _probe_update_notice()  # B2：尽力而为，失败静默
         return args.func(args)
     except CliError as exc:
         return _fail(exc)
@@ -462,6 +510,60 @@ def cmd_contacts_search(args) -> int:
     return EXIT_OK
 
 
+def cmd_folders_list(args) -> int:
+    client = _client(args)
+    data = client.request("GET", "/api/ext/v1/folders",
+                          params={"account_id": args.account_id})
+    _emit(data)
+    return EXIT_OK
+
+
+def _agent_collect(out: dict) -> dict:
+    """非流式 agent 响应 → 紧凑 envelope：回答 + 待审批 + 暂停态（供 SKILL.md 决策）。"""
+    events = out.get("events") or []
+    paused = None
+    for ev in reversed(events):
+        if ev.get("type") == "paused" and ev.get("reason") != "approval":
+            paused = {"reason": ev.get("reason"), "run_id": ev.get("run_id")}
+            break
+    return {"answer": out.get("answer") or "",
+            "approvals": out.get("approvals") or [],
+            "paused": paused}
+
+
+def cmd_agent_ask(args) -> int:
+    client = _client(args)
+    payload = {"question": args.question, "mode": args.mode,
+               "account_ids": args.account_id or []}
+    if args.session_id is not None:
+        payload["session_id"] = args.session_id
+    out = _agent_collect(client.request("POST", "/api/ext/v1/agent/chat", json_body=payload))
+    _emit(out)
+    return EXIT_OK
+
+
+def cmd_agent_decide(args) -> int:
+    if args.approve == args.reject:
+        raise CliError("--approve 与 --reject 必须二选一",
+                       code="invalid_params", exit_code=EXIT_BAD_PARAMS)
+    client = _client(args)
+    decision = "approve" if args.approve else "reject"
+    out = client.request("POST", f"/api/ext/v1/agent/actions/{args.action_id}/decide",
+                         json_body={"decision": decision})
+    _emit(out)
+    return EXIT_OK
+
+
+def cmd_agent_resume(args) -> int:
+    client = _client(args)
+    payload: dict = {"run_id": args.run_id}
+    if args.answer:
+        payload["answer"] = args.answer
+    out = _agent_collect(client.request("POST", "/api/ext/v1/agent/resume", json_body=payload))
+    _emit(out)
+    return EXIT_OK
+
+
 def cmd_digest(args) -> int:
     client = _client(args)
     _emit(client.request("GET", "/api/ext/v1/digest"))
@@ -623,6 +725,36 @@ def build_parser() -> argparse.ArgumentParser:
     dig = sub.add_parser("digest", help="最新每日摘要")
     _add_auth_base(dig)
     dig.set_defaults(func=cmd_digest)
+
+    folders = sub.add_parser("folders", help="账号文件夹列表")
+    folders_sub = folders.add_subparsers(dest="folders_command", required=True)
+    fl = folders_sub.add_parser("list", help="列出账号的文件夹（move/--folder 过滤的目标名从此查）")
+    fl.add_argument("--account-id", type=int, required=True, help="账号 id（+me 查看）")
+    _add_auth_base(fl)
+    fl.set_defaults(func=cmd_folders_list)
+
+    agent_ = sub.add_parser("agent", help="内置总管家（scope=agent；AI 需已在 Nmail 配置）")
+    agent_sub = agent_.add_subparsers(dest="agent_command", required=True)
+    ask = agent_sub.add_parser("ask", help="委托总管家处理一件事（写动作会返回待审批清单）")
+    ask.add_argument("question", help="要交办的事（自然语言）")
+    ask.add_argument("--mode", choices=["approval", "auto"], default="approval",
+                     help="approval=写动作逐条待审批（默认），auto=安全约束内直执行")
+    ask.add_argument("--account-id", type=int, action="append",
+                     help="限定账号 id（可重复；缺省=全部账号）")
+    ask.add_argument("--session-id", type=int, help="延续既有会话（多轮交办）")
+    _add_auth_base(ask)
+    ask.set_defaults(func=cmd_agent_ask)
+    dec = agent_sub.add_parser("decide", help="批准/拒绝总管家的待审批动作")
+    dec.add_argument("action_id", type=int)
+    dec.add_argument("--approve", action="store_true", help="批准执行")
+    dec.add_argument("--reject", action="store_true", help="拒绝（总管家会改道）")
+    _add_auth_base(dec)
+    dec.set_defaults(func=cmd_agent_decide)
+    res = agent_sub.add_parser("resume", help="续跑运行（审批决定后/触顶暂停后/澄清回答后）")
+    res.add_argument("run_id", type=int)
+    res.add_argument("--answer", help="ask_user 澄清问题的回答（waiting_input 时必传）")
+    _add_auth_base(res)
+    res.set_defaults(func=cmd_agent_resume)
 
     wat = sub.add_parser("watch", help="新邮件流（NDJSON 每行一封，Ctrl-C 停止）")
     wat.add_argument("--since-id", type=int, default=None,

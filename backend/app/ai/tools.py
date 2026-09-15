@@ -717,6 +717,18 @@ def _t_ask_user(args: dict, primary: int, scope: list[int]) -> dict:
     return {"error": "ask_user 由会话循环处理，不能直接执行"}
 
 
+def _t_read_skill(args: dict, primary: int, scope: list[int]) -> dict:
+    """read_skill：按名取内置工作流技能全文（AGENT_EXTEND_PLAN A7）。"""
+    from app.ai.skills_builtin import BUILTIN_SKILLS
+
+    name = str(args.get("name") or "")
+    skill = BUILTIN_SKILLS.get(name)
+    if skill is None:
+        return {"error": f"未知技能 {name}，可用：{'、'.join(BUILTIN_SKILLS)}"}
+    title, _desc, content = skill
+    return {"name": name, "title": title, "content": content}
+
+
 TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
     ToolSpec("search_emails", "read", "read",
              "按关键词与条件搜索邮件（默认全部文件夹含归档；支持分类/发件人/未读/日期过滤）",
@@ -851,6 +863,12 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
                                "description": "候选项（单选，最多 6 个；开放问题可不传）",
                                "maxItems": 6}}, ["question"]),
              _t_ask_user),
+    ToolSpec("read_skill", "read", "read",
+             "读取一个内置邮件工作流技能的完整方法（周报摘要/跟进提醒/批量归档策略/报销发票整理）；"
+             "接到这类任务时先读技能再动手",
+             '{"name": "技能名"}',
+             _obj({"name": _str("技能名（见系统提示词的技能索引）")}, ["name"]),
+             _t_read_skill),
 ]}
 
 
@@ -885,6 +903,7 @@ _PARAM_TYPES: dict[str, dict[str, str]] = {
     "save_memory": {"content": "str", "evidence": "str"},
     "delete_memory": {"memory_id": "int"},
     "ask_user": {"question": "str", "options": "strs"},
+    "read_skill": {"name": "str"},
 }
 _REQUIRED_ARGS: dict[str, tuple[str, ...]] = {
     "read_email": ("email_id",),
@@ -903,6 +922,7 @@ _REQUIRED_ARGS: dict[str, tuple[str, ...]] = {
     "add_sender_list": ("pattern", "list_type"),
     "save_memory": ("content", "evidence"),
     "delete_memory": ("memory_id",),
+    "read_skill": ("name",),
 }
 
 
