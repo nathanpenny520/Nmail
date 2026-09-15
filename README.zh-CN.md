@@ -16,7 +16,7 @@ AI 驱动的本地聚合邮箱客户端 · 本地优先 · 隐私自持 · MIT �
 
 **① 单文件可执行（零依赖，双击即用）**
 
-到 [Releases](../../releases) 下载对应平台文件双击运行，自动打开浏览器：Windows `nmail-windows-x64.exe` ｜ macOS (Apple Silicon) `nmail-macos-arm64` ｜ Linux `nmail-linux-x64`。Windows 也可 `winget install nathanpenny520.Nmail`（manifest 审核通过后可用）；macOS (Apple Silicon) 用 Homebrew：`brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail && brew install nmail`。
+到 [Releases](../../releases) 下载对应平台文件双击运行，自动打开浏览器：Windows `nmail-windows-x64.exe` ｜ macOS (Apple Silicon) `nmail-macos-arm64` ｜ Linux `nmail-linux-x64`。Windows 也可 `winget install nathanpenny520.Nmail`（manifest 审核通过后可用）；macOS (Apple Silicon) 用 Homebrew（注意须用带 tap 前缀的全名，core 仓库有同名无关软件）：`brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail && brew trust nathanpenny520/nmail && brew install nathanpenny520/nmail/nmail`。
 
 - Windows 可能弹 SmartScreen 提示（未签名）：点「更多信息 → 仍要运行」
 - macOS 首次运行需右键 → 打开（未公证）；Linux：`chmod +x nmail-linux-x64` 后直接运行
@@ -41,7 +41,7 @@ uvx --from nmail-app nmail
 ## 更新
 
 - **应用内检查**（默认开启，可在 设置-通用 关闭）：每 24 小时匿名对比 GitHub 版本号（不带任何本机数据），新版本在通知中心提醒；设置页可手动检查。
-- **各渠道升级**：uvx `uvx --refresh --from nmail-app nmail` ｜ 常驻 `uv tool upgrade nmail-app` ｜ pip `pip install -U nmail-app` ｜ Windows `winget upgrade nathanpenny520.Nmail` ｜ macOS `brew upgrade nmail` ｜ 单文件：下载新版覆盖。
+- **各渠道升级**：uvx `uvx --refresh --from nmail-app nmail` ｜ 常驻 `uv tool upgrade nmail-app` ｜ pip `pip install -U nmail-app` ｜ Windows `winget upgrade nathanpenny520.Nmail` ｜ macOS `brew upgrade nathanpenny520/nmail/nmail` ｜ 单文件：下载新版覆盖。
 - **升级不丢数据**：邮件库/密钥/配置在独立数据目录，新版本首次启动自动跑数据库迁移。
 
 ## 开发

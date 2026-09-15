@@ -95,6 +95,6 @@ release CI 新增 `nmail-cli-package` job：构建 `nmail-cli/` 并发布到 PyP
 | PyPI | CI 即时 | `uv tool upgrade nmail-app` / `pip install -U nmail-app` |
 | PyPI（nmail-cli） | CI 即时 | `uvx nmail-cli@latest` / `uv tool upgrade nmail-cli` |
 | GitHub Release | CI 即时 | 下载覆盖 |
-| Homebrew | CI 即时（tap 自动 bump） | `brew upgrade nmail` |
+| Homebrew | CI 即时（tap 自动 bump） | `brew upgrade nathanpenny520/nmail/nmail` |
 | winget | 版本 PR 合并后 | `winget upgrade nathanpenny520.Nmail` |
 | 应用内提醒 | CI 即时（对比 GitHub Releases 最新 tag） | 通知中心 → 点 Releases 链接 |

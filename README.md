@@ -16,7 +16,7 @@ You read, write, and make the calls; AI sorts your mail, filters the noise, pre-
 
 **① Single-file executable (zero dependencies — download and run)**
 
-Download the file for your platform from [Releases](../../releases) and double-click; your browser opens automatically: Windows `nmail-windows-x64.exe` ｜ macOS (Apple Silicon) `nmail-macos-arm64` ｜ Linux `nmail-linux-x64`. Windows can also install via winget (once the manifest review is approved): `winget install nathanpenny520.Nmail`; macOS (Apple Silicon) via Homebrew: `brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail && brew install nmail`.
+Download the file for your platform from [Releases](../../releases) and double-click; your browser opens automatically: Windows `nmail-windows-x64.exe` ｜ macOS (Apple Silicon) `nmail-macos-arm64` ｜ Linux `nmail-linux-x64`. Windows can also install via winget (once the manifest review is approved): `winget install nathanpenny520.Nmail`; macOS (Apple Silicon) via Homebrew (always use the fully qualified name — Homebrew core has an unrelated same-name formula): `brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail && brew trust nathanpenny520/nmail && brew install nathanpenny520/nmail/nmail`.
 
 - Windows may show a SmartScreen prompt (unsigned build): click "More info → Run anyway"
 - macOS: right-click → Open on first run (not notarized); Linux: `chmod +x nmail-linux-x64`, then run it
@@ -41,7 +41,7 @@ Then open http://127.0.0.1:8720 (the port falls back to the next one automatical
 ## Updates
 
 - **In-app check** (on by default; disable under Settings → General): an anonymous version comparison against GitHub every 24 hours (only the version number is sent — no local data leaves your machine); new releases appear in the notification center, and you can also check manually from the settings page.
-- **Upgrade per channel**: uvx `uvx --refresh --from nmail-app nmail` ｜ resident install `uv tool upgrade nmail-app` ｜ pip `pip install -U nmail-app` ｜ Windows `winget upgrade nathanpenny520.Nmail` ｜ macOS `brew upgrade nmail` ｜ single-file: download the new build and replace the old one.
+- **Upgrade per channel**: uvx `uvx --refresh --from nmail-app nmail` ｜ resident install `uv tool upgrade nmail-app` ｜ pip `pip install -U nmail-app` ｜ Windows `winget upgrade nathanpenny520.Nmail` ｜ macOS `brew upgrade nathanpenny520/nmail/nmail` ｜ single-file: download the new build and replace the old one.
 - **Upgrades never touch your data**: the mail store / secrets / settings live in a separate data directory, and the first launch of a new version runs database migrations automatically.
 
 ## Development
