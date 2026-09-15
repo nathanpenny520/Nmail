@@ -16,6 +16,13 @@
 
 ## 进行中
 
+### S-0915-0923-Agent扩展方案与SKILL打磨
+- 目标: 用户指派两项——①打磨 skills/SKILL.md（对照 nmail-cli 实际参数面补缺口，可直接改）②deer-flow/smolagents 调研出的 agent 扩展方向落成方案文档（docs/AGENT_EXTEND_PLAN.md，不动代码）
+- 范围: skills/SKILL.md 重写版 + docs/AGENT_EXTEND_PLAN.md 新增 + docs(CHANGELOG, SESSIONS)；明确避让工作树内并行会话 WIP（scheduler.py/NotificationBell.tsx 晨报通知）与 REDESIGN_PLAN（按 S-0914-2352 先例方案独立成文，落地时再并入 §20）
+- 产出: 提交（哈希见 CHANGELOG 回填）——SKILL.md v1.1.0（6 处缺口+参数速查节，审计记录在 AGENT_EXTEND_PLAN §4）；AGENT_EXTEND_PLAN.md 全文（现状对照/A1-A8/B1-B3/待拍板 5/明确不做 4/两仓参考索引）
+- 遗留: 方案全部未执行（用户指派先落方案）；B1/B2 对应的 SKILL.md 后续小节随实施补
+- 状态: 已完成（2026-09-15 上午）
+
 ### S-0915-0930-规则提议与AI晨报 ✅
 - 目标: 用户拍板两项——①规则提议（§18.5 遗留）：观察手动归档/删除，同发件人 14 天≥3 次提议「加入黑名单自动归档」，采纳走 sender_lists 既有管线 ②主动式助手（§18.6）与每日摘要调度骨架结合：digest_time 到点（开关开启时）由 scheduler 触发 agent 运行（origin=scheduler，auto 模式+SCHEDULER_ALLOWED 工具白名单硬边界：只读+create_draft/set_category），产出通知+草稿进待审列表
 - 范围: backend(db/database.py v25, ai/agent.py allowed 机制, core/rule_proposals.py 新增, core/batch_ops.py 观察钩子, api/ai.py, api/settings.py, scheduler.py, tests) + frontend(types, client, SettingsPage 通用开关+提议卡) + docs(§18.5/§18.6, ARCHITECTURE, PRODUCT_PLAN §11.2, CHANGELOG, SESSIONS)

@@ -1,7 +1,7 @@
 ---
 name: nmail
-description: 通过 nmail-cli 命令行工具操作 Nmail 邮箱：搜索、读取、回复、转发、发送（两阶段确认）、归档、新邮件监听、下载附件。当用户需要进行任何邮件相关操作、或提到 Nmail 时使用此 skill。
-version: 1.0.0
+description: 通过 nmail-cli 命令行工具操作 Nmail 邮箱：搜索、读取、回复、转发、发送（两阶段确认）、附件收发、整理归档、新邮件监听。当用户需要进行任何邮件相关操作、或提到 Nmail 时使用此 skill。
+version: 1.1.0
 ---
 
 # Nmail
@@ -23,9 +23,20 @@ uvx nmail-cli@latest --help
 uvx nmail-cli@latest auth login --yes
 ```
 
-`--yes` 表示接受自动创建专用密钥并打开对外 API 开关；默认 scope 为 `read`（只读）。
-需要发送邮件时用 `--scopes read,write,send` 显式扩权。配置保存在
-`~/.config/nmail-cli/config.json`，之后命令无需再传 Key。
+`--yes` 表示接受自动创建专用密钥并打开对外 API 开关。配置保存在
+`~/.config/nmail-cli/config.json`（之后命令无需再传 Key）；`auth status` 查看配置与
+账号可达性，`auth logout` 清除本机保存的配置。
+
+**scope 决定能做什么**，默认 `read`（只读），按需扩权：
+
+| scope | 允许的操作 |
+|-------|-----------|
+| `read` | 看账号/邮件/附件/联系人/摘要、新邮件监听（`+me`、`emails`、`contacts`、`digest`、`watch`） |
+| `write` | 整理邮箱与写草稿（`emails action`、`drafts create/reply/forward`、附件上传） |
+| `send` | 真正发送（`drafts send`） |
+
+需要发邮件时显式扩权：`uvx nmail-cli@latest auth login --yes --scopes read,write,send`。
+只读 Key 调 write/send 类命令会得到 exit 3（见「exit code 错误处理」），扩权后重试即可。
 
 **第 3 步 - 验证**：
 
@@ -42,14 +53,14 @@ uvx nmail-cli@latest +me
 
 ## 命令清单
 
-以下 `nmail-cli` 均指 `uvx nmail-cli@latest`（下同）。
+以下 `nmail-cli` 均指 `uvx nmail-cli@latest`（下同）；各命令完整参数见「参数速查」。
 
 | 操作 | 命令 | 说明 |
 |------|------|------|
 | 账号 | `nmail-cli +me` | 账号列表与健康状态 |
-| 列邮件 | `nmail-cli emails list --limit 20` | 过滤：`--folder --account-id --is-read --starred --category --from --to --after --before --has-attachments` |
-| 搜邮件 | `nmail-cli emails search "关键词"` | ≥3 字走全文检索；可叠加 list 的过滤参数 |
-| 读邮件 | `nmail-cli emails read <id>` | 详情含 `body_text`/`body_html`/`attachments`；`--save-attachments ./目录` 下载附件 |
+| 列邮件 | `nmail-cli emails list` | 过滤 + 分页（见参数速查） |
+| 搜邮件 | `nmail-cli emails search "关键词"` | ≥3 字走全文检索；可叠加 list 的全部过滤参数 |
+| 读邮件 | `nmail-cli emails read <id>` | 详情含 `body_text`/`body_html`/`attachments` |
 | 动作 | `nmail-cli emails action --ids 12,13 --action archive` | `read/unread/star/unstar/archive/unarchive/trash/move`；移动类自动等任务完成 |
 | 回复 | `nmail-cli drafts reply --email-id <id> --body-file ./r.md` | 自动带 Re: 主题/收件人/引用块；`--reply-all` 抄送原收件人 |
 | 转发 | `nmail-cli drafts forward --email-id <id> --to a@b.com --body-file ./f.md` | 自动 Fwd: 主题；`--include-attachments` 携带原附件 |
@@ -61,7 +72,61 @@ uvx nmail-cli@latest +me
 | 任务 | `nmail-cli jobs get <job_id>` | 后台任务进度（action 已自动轮询，一般不需要） |
 
 正文一律推荐 `--body-file ./文件.md`（Markdown，免 shell 转义）；也可 `--body "文本"`
-配 `--body-format md|html|text`。
+配 `--body-format md|html|text`。附件用 `--attachment ./文件`（可重复，create/reply/forward 均支持）。
+
+## 参数速查
+
+### emails list / emails search（过滤与分页，两者共用）
+
+| 参数 | 说明 |
+|------|------|
+| `--folder <名>` | 服务端文件夹名，需与服务端完全一致（收件箱为 `INBOX`） |
+| `--account-id <id>` | 限定账号 |
+| `--from <串>` / `--to <串>` | 发件人 / 收件人过滤（地址或姓名包含匹配） |
+| `--is-read true\|false` / `--starred true\|false` | 已读 / 星标 |
+| `--category <key>` | `work` `personal` `notification` `verification` `promo` `social` |
+| `--after YYYY-MM-DD` / `--before YYYY-MM-DD` | 日期范围（均含当天） |
+| `--has-attachments true\|false` | 有无附件 |
+| `--limit N` / `--offset N` | 分页（默认 50 / 0） |
+
+**分页纪律：翻页时保持全部过滤条件不变、只递增 `--offset`**，否则结果错乱。
+
+### emails read
+
+`<email_id>` + `--save-attachments ./目录`（保存附件到本地，读 `data.saved_to` 拿实际路径）。
+
+### emails action
+
+`--ids 1,2,3`（逗号分隔）、`--action read|unread|star|unstar|archive|unarchive|trash|move`；
+`move` 需加 `--folder <目标文件夹名>`。
+
+### drafts create
+
+`--account-id <id>`（必填）、`--to`、`--cc`、`--bcc`、`--subject`、
+`--body` / `--body-file`（+ `--body-format`）、`--attachment ./文件`（可重复）。
+
+### drafts reply
+
+`--email-id <id>`（必填）、`--reply-all`（原收件人并入 cc）、`--cc`、`--bcc`、
+`--body` / `--body-file`、`--attachment ./文件`（可重复，随回复追加附件）。
+
+### drafts forward
+
+`--email-id <id>`（必填）、`--to a@b.com,c@d.com`（必填）、`--include-attachments`（携带原邮件附件）、
+`--cc`、`--bcc`、`--body` / `--body-file`、`--attachment ./文件`（可重复，追加新附件）。
+
+### drafts send
+
+`<draft_id>`；`--confirmed` 仅第二阶段使用（见「发送前确认」）。
+
+### contacts search
+
+`"关键词"`（可省略，列出全部）、`--limit N`（默认 50）。
+
+### watch
+
+`--since-id <id>`（从该游标续听——长监听断线重连后用它继续，不回放更早历史）、
+`--account-id <id>`（只监听该账号）、`--interval 秒`（轮询间隔，默认 10）。
 
 ## 发送前确认（两阶段）
 
@@ -84,7 +149,7 @@ uvx nmail-cli@latest +me
 | 0 | 成功 | — |
 | 1 | 上游失败（IMAP/SMTP 等服务端错误） | 可重试，最多 2 次 |
 | 2 | 参数不合规 / 业务拒绝（缺凭据、无收件人等） | **不重试**；按 `error.message` 修改参数 |
-| 3 | 未配对 / Key 失效 / 未启用 / scope 不足 | 不重试；走「安装和配置」重新 login，或提示用户调整 scope |
+| 3 | 未配对 / Key 失效 / 未启用 / scope 不足 | 不重试；走「安装和配置」重新 login（缺 scope 就扩权） |
 | 4 | 连不上 Nmail | 可重试 1 次；提示用户检查 Nmail 是否运行、隧道是否在位 |
 | 6 | 资源不存在（邮件/草稿 id 无效） | 不重试；换 id 或重新搜索 |
 | 7 | 限流（429，带 `retry_after` 秒数） | 等待后重试 |
@@ -126,10 +191,19 @@ nmail-cli drafts send 44        # → exit 8，展示 summary，停下等用户
 nmail-cli drafts send 44 --confirmed   # 用户许可后
 ```
 
+### 发送带附件（两阶段）
+
+```bash
+nmail-cli drafts create --account-id 1 --to a@b.com --subject 月度报表 --body-file ./body.md --attachment ./报表.pdf
+nmail-cli drafts send 45        # → exit 8，展示 summary，停下等用户
+nmail-cli drafts send 45 --confirmed   # 用户许可后
+```
+
 ### 监听新邮件
 
 ```bash
-nmail-cli watch
+nmail-cli watch                 # 从当前最新开始
+nmail-cli watch --since-id 886  # 断线后从上次游标续听
 ```
 
 每封新邮件输出一行 JSON（`data` 为邮件摘要，含 id/主题/发件人）。持续读取并按用户要求
@@ -145,6 +219,7 @@ nmail-cli emails read 254 --save-attachments ./downloads
 ## 排错
 
 - `exit 4` 连不上：Nmail 没在运行（让用户启动 Nmail），或远程隧道断了。
-- `exit 3` 未启用/scope 不足：重新 `auth login --scopes …`，或让用户到 设置-API 调整。
+- `exit 3` 未启用/scope 不足：先 `auth status` 看配置与账号可达性，再重新
+  `auth login --scopes …`（缺什么扩什么），或让用户到 设置-API 调整。
 - 行为与本文档不符时，先 `uvx nmail-cli@latest --version` 确认 CLI 版本，必要时
   重新运行 `uvx nmail-cli@latest auth login --yes` 更新配对。
