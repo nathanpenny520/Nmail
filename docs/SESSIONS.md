@@ -16,10 +16,13 @@
 
 ## 进行中
 
-### S-0915-1545-v040文档官网同步 🔄
+### S-0915-1545-v040文档官网同步 ✅
 - 目标: v0.4.0 发布后的文档/官网对齐——①主仓 README 双语状态行落 v0.4.0 ②使用指南补 v0.4.x 用户向新能力（跨会话记忆/AI 晨报/触顶小结/澄清/技能包/运行恢复）③FAQ 补晨报与记忆两问 ④Agent接入指南补 CLI 总管家通道与版本协商 ⑤官网 nmail-site：版本口径 0.3.0→0.4.0、功能页/首页/项目卡文案、v0.4.0 发布动态帖
-- 范围: README.md, README.zh-CN.md, docs(使用指南, FAQ, Agent接入指南, CHANGELOG, SESSIONS) + nmail-site(独立仓另行提交)
-- 时间: 2026-09-15 15:45 开始
+- 范围: README.md, README.zh-CN.md, docs(使用指南, FAQ, Agent接入指南, CHANGELOG, SESSIONS) + nmail-site(独立仓)
+- 产出: 主仓提交 06eca8b；官网提交 4489817（动态帖 posts/v0.4.0、功能页 15 卡、首页/项目卡文案、兜底版本 0.4.0）——push 即自动部署
+- 验证: 官网 npm run build 通过（20 页），dist 实测：首页徽章 v0.4.0、projects.json 描述/正文已更新、/posts/v0.4.0/ 与 /docs/agent/（偷懒通道节）/docs/guide/（晨报段）/docs/faq/ 均含新内容；preview 四路径 200
+- 遗留: CLI 参数（agent decide/resume、--approve/--answer）已对照 cli.py 与 SKILL.md v1.2.0 核对无误；个人站 whizzzest.com 取 /projects.json 的描述将在其下次构建带上
+- 时间: 2026-09-15 15:50 完成
 
 ### S-0915-1420-安全审计修补 ✅
 - 目标: 四项审计短板的 A+B 阶段修补——A1 隧道管理面暴露修复（CF-* 边缘头拒绝）+ A2 密钥面加固（日志泄漏/XSS 链路扫描）+ A3 SQL 拼接抽查 + B 测试基建（前端 Vitest 首批冒烟、后端覆盖率报告）
