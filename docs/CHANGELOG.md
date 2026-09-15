@@ -8,6 +8,10 @@
 - 核对无误未动：exit code 表与 CLI `EXIT_*` 全量一致、安全六条、两阶段唯一规则、正文规范；官网 /docs/agent/ 走 sync-docs 白名单同步 Agent接入指南.md（人类向简介），无需随动
 - docs/AGENT_EXTEND_PLAN.md 新增（deer-flow 2.0 / smolagents 1.27 调研产出，**未执行**）：§1 两仓机制↔Nmail 现状对照（错误回灌/上下文压缩/校验/审批/白名单/流式/审计均已覆盖，勿重复建设）；方向 A 内置总管家 8 项——A1 步数耗尽强制收尾（scheduler 晨报无人值守场景零产出）、A2 final answer 确定性校验闸门、A3 工具结果保头尾截断、A4 同批只读调用并行、A5 `ask_user` 澄清中断（deer-flow 表单协议）、A6 批量任务事件持久化+断线回填、A7 邮件工作流技能包、A8 步级可观测；方向 B 对外 CLI 3 项（folders 命令/版本协商 _notice.update/包装总管家通道缓发）；待拍板 5 项 + 明确不做 4 项（代码沙箱/MCP/向量检索/LangGraph 级框架）
 
+## 待提交 — feat: 摘要页新增独立「AI 晨报」区块（用户拍板：晨报不顶替综述）
+- 用户反馈综述与晨报混同：store_agent_brief 改存独立键 agent_brief（不再覆盖 ai_overview）；摘要页新增「AI 晨报」卡片（Sunrise 图标+靛蓝配色区分于综述的紫色 Sparkles），有晨报当日不重复生成常规综述（省一次 LLM）；导出 Markdown 附「## AI 晨报」段
+- 验证：pytest 212 全绿（用例改断言独立键+无 ai_overview）、npm build 过；真实实例触发晨报——GET /api/digest 返回 agent_brief 正文+无 ai_overview+新鲜统计（new_today=7），开关保持开启
+
 ## 581dde8 — fix: 通知中心支持展开全文 + 晨报通知携带正文（回应「通知无法直接阅读」反馈）
 - 用户反馈：通知列表正文被 line-clamp-2 钉死、晨报通知只有指路文案，点通知跳转无法直接阅读——NotificationBell 新增「展开全文/收起」（>90 字符出现，stopPropagation 不触发跳转，展开后 whitespace-pre-wrap 保留晨报排版）；点击行仍按类型跳转（摘要→摘要页）
 - scheduler：晨报通知正文改为携带晨报全文（≤2000 字符）+ 草稿待审/摘要页指引

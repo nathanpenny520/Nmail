@@ -179,9 +179,10 @@ def build_digest(force: bool = False) -> dict:
 
 
 def store_agent_brief(brief_text: str) -> dict:
-    """AI 晨报产出落摘要页（§18.6）：结构化统计照常收集，AI 综述直接用晨报
-    文本，不再单独调 LLM——摘要页当日完整渲染（agent 拟的草稿经 has_draft
-    自然出现在「需要回复」）。通知由调用方（scheduler）负责，此处不发。"""
+    """AI 晨报产出落摘要页（§18.6）：结构化统计照常收集，晨报正文存独立键
+    agent_brief——摘要页单独的「AI 晨报」区块呈现（不顶替 AI 综述；当日不再
+    单独调 LLM 生成综述）。agent 拟的草稿经 has_draft 自然出现在「需要回复」。
+    通知由调用方（scheduler）负责，此处不发。"""
     today = date.today().isoformat()
     conn = get_conn()
     existing = conn.execute(
@@ -194,7 +195,7 @@ def store_agent_brief(brief_text: str) -> dict:
         if dismissed:
             stats["important"] = [i for i in stats["important"] if i["email_id"] not in dismissed]
             stats["dismissed_important"] = sorted(dismissed)
-    stats["ai_overview"] = brief_text
+    stats["agent_brief"] = brief_text
     conn.execute(
         "INSERT INTO digest_history (date, content_json) VALUES (?, ?)"
         " ON CONFLICT(date) DO UPDATE SET content_json = excluded.content_json,"

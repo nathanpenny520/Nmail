@@ -119,14 +119,15 @@ def test_dismiss_important_unknown_id_404():
 
 
 def test_store_agent_brief():
-    """§18.6：晨报文本写入当日摘要——ai_overview=晨报正文，结构化统计照常。"""
+    """§18.6：晨报正文存独立键 agent_brief（不顶替 AI 综述），结构化统计照常。"""
     aid = _aid()
     _seed_email(aid, 1, "晨报测试邮件")
     stats = digest.store_agent_brief("**晨报**：一切正常。")
-    assert stats["ai_overview"] == "**晨报**：一切正常。"
+    assert stats["agent_brief"] == "**晨报**：一切正常。"
     row = database.get_conn().execute(
         "SELECT content_json FROM digest_history WHERE date = date('now', 'localtime')"
     ).fetchone()
     assert row is not None
     data = json.loads(row["content_json"])
-    assert data["ai_overview"] == "**晨报**：一切正常。" and "need_reply" in data
+    assert data["agent_brief"] == "**晨报**：一切正常。" and "need_reply" in data
+    assert "ai_overview" not in data  # 晨报日不生成常规综述（省一次 LLM）

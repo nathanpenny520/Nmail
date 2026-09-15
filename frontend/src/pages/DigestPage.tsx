@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, Loader2, RefreshCw, Sparkles, X } from 'lucide-react'
+import { Download, Loader2, RefreshCw, Sparkles, Sunrise, X } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import * as echarts from 'echarts/core'
@@ -128,6 +128,7 @@ export default function DigestPage() {
       `# Nmail 每日摘要 · ${d.date}`,
       '',
       d.ai_overview && `> ${d.ai_overview}`,
+      ...(d.agent_brief ? ['', '## AI 晨报', '', d.agent_brief] : []),
       '',
       `**概览**：新邮件 ${d.overview.new_today} · 未读 ${d.overview.unread} · 需回复 ${d.overview.need_reply} · AI 已归档营销 ${d.overview.auto_archived}`,
       '',
@@ -209,6 +210,18 @@ export default function DigestPage() {
         </div>
       ) : (
         <>
+          {/* AI 晨报（REDESIGN_PLAN §18.6：scheduler 定时运行产出，独立区块不顶替综述） */}
+          {digest.agent_brief && (
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5">
+              <div className="flex items-center gap-2 t-sm font-semibold text-indigo-700">
+                <Sunrise className="h-3.5 w-3.5" /> AI 晨报
+              </div>
+              <div className="mt-1 t-md leading-relaxed text-gray-800">
+                <Markdown text={digest.agent_brief} />
+              </div>
+            </div>
+          )}
+
           {/* AI 综述 */}
           {digest.ai_overview && (
             <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-5">

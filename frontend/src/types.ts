@@ -556,6 +556,8 @@ export interface DigestData {
   need_reply: DigestNeedReply[]
   important: DigestImportant[]
   ai_overview: string
+  /** AI 晨报正文（§18.6：scheduler 定时运行产出，独立区块呈现；无则不存在该键） */
+  agent_brief?: string
 }
 
 export interface DigestResp {
