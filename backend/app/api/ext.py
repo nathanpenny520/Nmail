@@ -233,6 +233,20 @@ def ext_get_draft(draft_id: int, _: Any = READ_KEY) -> dict:
     return user_drafts.get_draft(draft_id)
 
 
+@router.delete("/drafts/{draft_id}")
+def ext_delete_draft(draft_id: int, _: Any = WRITE_KEY) -> dict:
+    """删除草稿。仅新建（editing）/已丢弃（discarded）可删——AI 待审、定时发送
+    等在途草稿不开放，防 agent 误清审批队列；这类草稿走 discard 或界面处理。"""
+    row = get_conn().execute(
+        "SELECT status FROM user_drafts WHERE id = ?", (draft_id,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "草稿不存在")
+    if row["status"] not in ("editing", "discarded"):
+        raise HTTPException(409, f"草稿状态为 {row['status']}，仅 editing/discarded 可删除")
+    return user_drafts.delete_draft(draft_id)
+
+
 @router.get("/folders")
 def ext_folders(account_id: int, _: Any = READ_KEY) -> dict:
     """账号文件夹缓存列表（不触发服务器 LIST；先经 POST /folders/sync 按需同步）。"""
@@ -363,17 +377,20 @@ async def ext_upload_draft_attachments(
 def ext_folder_sync(
     account_id: int,
     name: str,
+    wait: bool = False,
     _: Any = WRITE_KEY,
 ) -> dict:
-    """按需同步指定文件夹（IMAP 名含分隔符，走查询参数与内部一致）。"""
+    """按需同步指定文件夹（IMAP 名含分隔符，走查询参数与内部一致）。
+    wait=true 同步执行、完成才返回（CLI 用，保证"同步后立即可读"）；
+    默认后台线程执行，立即返回 {started}。"""
     row = get_conn().execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
     if not row:
         raise HTTPException(404, "账号不存在")
-    return sync_engine.start_sync(
-        {"id": row["id"], "email": row["email"],
-         "imap_server": row["imap_server"], "imap_port": row["imap_port"]},
-        folders=(name,),
-    )
+    account = {"id": row["id"], "email": row["email"],
+               "imap_server": row["imap_server"], "imap_port": row["imap_port"]}
+    if wait:
+        return sync_engine.sync_account(account, folders=(name,))
+    return sync_engine.start_sync(account, folders=(name,))
 
 
 # ── 端点：send ──────────────────────────────────────────────

@@ -128,3 +128,32 @@ def test_app_version_falls_back_to_metadata(monkeypatch):
     monkeypatch.setattr(config, "_version_from_pyproject", lambda base: None)
     monkeypatch.setattr(config, "_metadata_version", lambda name: "7.7.7")
     assert config._app_version() == "7.7.7"  # site-packages 旁无 pyproject → 包元数据
+
+
+# ── batch_ops._match_rebuilt（v0.4.1 重建映射）──────────────
+# 契约：移动类动作拿不到新 UID 删行重建后，按 message_id 在目标文件夹找回新 id；
+# 无 message_id 或服务器上没找回的记 None——CLI/skill 据此把旧 id 换成新 id 续操作
+
+def test_match_rebuilt_mapping():
+    from app.core.batch_ops import _match_rebuilt
+    from app.db import database
+
+    database.run_migrations()
+    conn = database.get_conn()
+    aid = int(conn.execute(
+        "INSERT INTO accounts (email, imap_server, imap_port)"
+        " VALUES ('rb-units@example.com', 'imap.test', 993)").lastrowid)
+    conn.commit()
+    new_id = int(conn.execute(
+        "INSERT INTO emails (account_id, folder, uid, message_id)"
+        " VALUES (?, 'Archived', 11, '<rb1@test>')", (aid,)).lastrowid)
+    conn.commit()
+
+    deleted = [
+        {"id": 9001, "message_id": "<rb1@test>"},    # 服务器找回 → 映射到新 id
+        {"id": 9002, "message_id": None},            # 原本就无 message_id → None
+        {"id": 9003, "message_id": "<rb-ghost@test>"},  # 目标文件夹里没找到 → None
+    ]
+    assert _match_rebuilt(conn, aid, "Archived", deleted) == {
+        "9001": new_id, "9002": None, "9003": None,
+    }

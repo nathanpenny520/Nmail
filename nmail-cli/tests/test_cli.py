@@ -239,6 +239,61 @@ def test_folders_list(capsys):
     assert envelope["ok"] is True and "folders" in envelope["data"]
 
 
+def test_drafts_delete(capsys):
+    "v0.4.1：drafts delete 删新建草稿；AI 待审（pending_review）草稿业务拒绝。"
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    save_config("http://127.0.0.1:8720", _make_key(["read", "write"]))
+    aid = _seed_account()
+
+    # 新建 → 删除 → 再读 exit 6（资源不存在）
+    assert main(["drafts", "create", "--account-id", str(aid), "--to", "a@b.com",
+                 "--subject", "待删草稿", "--body", "x"]) == EXIT_OK
+    draft = _out_lines(capsys)[0]["data"]
+    assert main(["drafts", "delete", str(draft["id"])]) == EXIT_OK
+    assert main(["drafts", "send", str(draft["id"])]) == EXIT_PERMANENT
+
+    # 在途审批草稿不开放删除 → exit 2 业务拒绝（防 agent 误清审批队列）
+    conn = database.get_conn()
+    cur = conn.execute(
+        "INSERT INTO user_drafts (account_id, mode, status, to_addrs, subject, body_html)"
+        " VALUES (?, 'ai', 'pending_review', 'x@y.com', '审批中', '<p>z</p>')", (aid,))
+    conn.commit()
+    assert main(["drafts", "delete", str(int(cur.lastrowid))]) == EXIT_BAD_PARAMS
+    conn.execute("DELETE FROM user_drafts WHERE id = ?", (int(cur.lastrowid),))
+    conn.commit()
+
+
+def test_folders_sync_wait模式(capsys):
+    "v0.4.1：folders sync 带 wait=true 同步执行；无 IMAP 凭据的种子账号按业务失败透传。"
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    save_config("http://127.0.0.1:8720", _make_key(["write"]))
+    aid = _seed_account()
+    _seed_folder(aid)
+    assert main(["folders", "sync", "--account-id", str(aid), "--folder", "INBOX"]) == EXIT_OK
+    envelope = _out_lines(capsys)[0]
+    # HTTP 成功（CLI envelope ok），data 里是同步结果；种子账号缺凭据 → ok=false 如实透出
+    assert envelope["ok"] is True and envelope["data"]["ok"] is False
+    assert "started" not in envelope["data"]  # wait 模式：不是后台线程的 {started} 响应
+
+
+def test_watch_max_emails自动退出(capsys, monkeypatch):
+    "v0.4.1：--max-emails 收满自动退出（agent 调用防挂起），不再必须 Ctrl-C。"
+    client.post("/api/extkeys/enabled", json={"enabled": True})
+    save_config("http://127.0.0.1:8720", _make_key(["read"]))
+    aid = _seed_account()
+    _seed_email(aid, 1, "历史邮件")
+
+    # 首轮轮询为空，sleep 时注入一封新邮件 → 下轮输出 1 封即达 --max-emails 退出。
+    # 注：cli.time 是全局 time 模块（anyio/限流器也在用 monotonic），不要 mock 它。
+    def _seed_and_return(*_a):
+        _seed_email(aid, 2, "新邮件")
+    monkeypatch.setattr(cli.time, "sleep", _seed_and_return)
+    assert main(["watch", "--account-id", str(aid), "--interval", "0",
+                 "--max-emails", "1"]) == EXIT_OK
+    lines = _out_lines(capsys)
+    assert len(lines) == 1 and lines[0]["data"]["subject"] == "新邮件"
+
+
 def test_agent_ask_未配置AI(capsys):
     "B3：AI 未配置时 agent ask 返回明确错误（exit 2，agent 据此告知用户）。"
     client.post("/api/extkeys/enabled", json={"enabled": True})

@@ -1863,7 +1863,12 @@ export interface paths {
         get: operations["ext_get_draft_api_ext_v1_drafts__draft_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Ext Delete Draft
+         * @description 删除草稿。仅新建（editing）/已丢弃（discarded）可删——AI 待审、定时发送
+         *     等在途草稿不开放，防 agent 误清审批队列；这类草稿走 discard 或界面处理。
+         */
+        delete: operations["ext_delete_draft_api_ext_v1_drafts__draft_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2039,6 +2044,8 @@ export interface paths {
         /**
          * Ext Folder Sync
          * @description 按需同步指定文件夹（IMAP 名含分隔符，走查询参数与内部一致）。
+         *     wait=true 同步执行、完成才返回（CLI 用，保证"同步后立即可读"）；
+         *     默认后台线程执行，立即返回 {started}。
          */
         post: operations["ext_folder_sync_api_ext_v1_folders_sync_post"];
         delete?: never;
@@ -6752,6 +6759,39 @@ export interface operations {
             };
         };
     };
+    ext_delete_draft_api_ext_v1_drafts__draft_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ext_folders_api_ext_v1_folders_get: {
         parameters: {
             query: {
@@ -7021,6 +7061,7 @@ export interface operations {
             query: {
                 account_id: number;
                 name: string;
+                wait?: boolean;
             };
             header?: never;
             path?: never;

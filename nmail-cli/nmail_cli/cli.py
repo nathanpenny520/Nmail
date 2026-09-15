@@ -501,6 +501,13 @@ def cmd_drafts_send(args) -> int:
     return EXIT_OK
 
 
+def cmd_drafts_delete(args) -> int:
+    """删除草稿（服务端仅放行 editing/discarded；在途审批草稿先 discard）。"""
+    client = _client(args)
+    _emit(client.request("DELETE", f"/api/ext/v1/drafts/{args.draft_id}"))
+    return EXIT_OK
+
+
 # ── 其他 ────────────────────────────────────────────────────
 
 def cmd_contacts_search(args) -> int:
@@ -515,6 +522,15 @@ def cmd_folders_list(args) -> int:
     data = client.request("GET", "/api/ext/v1/folders",
                           params={"account_id": args.account_id})
     _emit(data)
+    return EXIT_OK
+
+
+def cmd_folders_sync(args) -> int:
+    """按需同步指定文件夹（wait 模式：完成才返回，之后该文件夹立即可读）。"""
+    client = _client(args)
+    _stderr(f"同步文件夹 {args.folder}（account {args.account_id}）…")
+    _emit(client.request("POST", "/api/ext/v1/folders/sync", params={
+        "account_id": args.account_id, "name": args.folder, "wait": "true"}))
     return EXIT_OK
 
 
@@ -572,6 +588,12 @@ def cmd_digest(args) -> int:
 
 def cmd_watch(args) -> int:
     client = _client(args)
+    if args.timeout is not None and args.timeout <= 0:
+        raise CliError("--timeout 必须为正数（秒）", code="bad_request",
+                       exit_code=EXIT_BAD_PARAMS)
+    if args.max_emails is not None and args.max_emails <= 0:
+        raise CliError("--max-emails 必须为正整数", code="bad_request",
+                       exit_code=EXIT_BAD_PARAMS)
     params: dict = {"limit": 200}
     if args.account_id is not None:
         params["account_id"] = args.account_id
@@ -580,13 +602,27 @@ def cmd_watch(args) -> int:
         params["since_id"] = latest["latest_id"]  # 基线：不回放历史
     else:
         params["since_id"] = args.since_id
-    _stderr(f"watching（base={params['since_id']}，Ctrl-C 停止）…")
+    stop_hint = "Ctrl-C 停止" if args.timeout is None and args.max_emails is None else "到条件自动停止"
+    _stderr(f"watching（base={params['since_id']}，{stop_hint}）…")
+    deadline = (time.monotonic() + args.timeout) if args.timeout is not None else None
+    received = 0
     while True:
         body = client.request("GET", "/api/ext/v1/emails/recent", params=params)
         for item in body["items"]:
             _emit(item)
+            received += 1
         params["since_id"] = body["latest_id"]
-        time.sleep(args.interval)
+        if args.max_emails is not None and received >= args.max_emails:
+            _stderr(f"已收到 {received} 封（--max-emails={args.max_emails}），停止监听")
+            return EXIT_OK
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _stderr(f"--timeout={args.timeout}s 到，停止监听")
+                return EXIT_OK
+            time.sleep(min(args.interval, remaining))
+        else:
+            time.sleep(args.interval)
 
 
 # ── 参数表 ──────────────────────────────────────────────────
@@ -713,6 +749,10 @@ def build_parser() -> argparse.ArgumentParser:
                       help="第二阶段：用户明确许可后才传（不得同轮自确认）")
     _add_auth_base(send)
     send.set_defaults(func=cmd_drafts_send)
+    ddel = drafts_sub.add_parser("delete", help="删除草稿（仅新建/已丢弃状态；在途审批草稿先 discard）")
+    ddel.add_argument("draft_id", type=int)
+    _add_auth_base(ddel)
+    ddel.set_defaults(func=cmd_drafts_delete)
 
     contacts = sub.add_parser("contacts", help="通讯录")
     contacts_sub = contacts.add_subparsers(dest="contacts_command", required=True)
@@ -732,6 +772,11 @@ def build_parser() -> argparse.ArgumentParser:
     fl.add_argument("--account-id", type=int, required=True, help="账号 id（+me 查看）")
     _add_auth_base(fl)
     fl.set_defaults(func=cmd_folders_list)
+    fs = folders_sub.add_parser("sync", help="按需同步指定文件夹（归档/移动后兜底；完成才返回）")
+    fs.add_argument("--account-id", type=int, required=True, help="账号 id（+me 查看）")
+    fs.add_argument("--folder", required=True, help="文件夹名（folders list 里查）")
+    _add_auth_base(fs)
+    fs.set_defaults(func=cmd_folders_sync)
 
     agent_ = sub.add_parser("agent", help="内置总管家（scope=agent；AI 需已在 Nmail 配置）")
     agent_sub = agent_.add_subparsers(dest="agent_command", required=True)
@@ -756,11 +801,15 @@ def build_parser() -> argparse.ArgumentParser:
     _add_auth_base(res)
     res.set_defaults(func=cmd_agent_resume)
 
-    wat = sub.add_parser("watch", help="新邮件流（NDJSON 每行一封，Ctrl-C 停止）")
+    wat = sub.add_parser("watch", help="新邮件流（NDJSON 每行一封；agent 调用建议带 --timeout）")
     wat.add_argument("--since-id", type=int, default=None,
                      help="起始游标（默认当前最新，不回放历史）")
     wat.add_argument("--account-id", type=int)
     wat.add_argument("--interval", type=float, default=10.0, help="轮询秒数（默认 10）")
+    wat.add_argument("--timeout", type=float, default=None,
+                     help="最长监听秒数，到点自动退出（缺省一直监听直到 Ctrl-C）")
+    wat.add_argument("--max-emails", type=int, default=None,
+                     help="收到 N 封后自动退出（缺省不限）")
     _add_auth_base(wat)
     wat.set_defaults(func=cmd_watch)
 

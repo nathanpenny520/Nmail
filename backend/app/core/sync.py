@@ -393,6 +393,20 @@ def _sync_folder(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001
     }
 
 
+def resync_folder_with_mb(mb, account_id: int, folder: str) -> dict:  # noqa: ANN001 — mb 为 MailBox
+    """复用既有 IMAP 连接做单文件夹增量同步（批量移动/归档后目标文件夹立即可见）。
+
+    尽力而为：失败只记日志不抛——服务器侧移动已成功，本地重建还有轮询兜底
+    （调度轮询含归档文件夹）。供 batch_ops 在动作 job 内就地调用。
+    """
+    try:
+        return _sync_folder(mb, account_id, folder)
+    except Exception:  # noqa: BLE001 — 同上，重建失败不推翻已完成的移动
+        logger.exception("post-action resync failed for account %s folder %s",
+                         account_id, folder)
+        return {"folder": folder, "new_count": 0, "new_email_ids": []}
+
+
 def delete_account_files(account_id: int) -> None:
     """删除账号附件目录（账号删除时调用）。"""
     base = get_data_dir() / "accounts" / str(account_id)

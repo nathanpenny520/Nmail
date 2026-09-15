@@ -41,20 +41,23 @@ gh auth status >/dev/null 2>&1 || die "gh 未登录：gh auth login"
 info "预检通过：版本 ${VERSION}（${TAG}）"
 
 # ── 1. 改版本号 ──
-# 版本唯一来源是 pyproject.toml；config.py 运行时解析本文件（源码/冻结读文件，wheel 读元数据），无需改 config.py
-sed -i.bak "s/^version = \"[0-9][0-9.]*\"/version = \"$VERSION\"/" pyproject.toml
-rm -f pyproject.toml.bak
+# 版本唯一来源是根 pyproject.toml；scripts/sync_version.py 把版本同步到 nmail-cli
+# （pyproject + __init__）与 skills/SKILL.md——四处同线（test_version_sync.py 兜底），
+# 版本漂移会导致 CLI 版本协商误报。config.py 运行时解析根 pyproject，无需改 config.py
+PY_BIN="$(command -v python3 || command -v python)"
+[ -n "$PY_BIN" ] || die "找不到 python3/python"
+"$PY_BIN" scripts/sync_version.py "$VERSION" || die "版本号同步失败"
 grep -q "version = \"$VERSION\"" pyproject.toml || die "pyproject.toml 版本号替换失败"
-info "版本号已更新：pyproject.toml → $VERSION"
+info "版本号已统一：pyproject / nmail-cli / SKILL.md → $VERSION"
 
 if [ "$DRY_RUN" = 1 ]; then
-  git checkout -- pyproject.toml
+  git checkout -- pyproject.toml nmail-cli/pyproject.toml nmail-cli/nmail_cli/__init__.py skills/SKILL.md
   info "dry-run 结束：版本号已还原，未提交/未推送。预检与替换逻辑均验证通过。"
   exit 0
 fi
 
 # ── 2. 提交 + tag + 推送 ──
-git add pyproject.toml
+git add pyproject.toml nmail-cli/pyproject.toml nmail-cli/nmail_cli/__init__.py skills/SKILL.md
 git commit -m "release: v$VERSION"
 git tag "$TAG"
 if ! git push origin main "$TAG"; then

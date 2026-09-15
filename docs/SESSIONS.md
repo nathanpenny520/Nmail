@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0915-2130-版本统一与CLI修复 🔄
+- 目标: ①skill 实测发现的 archive 后邮件不可见/unarchive 无效修复（移动类动作后就地增量同步目标文件夹+重建映射）②版本管理自动化+统一版本线（app=nmail-cli=skill，sync_version.py + release.sh 集成 + 一致性测试）③CLI 补 drafts delete / folders sync / watch --timeout/--max-emails ④SKILL.md 补镜像兜底与 watch agent 用法
+- 范围: backend(app/core/batch_ops.py, core/sync.py, scheduler.py, api/ext.py) + nmail-cli(cli.py, pyproject.toml, __init__.py, tests) + scripts(sync_version.py 新增, release.sh) + skills/SKILL.md + docs(CHANGELOG, ARCHITECTURE, 对外API使用指南, SESSIONS) + frontend(openapi 快照+schema 同提交)
+- 时间: 2026-09-15 21:30 开工
+
 ### S-0915-1530-发版v0.4.0 ✅
 - 目标: 用户指示推送代码并发布 v0.4.0——按 docs/RELEASE.md 一条命令发版 + 收尾清单
 - 范围: pyproject.toml（版本号）、docs/CHANGELOG.md、docs/SESSIONS.md；外部渠道（PyPI/Release/tap/winget/官网）

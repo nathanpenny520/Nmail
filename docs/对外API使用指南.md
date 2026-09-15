@@ -56,17 +56,18 @@ CLI 自身用法见 `nmail-cli/README.md`。下文 curl 用法与 CLI 并行有�
 | `/emails/{id}` | GET | read | 详情（HTML 正文已消毒，远程图片默认拦截） |
 | `/emails/recent` | GET | read | 新邮件游标轮询（watch）：`since_id`（默认 0）返回 id 更大的邮件（按 id 升序）+ `latest_id`；首呼拿 `latest_id` 作基线，此后带上次返回值轮询，空结果也推进游标。参数 `account_id` `limit`（≤200） |
 | `/emails/{id}/attachments/{aid}` | GET | read | 下载附件 |
-| `/emails/actions` | POST | write | 批量动作 `{"ids":[...],"action":"read\|unread\|star\|unstar\|move\|trash\|archive\|unarchive","folder":"目标"}`；打标类同步返回，移动类异步返回 `job_id` |
+| `/emails/actions` | POST | write | 批量动作 `{"ids":[...],"action":"read\|unread\|star\|unstar\|move\|trash\|archive\|unarchive","folder":"目标"}`；打标类同步返回，移动类异步返回 `job_id`（终态结果含 `updated/failed`；个别服务商移动不回新 UID 时本地按 message_id 重建，`rebuilt` 为 `{"旧id": 新id}` 映射，续操作请用新 id） |
 | `/jobs/{job_id}` | GET | read | 轮询批量动作进度 |
 | `/drafts?status=` | GET | read | 草稿列表（默认 `pending_review` AI 待审） |
 | `/drafts` | POST | write | 创建草稿 `{"account_id","to","cc","bcc","subject"}` + 正文三选一 `body_html`/`body_md`（Markdown）/`body_text`（纯文本，转义换行）——多选一给 400（地址为逗号分隔串；不会自动发送） |
 | `/drafts/reply` | POST | write | 回复草稿 `{"email_id","reply_all"?,"cc"?,"bcc"?}` + 正文三选一：自动带 `Re:` 主题、收件人=原发件人（reply_all 时原收件人并入 cc，剔除本账号地址）、`in_reply_to`（发送自动串线）与原文引用块 |
 | `/drafts/forward` | POST | write | 转发草稿 `{"email_id","to","include_attachments"?,"cc"?,"bcc"?}` + 正文三选一：自动带 `Fwd:` 主题与引用块；不设 `in_reply_to`（不串线、不回标原邮件已读）；`include_attachments=true` 复制原附件 |
 | `/drafts/{id}` | GET | read | 单条草稿（含正文与附件清单） |
+| `/drafts/{id}` | DELETE | write | 删除草稿。仅 `editing`/`discarded` 状态可删（AI 待审、定时等在途草稿返回 409，防误清审批队列） |
 | `/drafts/{id}/attachments` | POST | write | 草稿附件上传（multipart，字段名 `files`，可多文件） |
 | `/drafts/{id}/approve` | POST | send | 发送草稿（In-Reply-To/消毒/Sent 归档与界面同通路） |
 | `/folders?account_id=` | GET | read | 文件夹缓存列表 |
-| `/folders/sync?account_id=&name=` | POST | write | 按需同步指定文件夹（名字走查询参数，IMAP 名含分隔符） |
+| `/folders/sync?account_id=&name=&wait=` | POST | write | 按需同步指定文件夹（名字走查询参数，IMAP 名含分隔符）；`wait=true` 同步执行、完成才返回（CLI 用），默认后台线程立即返回 `{started}` |
 | `/contacts?q=&limit=` | GET | read | 通讯录搜索 |
 | `/digest` | GET | read | 最新每日摘要 |
 | `/agent/chat` | POST | agent | 总管家对话（非流式）：`{"question","account_ids?","mode?":"approval\|auto"}` → `{answer, approvals, events}`。approvals 各项带 `run_id`；`text_delta` 增量事件已过滤，回答以 `text` 事件为准 |

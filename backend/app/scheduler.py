@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, UTC
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from app.core.folders import archive_folder_name
 from app.core.outbox import send_user_draft
 from app.core.sync import add_notification, start_sync
 from app.db.database import get_conn, get_setting, set_setting
@@ -191,13 +192,23 @@ def poll_due_accounts() -> None:
         if last is not None and now - last < timedelta(minutes=interval_minutes):
             continue
         try:
+            # 轮询 = INBOX + 归档文件夹（仅当该账号缓存里已有此文件夹——从未归档过
+            # 的账号服务器上还没有它，带上只会报错）。归档是真实服务器移动，归档夹
+            # 不进轮询时，移动后删行重建的邮件要等手动同步才可见。
+            # 其余文件夹仍按需同步（界面点开/POST /folders/sync），全量轮询不值得：
+            # 每文件夹一次 SELECT 的开销换不来高频访问。
+            archive = archive_folder_name(row["id"])
+            known = get_conn().execute(
+                "SELECT 1 FROM folders WHERE account_id = ? AND name = ?", (row["id"], archive)
+            ).fetchone()
+            poll_folders = ("INBOX", archive) if known else ("INBOX",)
             # 后台线程执行：长同步（如首翻大邮箱）不再阻塞调度 tick
             result = start_sync({
                 "id": row["id"],
                 "email": row["email"],
                 "imap_server": row["imap_server"],
                 "imap_port": row["imap_port"],
-            })
+            }, folders=poll_folders)
             if not result["started"] and result.get("reason") != "syncing":
                 logger.info("poll sync not started for %s: %s", row["email"], result.get("reason"))
         except Exception:  # noqa: BLE001 — 单账号失败不影响其他账号
