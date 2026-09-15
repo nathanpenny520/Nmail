@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0915-2105-README精简与演示图 🔄
+- 目标: README 双语精简——「快速开始」收敛两渠道、uvx 补「命令即启动命令/--refresh 升级」口径、「首次使用」独立成节、删「自行打包」节与 v0.4.0 特性长枚举、源码与开发模式合并；嵌入 assets/Nmail-demo.gif（3.7MB 1280×720）
+- 范围: README.md, README.zh-CN.md, assets/Nmail-demo.gif(新增入库), docs(CHANGELOG, SESSIONS)
+- 时间: 2026-09-15 21:05 开工
+
 ### S-0915-2050-uvx升级口径与下载页说明 ✅
 - 目标: 主仓 INSTALL「更新」节补 uvx 升级命令（uv 官方语义：uvx 首跑取最新版、之后沿用缓存，升级需 --refresh）；官网下载页副标题点明「该命令即启动命令」并补下次打开/更新方式/常驻安装三行说明，uvx 仍为主推渠道
 - 范围: docs(INSTALL.md, CHANGELOG.md, SESSIONS.md) + nmail-site(独立仓): src/pages/download.astro, docs/CHANGELOG.md
