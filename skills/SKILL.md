@@ -137,8 +137,6 @@ uvx nmail-cli@latest +me
 
 ### contacts search
 
-### contacts search
-
 `"关键词"`（可省略，列出全部）、`--limit N`（默认 50）。
 
 ### folders list
