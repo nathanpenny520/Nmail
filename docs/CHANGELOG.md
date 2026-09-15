@@ -10,6 +10,12 @@
 - README 双语状态行：v0.3.0 已发布 → v0.4.0 已发布+Agent 化收官要点（记忆/晨报/技能/CLI 通道）
 - 官网（nmail-site 独立仓另行提交）：版本口径 0.3.0→0.4.0、功能页/首页/项目卡文案更新、v0.4.0 发布动态帖
 
+## e9a6946 — 发版: v0.4.0 全平台——PyPI/Release/tap/官网即时生效，tap 403 老毛病复发（手动兜底），winget 0.4.0 PR 已提
+- `release: v0.4.0`（e9a6946）+ tag 推送，release CI run 34941786990：PyPI `nmail-app` 0.4.0 ✅、**PyPI `nmail-cli` 0.1.0 首发认领包名** ✅、GitHub Release 三平台资产 ✅、homebrew-tap ❌（403 复发，与 v0.3.0 同根因：`HOMEBREW_TAP_TOKEN` fine-grained PAT 失效——**待用户重建 token 并更新 repo secret**，已连续两版手动兜底）
+- 手动同步 tap formula → 0.4.0（homebrew-nmail 提交 5045fdf，url/SHA256 对齐 Release 资产，`brew upgrade nmail` 即生效）；官网重建（run 34944037912，含 S-0915-1545 的 v0.4.0 官网文案提交）
+- winget：fork 分支 nmail-0.4.0 提交三 manifest（ManifestVersion 1.6.0），PR microsoft/winget-pkgs#434983；存量 0.1.0（#432990）/0.3.0（#433678）两 PR 校验 8/8 全绿，仍待社区审核合并
+- 本版内容（自 v0.3.0）：**v0.4 改版主线全量落地**——草稿中心（AI 待审+手写+定时发送统一收口）、AI 总管家 2.x Agent 化（对话式执行/审批卡/五授权位/内置技能层/运行观测/ask_user/同批并行）、对外 API（/api/ext/v1，scope 分级+限流+调用日志）+ **nmail-cli PyPI 首发**、安全加固（来源校验第三层：公网 CF 隧道管理面拦截）、前端测试基建（Vitest+RTL 挂入 build 门禁）
+
 ## 5638375 — 测试基建：前端 Vitest+RTL 首批用例挂入 build 门禁（审计 B1/B3）
 - ExtApiSection 8 用例：密钥默认遮蔽/眼睛显隐/吊销确认与取消/重置/创建 payload（trimmed+默认 read+空上限=null）/总开关（不携带日志开关字段，后端保持原值）——对外 API 管理面交互语义固化
 - `npm run build` 链路增 vitest run（字号 lint → vitest → tsc → vite build）；新增 npm test / test:watch；vite.config 增 test 段（jsdom + globals + setup）
