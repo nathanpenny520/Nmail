@@ -154,7 +154,8 @@ ManifestVersion: 1.6.0
 EOF
 
   for f in nathanpenny520.Nmail.yaml nathanpenny520.Nmail.installer.yaml nathanpenny520.Nmail.locale.en-US.yaml; do
-    C=$(base64 -w0 "$TMP_MANIFEST/$f")
+    # GNU base64 用 -w0、BSD（macOS）没有该参数——统一去掉换行符，两边通吃
+    C=$(base64 < "$TMP_MANIFEST/$f" | tr -d '\n')
     gh api -X PUT "repos/$FORK/contents/$DEST/$f" \
       -f message="nathanpenny520.Nmail version $VERSION" \
       -f content="$C" -f branch="$BRANCH" --jq '.content.path' > /dev/null

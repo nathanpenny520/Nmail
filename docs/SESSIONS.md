@@ -16,10 +16,14 @@
 
 ## 进行中
 
-### S-0915-2130-版本统一与CLI修复 🔄
+### S-0915-2130-版本统一与CLI修复 ✅
 - 目标: ①skill 实测发现的 archive 后邮件不可见/unarchive 无效修复（移动类动作后就地增量同步目标文件夹+重建映射）②版本管理自动化+统一版本线（app=nmail-cli=skill，sync_version.py + release.sh 集成 + 一致性测试）③CLI 补 drafts delete / folders sync / watch --timeout/--max-emails ④SKILL.md 补镜像兜底与 watch agent 用法
 - 范围: backend(app/core/batch_ops.py, core/sync.py, scheduler.py, api/ext.py) + nmail-cli(cli.py, pyproject.toml, __init__.py, tests) + scripts(sync_version.py 新增, release.sh) + skills/SKILL.md + docs(CHANGELOG, ARCHITECTURE, 对外API使用指南, SESSIONS) + frontend(openapi 快照+schema 同提交)
-- 时间: 2026-09-15 21:30 开工
+- 产出: 主提交 d8fad4c（fix+feat 全量）+ 903362f（release: v0.4.1 + tag，sync_version 首次实战：四处版本号一条命令统一）+ 11ff0cc（SKILL.md 标题去重）；v0.4.1 发版 CI 由 release.sh 盯守
+- 验收: 后端 230 测试全绿（+版本一致性/重建映射 2 项）、CLI 16 全绿（+3）；前端 build 链通过；真机 E2E：archive→rebuilt {"584":587}→立即 read→unarchive→rebuilt→恢复 INBOX 全链路、drafts create→delete→404、folders sync wait 模式、watch --timeout 4s 自动退出（4.116s 实测）；8720 已重启运行 0.4.0 代码（下一版本号周期自然对齐 0.4.1）
+- 经验: ①CLI 测试 mock time 要小心——cli.time 是全局 time 模块，anyio 与限流器共用 monotonic，mock 常量值会同时弄挂 deadline 与限流（429 迷惑性极强）；watch 退出测试改用 sleep 注入数据 + --max-emails ②PyPI 同名文件永久占用，"覆盖已发版本"不可行，修复走新版本号
+- 遗留: ①发版 CI 结果见 release.sh 输出（PyPI 0.4.1 双包/tap/winget PR）②上轮遗留的测试草稿 50/51/52 仍在草稿箱（50 待用户确认发送，51/52 可 `drafts delete` 或界面清理）③Homebrew/winget 渠道沿用 v0.4.0 会话的已知问题跟踪
+- 时间: 2026-09-15 22:20 完成
 
 ### S-0915-1530-发版v0.4.0 ✅
 - 目标: 用户指示推送代码并发布 v0.4.0——按 docs/RELEASE.md 一条命令发版 + 收尾清单
