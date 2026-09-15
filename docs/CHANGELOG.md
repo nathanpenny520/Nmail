@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: 更新就绪态自愈，「重启即更新」提示应用后不再悬挂
+## 07edc29 — fix: 更新就绪态自愈，「重启即更新」提示应用后不再悬挂
 - 用户实测：更新到 0.4.2 并重启后，设置-关于 仍显示「新版本 v0.4.2 已就绪，重启即更新」——根因：就绪态（`phase=ready`）设计上跨重启保留、靠前端版本对比隐藏，但关于页 UpdateApplyRow 漏了对比，就绪态本身又永不清除 → 永久悬挂
 - 修复（update_apply.py）：新增 `_heal_applied_ready` 自愈——`phase=ready` 且 `staged_version` 已不比当前新 → 归位 `idle` 并清理过期更新通知；挂启动收尾 `finish_pending_swap` 与 `GET /api/update-apply` 两处（已中招机器读一次即愈）；`staged_version` 三个写入点统一存不含 v 前缀的裸版本号（此前 binary 渠道存 `v0.4.2`，关于页会渲染成「vv0.4.2」、浮条的版本对比也永不匹配）
 - 验证：ruff 通过；pytest 249 全绿（+1 就绪态自愈回归测试）；npm build 通过；本机 8720 实例走应用内重启端点载入新代码，KV 就绪态归位 idle、接口不再报 ready
