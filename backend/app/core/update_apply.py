@@ -26,7 +26,13 @@ import httpx
 
 from app.config import APP_VERSION, get_data_dir
 from app.core import channel
-from app.core.update_check import RELEASES_API, _is_newer, _parse_version, notify_ready
+from app.core.update_check import (
+    RELEASES_API,
+    _cleanup_stale_notifications,
+    _is_newer,
+    _parse_version,
+    notify_ready,
+)
 from app.db.database import get_setting, set_setting
 
 _STATE_KEY = "update_apply_state"
@@ -72,7 +78,20 @@ def _set_state(**fields) -> None:
     _write_state(state)
 
 
+def _heal_applied_ready() -> None:
+    """自愈：已在跑新版（staged_version 不再比当前新）时把就绪态归位 idle，
+    并顺带清理过期更新通知——否则「已就绪，重启即更新」在更新应用后永久悬挂。"""
+    state = _read_state()
+    if state.get("phase") != "ready":
+        return
+    if _is_newer(state.get("staged_version") or "", APP_VERSION):
+        return
+    _set_state(phase="idle", progress=0, staged_version=None)
+    _cleanup_stale_notifications()
+
+
 def get_state() -> dict:
+    _heal_applied_ready()
     ch = channel.detect_channel()
     state = _read_state()
     return {
@@ -125,7 +144,7 @@ def _swap_in_new(new_file: Path) -> None:
 def finish_pending_swap() -> None:
     """启动早段收尾（cli.main 调用，必须零阻塞零抛错）：
     ① 清理上次重启遗留的 *.old；② 上次下载中途退出的 nmail.new 校验后完成换身
-    ——对应版本仍比当前新才换，否则删除归位。
+    ——对应版本仍比当前新才换，否则删除归位；③ 已应用的就绪态自愈归位。
 
     全函数整体兜底：首次启动时 KV 表尚未建（迁移在 FastAPI lifespan 才跑），
     读状态会 OperationalError——收尾失败绝不阻塞服务启动。"""
@@ -136,6 +155,7 @@ def finish_pending_swap() -> None:
             if old.exists():
                 with suppress(OSError):
                     old.unlink()
+        _heal_applied_ready()
         state = _read_state()
         if state.get("phase") not in ("downloading", "verifying", "staging"):
             return
@@ -146,7 +166,8 @@ def finish_pending_swap() -> None:
             try:
                 _verify_digest(new_file, state.get("digest"))
                 _swap_in_new(new_file)
-                _set_state(phase="ready", progress=100, staged_version=pending_version, error=None)
+                _set_state(phase="ready", progress=100,
+                           staged_version=_parse_version_str(pending_version), error=None)
                 notify_ready(pending_version)
             except Exception:  # noqa: BLE001 — 收尾失败不阻塞启动，清理残局即可
                 with suppress(OSError):
@@ -244,7 +265,7 @@ def _download_and_swap() -> None:
     except OSError as exc:
         _set_state(phase="failed", error=f"换身失败: {exc}")
         return
-    _set_state(phase="ready", progress=100, staged_version=tag,
+    _set_state(phase="ready", progress=100, staged_version=_parse_version_str(tag),
                pending_version=tag, digest=digest, error=None)
     notify_ready(tag)
 

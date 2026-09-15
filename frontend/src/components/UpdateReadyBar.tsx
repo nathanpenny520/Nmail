@@ -1,6 +1,6 @@
 /** 全局更新就绪浮条（UPDATE_AND_DESKTOP.md §3.3）：后台已装好新版本时提示重启。
  * 文字从简（用户定）；叉掉即等下次打开自动生效——按版本记忆，不重复打扰；
- * 重启成功后新版本下 phase 语义为「就位即当前版」，浮条自然消失。 */
+ * 重启到新版后启动收尾把已应用的就绪态自愈归位 idle（update_apply），浮条自然消失。 */
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { useState } from 'react'

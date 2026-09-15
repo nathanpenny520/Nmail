@@ -16,6 +16,14 @@
 
 ## 进行中
 
+### S-0916-0007-更新提示悬挂 ✅
+- 目标: 用户反馈更新到 0.4.2 并重启后，设置-关于 仍显示「新版本 v0.4.2 已就绪，重启即更新」——排查 update_apply 就绪态生命周期并修复
+- 根因: 就绪态（phase=ready）设计上跨重启保留、靠前端版本对比隐藏浮条（UpdateReadyBar 有对比），但关于页 UpdateApplyRow 漏了对比，就绪态本身又永不清除（finish_pending_swap 只处理 downloading/verifying/staging）→ 永久悬挂
+- 范围: backend(app/core/update_apply.py, tests/test_channel_desktop.py) + frontend(UpdateReadyBar.tsx 注释) + docs(UPDATE_AND_DESKTOP, CHANGELOG, SESSIONS)
+- 产出: `_heal_applied_ready` 自愈（ready 且 staged 不比当前新 → 归位 idle + 清过期更新通知），挂 finish_pending_swap 与 GET /api/update-apply 两处；staged_version 三写入点统一裸版本号（修 binary 渠道「vv0.4.2」渲染隐患）
+- 验证: ruff 通过；pytest 249 全绿（+1 自愈回归）；npm build 通过；本机 8720 实例走应用内重启端点载新码，KV 归位 idle、接口不再报 ready
+- 时间: 2026-09-16 00:07 开工，00:15 完成
+
 ### S-0915-2305-brew安装排查 ✅
 - 目标: 用户 brew 安装报错排查——连环挖出三个问题：①Homebrew 7.0 起第三方 tap 须 `brew trust`（tap 报「invalid syntax」且自动删克隆，报错误导性极强）②裸 `brew install nmail` 经 API 命中 homebrew/core **同名无关公式**（d99kris 的 C++ 终端邮箱 5.15.8），用户本机已实际误装并卸载替换 ③tap 0.4.1 二进制 `--version`/启动全部静默 exit 0
 - 排障与根因: 逐步排除法锁定 ③ 的根因——hello-world 冻结二进制正常（排除 PyInstaller/macOS 27 兼容）→ 分步导入诊断二进制正常（排除依赖）→ 唯差异为入口脚本：**cli.py 缺 `if __name__ == "__main__":` 保护**，PyInstaller 入口脚本加载完即退出，发布版 macOS/Linux 二进制从未真正运行过

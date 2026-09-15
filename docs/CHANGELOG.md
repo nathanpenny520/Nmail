@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 更新就绪态自愈，「重启即更新」提示应用后不再悬挂
+- 用户实测：更新到 0.4.2 并重启后，设置-关于 仍显示「新版本 v0.4.2 已就绪，重启即更新」——根因：就绪态（`phase=ready`）设计上跨重启保留、靠前端版本对比隐藏，但关于页 UpdateApplyRow 漏了对比，就绪态本身又永不清除 → 永久悬挂
+- 修复（update_apply.py）：新增 `_heal_applied_ready` 自愈——`phase=ready` 且 `staged_version` 已不比当前新 → 归位 `idle` 并清理过期更新通知；挂启动收尾 `finish_pending_swap` 与 `GET /api/update-apply` 两处（已中招机器读一次即愈）；`staged_version` 三个写入点统一存不含 v 前缀的裸版本号（此前 binary 渠道存 `v0.4.2`，关于页会渲染成「vv0.4.2」、浮条的版本对比也永不匹配）
+- 验证：ruff 通过；pytest 249 全绿（+1 就绪态自愈回归测试）；npm build 通过；本机 8720 实例走应用内重启端点载入新代码，KV 就绪态归位 idle、接口不再报 ready
+- 会话：S-0916-0007-更新提示悬挂
+
 ## d9eae83 — release: v0.4.2 + tag
 - **首个全渠道真实可用的版本**：冻结入口 `__main__` 修复（873ce06）随版生效——此前所有发布（v0.1.0–v0.4.1）的单文件/winget/brew 二进制均静默退出，本版起才真正可运行
 - release.sh 全流程：PyPI nmail-app 0.4.2 ✅、Release 四资产（三平台 + 首个 `nmail-macos-arm64.app.zip`）✅、tap 自动 bump 0.4.2 ✅（本机 brew 全链路实测 `nmail --version` → `Nmail 0.4.2`）、winget PR microsoft/winget-pkgs#435195、官网联动重建

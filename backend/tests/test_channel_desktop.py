@@ -192,6 +192,19 @@ def test_finish_pending_swap_discards_stale(tmp_path, monkeypatch):
     assert not new_file.exists() and update_apply.get_state()["phase"] == "idle"
 
 
+def test_heal_applied_ready(tmp_path, monkeypatch):
+    # 已在跑新版（staged 不比当前新）：就绪态自愈归位 idle——读状态与启动收尾两条路径
+    update_apply._set_state(phase="ready", progress=100, staged_version=APP_VERSION)
+    assert update_apply.get_state()["phase"] == "idle"
+    assert update_apply.get_state()["staged_version"] is None
+    update_apply._set_state(phase="ready", progress=100, staged_version="v0.0.9")
+    update_apply.finish_pending_swap()
+    assert update_apply.get_state()["phase"] == "idle"
+    # staged 仍比当前新（真的在等重启）：不得误清
+    update_apply._set_state(phase="ready", progress=100, staged_version="999.0.0")
+    assert update_apply.get_state()["phase"] == "ready"
+
+
 # ── 自动更新心跳：开关/渠道/新版本三重门控（UPDATE_AND_DESKTOP.md §3.3）────
 
 def test_auto_update_tick_gates(monkeypatch):

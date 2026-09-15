@@ -40,6 +40,7 @@
 3. 换身：当前二进制 rename 为 `nmail.old` → `nmail.new` os.replace 到原路径。旧进程照常跑（旧 inode），**文件已就位即「更新完成」**；
 4. 重启（可选动作）：新进程带 `--wait-port <当前端口>` 启动（等旧进程退净再绑同一端口，防 find_free_port 顺延丢页面），旧进程随即退出；下次启动清理 `nmail.old`（留作回滚）；
 5. 启动完成检查：进程启动早段若发现 `<DATA_DIR>/update/nmail.new` 存在（下载中途退出的残局）→ 校验通过则完成换身、失败则删除——保证「下次打开一定是新版」。
+6. 就绪态自愈：启动收尾与 `GET /api/update-apply` 读取时校验——`phase=ready` 但 `staged_version` 已不比当前版本新（更新已应用）→ 归位 `idle` 并清理过期更新通知，否则「已就绪，重启即更新」提示在应用后永久悬挂；`staged_version` 三个写入点统一存不含 v 前缀的裸版本号。
 
 附带好处：应用内下载的文件不带 quarantine 属性，换身后不再触发 Gatekeeper/SmartScreen 首次放行。
 
