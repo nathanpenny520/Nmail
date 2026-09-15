@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.ai import tasks
 from app.ai.digest import build_digest
-from app.db.database import get_conn
+from app.db.database import get_conn, get_setting
 
 router = APIRouter(prefix="/api/digest", tags=["digest"])
 
@@ -24,6 +24,9 @@ def get_digest() -> dict:
     digest = json.loads(latest["content_json"]) if latest else None
     if digest:
         digest = _filter_dismissed(digest)
+        # AI 晨报开关关闭 → 区块不展示（历史晨报同样隐藏；含导出，前端同源）
+        if not bool(get_setting("agent_brief_enabled", False)):
+            digest.pop("agent_brief", None)
     return {
         "dates": [r["date"] for r in rows],
         "digest": digest,

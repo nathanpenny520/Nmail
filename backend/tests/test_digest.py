@@ -131,3 +131,14 @@ def test_store_agent_brief():
     data = json.loads(row["content_json"])
     assert data["agent_brief"] == "**晨报**：一切正常。" and "need_reply" in data
     assert "ai_overview" not in data  # 晨报日不生成常规综述（省一次 LLM）
+
+
+def test_agent_brief_hidden_when_switch_off():
+    """开关关闭 → GET /api/digest 不返回晨报区块（开启时返回，历史晨报同样隐藏）。"""
+    aid = _aid()
+    _seed_email(aid, 2, "开关测试")
+    digest.store_agent_brief("**晨报**：开关验证。")
+    database.set_setting("agent_brief_enabled", True)
+    assert "agent_brief" in client.get("/api/digest").json()["digest"]
+    database.set_setting("agent_brief_enabled", False)
+    assert "agent_brief" not in client.get("/api/digest").json()["digest"]

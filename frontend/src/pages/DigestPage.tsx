@@ -210,18 +210,6 @@ export default function DigestPage() {
         </div>
       ) : (
         <>
-          {/* AI 晨报（REDESIGN_PLAN §18.6：scheduler 定时运行产出，独立区块不顶替综述） */}
-          {digest.agent_brief && (
-            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5">
-              <div className="flex items-center gap-2 t-sm font-semibold text-indigo-700">
-                <Sunrise className="h-3.5 w-3.5" /> AI 晨报
-              </div>
-              <div className="mt-1 t-md leading-relaxed text-gray-800">
-                <Markdown text={digest.agent_brief} />
-              </div>
-            </div>
-          )}
-
           {/* AI 综述 */}
           {digest.ai_overview && (
             <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-5">
@@ -363,6 +351,18 @@ export default function DigestPage() {
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* AI 晨报（REDESIGN_PLAN §18.6：scheduler 定时运行产出；置于摘要底部，开关关闭即隐藏） */}
+          {digest.agent_brief && (
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5">
+              <div className="flex items-center gap-2 t-sm font-semibold text-indigo-700">
+                <Sunrise className="h-3.5 w-3.5" /> AI 晨报
+              </div>
+              <div className="mt-1 t-md leading-relaxed text-gray-800">
+                <Markdown text={digest.agent_brief} />
               </div>
             </div>
           )}
