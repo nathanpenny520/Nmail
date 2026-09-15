@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 31fd015 — fix: Nmail.app 装标准 /Applications + Dock 图标常驻（编译型存根）+ 重启端口不再顺延
+- 用户实测反馈两问题——①.app 装到了用户目录 Applications 而非标准位置 ②点击打开后 Dock 图标不保留
+- 安装位置：macOS 改首选 `/Applications`（用户期望标准位置；无写权限的普通用户自动回退 `~/Applications`）；CLAUDE.md 决策#2「只写用户目录」同步修订
+- **Dock 图标根因**：LaunchServices 不为纯脚本 bundle 注册应用（`lsappinfo`/System Events 均不可见，进程活着也无 ASN 记录）——新增编译型 ObjC 存根 `scripts/nmail_stub.m`（通用二进制 arm64+x86_64 入库 `backend/app/assets/nmail-stub`，86KB）：以 NSApplication 身份注册应用（图标=AppIcon.icns、名称=CFBundleName、⌘Q 可用、Dock 右键 Quit），服务作为其子进程跑 `Contents/MacOS/server` 脚本；应用终止向子进程 SIGTERM（3s 升级 SIGKILL）→ server 脚本 trap 链式停 Python；服务子进程退出则应用随退（「已在运行」探测场景开完浏览器即退，不留僵尸图标）；无存根资产时回退纯脚本形态
+- **端口顺延根治**：find_free_port 占用判定分层——有监听必跳过（connect_ex 探测），裸 bind 失败但 SO_REUSEADDR 下可绑=TIME_WAIT 残留照常使用；此前每次重启都从 8720 顺延（8721/8722 漂移、浏览器页面地址丢失）的根因与 wait_for_port 同源
+- 实测：`open` 装在 /Applications 的 Nmail.app → LS 注册 ASN 出现、health 正常、进程树 stub→bash→python；osascript quit → LS 注销、服务停净、零残留进程；quit 后立刻重启实例收敛回 8720 不再漂移
+- 会话：S-0915-2225-更新与桌面图标
+
 ## 0d2aace — docs: 对外 brew/winget 命令全名同步（README 双语/官网/代码文案）
 - README 双语、官网 posts×2、UPDATE_AND_DESKTOP、RELEASE 的 brew 命令统一改 tap 全名 `brew upgrade nathanpenny520/nmail/nmail`，安装命令补 `brew trust` 步骤与 core 撞名警告；CLAUDE.md 新增工作流规范 #11：对外命令/渠道说明改动同一轮同步 INSTALL/README 双语/官网/代码文案四处
 - 会话：S-0915-2305-brew安装排查
