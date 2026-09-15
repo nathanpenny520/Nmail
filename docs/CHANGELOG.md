@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — docs: README 精简改版 + 嵌入演示 GIF
+## 768d5fa — docs: README 精简改版 + 嵌入演示 GIF
 - 嵌入 assets/Nmail-demo.gif（1280×720，3.7MB）；「快速开始」收敛为两渠道（单文件 / 一行命令），uvx 补「命令即启动命令：重跑同一条即再次打开，升级 --refresh」口径（对齐 INSTALL.md 与官网下载页）；「首次使用（约 5 分钟）」从源码段尾独立成节（所有渠道共用）；删「自行打包」节（并入「开发」一行指引 → docs/RELEASE.md）、删 v0.4.0 特性长枚举（指向 docs/CHANGELOG.md）；「源码开发」与「开发模式」合并为「开发」节去重；更新节各渠道升级补 uvx --refresh；README.md 与 README.zh-CN.md 同步改
 
 ## 5cd023e — docs: INSTALL 补 uvx 方式升级命令与「更新」指引
