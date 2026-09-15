@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交4 — feat: 自动更新（后台静默安装、重启生效）+ 全局就绪浮条
+- settings 新键 `auto_update_enabled`（默认开，设置-关于 紧挨「自动检查更新」；检查关闭时该开关置灰）
+- 自动触发链：main lifespan 启动 8s 后静默检查一次（复用 24h 缓存）+ scheduler 每小时 `update_tick` 兜底——检查开启+自动安装开启+渠道可自更新+确有新版本四重门控全过才后台启动更新任务，全程不打扰当前使用
+- 就绪提示（文案按用户定稿从简）：通知中心该版本通知在就位时改写为「新版本 X 已就绪，重启即更新；下次打开自动生效。可在 设置-关于 调整自动更新」；前端全局浮条 UpdateReadyBar（每分钟轮询，仅「就绪且未重启」出现，叉掉按版本记忆不再打扰），「立即重启」与设置页共用抽出的 `restartForUpdateThenReload`
+- **冻结包真机核验**（本地 PyInstaller 6.22 构建 + 隔离数据目录实测）发现并修复：全新数据目录首次启动时 `finish_pending_swap` 读 KV 表（迁移尚未跑）崩溃致 exe 启动失败——启动收尾改为全函数零抛错；binary 渠道识别、从冻结 exe 生成 Nmail.app、`--wait-port` 端口接管在冻结形态下实测全部可用（与 S-0915-2305 从用户侧发现的入口保护问题互为印证）
+- 自动心跳门控 5 分支单测；openapi/schema 快照再生（settings 新键）
+- 会话：S-0915-2225-更新与桌面图标
+
 ## 待提交3 — fix: 冻结单文件缺 `__main__` 入口保护，静默退出（brew 渠道不可用根因）
 - cli.py 补 `if __name__ == "__main__": main()`——PyInstaller 冻结单文件以本文件为入口脚本执行，此前无任何调用点，二进制加载完 stdlib 即 exit 0（无输出无报错），Homebrew/Release 分发的 macOS/Linux 二进制自发布以来从未真正运行过；源码（run.py）与 PyPI console script 入口不受影响
 - 排障记录：用户 brew 安装后 `nmail --version` 静默无输出；逐步排除法——同机构建 hello-world 冻结二进制正常（排除 PyInstaller 与 macOS 27 兼容性）→ 分步导入诊断二进制正常（排除依赖）→ 唯差异为入口脚本本身 → 发现缺 `__main__` 保护

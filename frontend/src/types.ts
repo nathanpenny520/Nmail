@@ -25,6 +25,7 @@ export interface Settings {
   body_font: 'small' | 'standard' | 'large'
   allow_remote_images: boolean
   update_check_enabled: boolean
+  auto_update_enabled: boolean
   /** 系统代理探测结果（只读展示，不入库） */
   detected_proxy: string | null
   /** 实际生效通道（检测到的系统代理；null=直连）——只读展示，不入库 */
@@ -48,6 +49,7 @@ export interface SettingsPayload {
   body_font?: 'small' | 'standard' | 'large'
   allow_remote_images?: boolean
   update_check_enabled?: boolean
+  auto_update_enabled?: boolean
   contacts_auto_collect?: boolean
   desktop_notifications_enabled?: boolean
   notify_types?: Partial<Record<NotifyTypeKey, boolean>>

@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import threading
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
@@ -17,7 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api import api_router
 from app.api.ext import log_ext_call as _log_ext_call
 from app.config import APP_NAME, APP_VERSION, DIST_DIR
-from app.core import batch_ops, pipeline  # noqa: F401 — 导入即注册 jobs runner（organize/imap_batch）
+from app.core import batch_ops, pipeline, update_apply  # noqa: F401 — pipeline 导入即注册 jobs runner
 from app.db.database import cleanup_retention, run_migrations
 from app.scheduler import MailScheduler
 
@@ -52,6 +53,10 @@ async def lifespan(_: FastAPI):
     migrate_legacy_ai_drafts()
     cleanup_retention()  # R7：通知/用量日志保留策略，防本地库无界增长
     scheduler.start()
+    # 应用内自动更新（UPDATE_AND_DESKTOP.md §3.3）：启动后延迟静默检查一次
+    _update_timer = threading.Timer(8.0, update_apply.auto_update_tick)
+    _update_timer.daemon = True
+    _update_timer.start()
     yield
     scheduler.shutdown()
 

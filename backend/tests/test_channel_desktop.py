@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app.config import APP_VERSION
 from app.core import channel, desktop, update_apply
-from app.db.database import run_migrations
+from app.db.database import run_migrations, set_setting
 
 run_migrations()  # 渠道状态读写 KV 表；迁移幂等
 
@@ -187,3 +187,36 @@ def test_finish_pending_swap_discards_stale(tmp_path, monkeypatch):
     monkeypatch.setattr(update_apply, "_current_binary", lambda: None)
     update_apply.finish_pending_swap()
     assert not new_file.exists() and update_apply.get_state()["phase"] == "idle"
+
+
+# ── 自动更新心跳：开关/渠道/新版本三重门控（UPDATE_AND_DESKTOP.md §3.3）────
+
+def test_auto_update_tick_gates(monkeypatch):
+    from app.core import update_check as uc
+
+    calls: list[int] = []
+    monkeypatch.setattr(update_apply, "start_apply", lambda: calls.append(1))
+    monkeypatch.setattr(uc, "get_state", lambda **kw: {"is_newer": True})
+
+    set_setting("update_check_enabled", False)
+    set_setting("auto_update_enabled", True)
+    update_apply.auto_update_tick()
+    assert calls == []  # 检查关闭 → 不动
+
+    set_setting("update_check_enabled", True)
+    set_setting("auto_update_enabled", False)
+    update_apply.auto_update_tick()
+    assert calls == []  # 只检查不自动安装
+
+    set_setting("auto_update_enabled", True)
+    monkeypatch.setattr(update_apply.channel, "detect_channel", lambda: "uvx")
+    update_apply.auto_update_tick()
+    assert calls == []  # 渠道不可自更新 → 不动
+
+    monkeypatch.setattr(update_apply.channel, "detect_channel", lambda: "pip")
+    update_apply.auto_update_tick()
+    assert calls == [1]  # 全部满足 → 触发
+
+    monkeypatch.setattr(uc, "get_state", lambda **kw: {"is_newer": False})
+    update_apply.auto_update_tick()
+    assert calls == [1]  # 已是最新 → 不触发

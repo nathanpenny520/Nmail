@@ -10,6 +10,7 @@ import { notifyPermission, type NotifyPermission } from '../components/Notificat
 import { useCompose } from '../components/compose/ComposeContext'
 import { SignatureEditor, TemplateManager } from '../components/compose/InsertDialogs'
 import { backendLocalDate } from '../utils/format'
+import { restartForUpdateThenReload } from '../utils/updateRestart'
 import { ACCOUNT_COLOR_PALETTE } from '../utils/accountColor'
 import type { Account, AITestResult, AIProfile, ContactGroup, ContactItem, NotifyTypeKey, SenderListEntry, Settings } from '../types'
 
@@ -213,6 +214,14 @@ export default function SettingsPage() {
   })
   const updateToggleMutation = useMutation({
     mutationFn: (enabled: boolean) => api.updateSettings({ update_check_enabled: enabled }),
+    onSuccess: (saved) => {
+      guardVersion(saved)
+      void queryClient.invalidateQueries({ queryKey: ['update-check'] })
+    },
+    onError: (err: Error) => setSettingsError(`保存失败：${err.message}`),
+  })
+  const autoToggleMutation = useMutation({
+    mutationFn: (enabled: boolean) => api.updateSettings({ auto_update_enabled: enabled }),
     onSuccess: (saved) => {
       guardVersion(saved)
       void queryClient.invalidateQueries({ queryKey: ['update-check'] })
@@ -808,8 +817,21 @@ export default function SettingsPage() {
                   />
                   自动检查更新
                 </label>
+                <label
+                  className="flex items-center gap-2 t-md text-gray-600"
+                  title={data?.update_check_enabled ? undefined : '需先开启自动检查更新'}
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-indigo-600"
+                    checked={!!data?.auto_update_enabled}
+                    disabled={!data?.update_check_enabled}
+                    onChange={(e) => autoToggleMutation.mutate(e.target.checked)}
+                  />
+                  自动安装更新
+                </label>
                 <span className="t-sm text-gray-400">
-                  每 24 小时向 GitHub 做一次匿名版本对比，不发送本机数据
+                  每 24 小时一次匿名版本对比；新版本后台自动下载，重启时生效
                 </span>
                 <span className="flex-1" />
                 <span className="t-sm text-gray-500">当前 v{updateState?.current_version ?? '…'}</span>
@@ -929,22 +951,10 @@ function UpdateApplyRow({ isNewer, oldVersion }: { isNewer: boolean; oldVersion:
     mutationFn: () => api.restartForUpdate(),
     onSuccess: () => {
       setRestarting(true)
-      const started = Date.now()
-      const timer = setInterval(() => {
-        // 旧进程退出前 /api/health 仍应答：至少等 1.5s，且版本已变（或 15s 兜底）才刷新
-        fetch('/api/health').then((r) => r.json()).then((h) => {
-          if (h?.status === 'ok' && Date.now() - started > 1500
-            && (h.version !== oldVersion || Date.now() - started > 15000)) {
-            clearInterval(timer)
-            window.location.reload()
-          }
-        }).catch(() => {})
-        if (Date.now() - started > 45000) {
-          clearInterval(timer)
-          setRestarting(false)
-          setRestartError('重启超时，请手动刷新页面')
-        }
-      }, 600)
+      restartForUpdateThenReload(oldVersion, () => {
+        setRestarting(false)
+        setRestartError('重启超时，请手动刷新页面')
+      })
     },
     onError: (err: Error) => setRestartError(err.message),
   })

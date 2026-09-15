@@ -10,7 +10,7 @@
 | 渠道 | 判定 | 桌面图标 | 应用内更新 |
 |---|---|---|---|
 | `binary` 直装二进制 | `sys.frozen` 且路径不在包管理器目录 | 打包 .app（mac）/ .lnk（Win） | **完整自更新**（下载→校验→换身→重启） |
-| `brew` | frozen 且路径在 `/opt/homebrew`、`/usr/local` 下 | 打包 .app | 不自换身 → 提示 `brew upgrade nmail` |
+| `brew` | frozen 且路径在 `/opt/homebrew`、`/usr/local` 下 | 打包 .app | 不自换身 → 提示 `brew upgrade nathanpenny520/nmail/nmail` |
 | `winget` | frozen 且路径含 `WinGet\Packages` | .lnk | 不自换身 → 提示 `winget upgrade` |
 | `pip` | 非 frozen 且不在 uv 缓存 | 命令包装器 + 独立图标 | 后台 `pip install --upgrade nmail-app` |
 | `uvx` | `sys.prefix` 位于 uv 缓存（archive-v0 / Caches/uv / uv/cache） | 命令包装器 + 独立图标 | 不自更新 → 提示 `uvx --refresh --from nmail-app nmail` |

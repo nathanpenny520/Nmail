@@ -48,7 +48,7 @@ brew trust nathanpenny520/nmail            # Homebrew 7 起第三方 tap 须显�
 brew install nathanpenny520/nmail/nmail    # 升级: brew upgrade nathanpenny520/nmail/nmail；卸载: brew uninstall nathanpenny520/nmail/nmail
 ```
 
-> **为什么必须用带 tap 前缀的全名**：homebrew/core 里有 **同名但无关** 的 `nmail`（另一个终端邮箱客户端项目），裸 `brew install nmail` 装到的是它。信任步骤同理——不信任时第三方公式拒绝加载，tap 命令也会报「invalid syntax」并删除克隆（报错误导性强，实为信任问题）。
+> **必须用全名**：core 仓库已有同名无关软件，裸 `brew install nmail` 装到的是它。**`brew trust` 为 Homebrew 7 起必需**；未信任时 `brew tap` 报「invalid syntax」并删克隆，实为信任问题。
 
 Linux 用户请用方式 ④（tap 不分发 Linux 二进制）。
 
@@ -77,8 +77,10 @@ pip install nmail-app                # 升级: pip install -U nmail-app；卸载
 
 ## 更新
 
-- **应用内检查**（默认开启，设置-通用 可关）：每 24 小时向 GitHub 做一次匿名版本号对比（请求只带 UA，不含任何本机数据），发现新版本会在通知中心提醒；设置页可手动「检查更新」。
-- **升级命令**：`winget upgrade nathanpenny520.Nmail` ｜ `brew upgrade nathanpenny520/nmail/nmail` ｜ `uv tool upgrade nmail-app` ｜ uvx：`uvx --refresh --from nmail-app nmail`（uvx 首次运行取最新版、之后沿用缓存版本，新发布不会自动跟上，`--refresh` 刷新缓存即取最新）｜ 单文件：下载新版覆盖旧文件。
+- **应用内检查**（默认开启，设置-关于 可关）：每 24 小时向 GitHub 做一次匿名版本号对比（请求只带 UA，不含任何本机数据），发现新版本会在通知中心提醒；设置页可手动「检查更新」。
+- **应用内更新**（v0.4.2 起，默认开启可关）：单文件版与 pip 安装在发现新版本后自动在后台下载并就位，提示「重启即更新，下次打开自动生效」，设置-关于 可一键重启或关掉自动安装；Homebrew/winget/uvx 由包管理器管理，应用内会给出对应升级命令。
+- **桌面图标**（设置-关于 一键安装，或命令行 `nmail install-shortcut`）：Windows 在桌面+开始菜单创建快捷方式，macOS 在「应用程序」生成 Nmail.app，Linux 创建 .desktop 启动器——双击即用，无需再敲命令。
+- **升级命令**：`winget upgrade nathanpenny520.Nmail` ｜ `brew upgrade nathanpenny520/nmail/nmail` ｜ `uv tool upgrade nmail-app` ｜ uvx：`uvx --refresh --from nmail-app nmail`（uvx 首次运行取最新版、之后沿用缓存版本，新发布不会自动跟上，`--refresh` 刷新缓存即取最新）｜ 单文件：下载新版覆盖旧文件（或直接用应用内更新）。
 - **升级不丢数据**：邮件库、密钥、配置在独立数据目录（见下），新版本首次启动自动执行数据库迁移。
 
 ## 数据位置、备份与卸载

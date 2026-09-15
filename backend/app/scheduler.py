@@ -18,6 +18,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from app.core.folders import archive_folder_name
 from app.core.outbox import send_user_draft
 from app.core.sync import add_notification, start_sync
+from app.core.update_apply import auto_update_tick
 from app.db.database import get_conn, get_setting, set_setting
 
 logger = logging.getLogger(__name__)
@@ -248,6 +249,16 @@ class MailScheduler:
             "interval",
             seconds=TICK_SECONDS,
             id="mail_poll",
+            max_instances=1,
+            coalesce=True,
+        )
+        # 自动更新心跳（UPDATE_AND_DESKTOP.md §3.3）：检查侧自带 24h 缓存节流，
+        # 每小时问一次只为兜底长驻进程；不可自更新渠道与关闭开关时内部直返
+        self._scheduler.add_job(
+            auto_update_tick,
+            "interval",
+            hours=1,
+            id="update_tick",
             max_instances=1,
             coalesce=True,
         )

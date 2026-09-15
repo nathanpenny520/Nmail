@@ -2883,6 +2883,8 @@ export interface components {
             allow_remote_images?: boolean | null;
             /** Update Check Enabled */
             update_check_enabled?: boolean | null;
+            /** Auto Update Enabled */
+            auto_update_enabled?: boolean | null;
             /** Contacts Auto Collect */
             contacts_auto_collect?: boolean | null;
             /** Desktop Notifications Enabled */

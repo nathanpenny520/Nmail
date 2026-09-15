@@ -78,10 +78,29 @@ def _notify_new_version(version: str, url: str) -> None:
     conn.execute(
         "INSERT INTO notifications (type, title, body, ref_id) VALUES (?, ?, ?, ?)",
         ("update", f"有新版本 {version}",
-         f"Nmail {version} 已发布，可到 GitHub Releases 下载替换（数据不受影响）。\n{url}\n"
+         f"Nmail {version} 已发布，可在 设置-关于 一键更新（数据不受影响）。\n{url}\n"
          "（此提醒仅来自一次匿名的版本号对比，可在设置中关闭自动检查）",
          version),
     )
+    conn.commit()
+
+
+def notify_ready(version: str) -> None:
+    """更新已就位（下载换身完成）：把该版本的通知改写为「重启即更新」。
+    无历史通知时补一条（例如检查关闭但用户手动点过立即更新）。"""
+    conn = get_conn()
+    title = f"新版本 {version} 已就绪"
+    body = (f"Nmail {version} 已在后台完成安装，重启即更新；下次打开自动生效。"
+            "可在 设置-关于 调整自动更新。")
+    cur = conn.execute(
+        "UPDATE notifications SET title = ?, body = ? WHERE type = 'update' AND ref_id = ?",
+        (title, body, version),
+    )
+    if cur.rowcount == 0:
+        conn.execute(
+            "INSERT INTO notifications (type, title, body, ref_id) VALUES (?, ?, ?, ?)",
+            ("update", title, body, version),
+        )
     conn.commit()
 
 

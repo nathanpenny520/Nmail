@@ -22,6 +22,7 @@ DEFAULT_SETTINGS: dict[str, object] = {
     "body_font": "standard",  # small | standard | large
     "allow_remote_images": False,  # 全局放行邮件远程图片（默认拦截防追踪）
     "update_check_enabled": True,  # 应用内更新检查（匿名版本对比，可关）
+    "auto_update_enabled": True,  # 自动安装更新：检查到新版本后台下载换身，重启时生效（UPDATE_AND_DESKTOP.md §3.3）
     "contacts_auto_collect": False,  # 通讯录自动采集（收发往来地址自动入册；关=仅手动）
     "desktop_notifications_enabled": True,  # 桌面通知总开关（应用内铃铛与角标不受影响）
     # 桌面通知按类型细分（读侧与默认合并，缺省键视为开）；其余系统通知（更新/黑名单归档）不受控
@@ -42,6 +43,7 @@ class SettingsIn(BaseModel):
     body_font: str | None = None
     allow_remote_images: bool | None = None
     update_check_enabled: bool | None = None
+    auto_update_enabled: bool | None = None
     contacts_auto_collect: bool | None = None
     desktop_notifications_enabled: bool | None = None
     notify_types: dict[str, bool] | None = None
@@ -99,6 +101,9 @@ def read_settings() -> dict:
         "update_check_enabled": get_setting(
             "update_check_enabled", DEFAULT_SETTINGS["update_check_enabled"]
         ),
+        "auto_update_enabled": get_setting(
+            "auto_update_enabled", DEFAULT_SETTINGS["auto_update_enabled"]
+        ),
         # 只读展示：系统代理探测结果 + 实际生效通道（设置页状态行实时轮询，均不入库）
         "detected_proxy": netproxy.detect_system_proxy(),
         "effective_proxy": netproxy.effective_proxy_url(),
@@ -136,6 +141,8 @@ def update_settings(payload: SettingsIn) -> dict:
         set_setting("allow_remote_images", payload.allow_remote_images)
     if payload.update_check_enabled is not None:
         set_setting("update_check_enabled", payload.update_check_enabled)
+    if payload.auto_update_enabled is not None:
+        set_setting("auto_update_enabled", payload.auto_update_enabled)
     if payload.contacts_auto_collect is not None:
         set_setting("contacts_auto_collect", payload.contacts_auto_collect)
     if payload.desktop_notifications_enabled is not None:

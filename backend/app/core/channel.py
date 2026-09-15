@@ -15,8 +15,8 @@ CHANNELS = ("binary", "brew", "winget", "pip", "uvx")
 
 # 各渠道的升级命令（can_self_update=false 时设置页展示）；binary/pip 应用内自更新无此命令
 UPGRADE_HINTS: dict[str, str] = {
-    "brew": "brew upgrade nmail",
-    "winget": "winget upgrade nmail",
+    "brew": "brew upgrade nathanpenny520/nmail/nmail",
+    "winget": "winget upgrade nathanpenny520.Nmail",
     "uvx": "uvx --refresh --from nmail-app nmail",
 }
 

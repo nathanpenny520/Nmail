@@ -6,6 +6,7 @@ import { toggleTreeCollapsed, useTreeCollapsed } from '../hooks/useSidebar'
 import { useCompose } from './compose/ComposeContext'
 import ComposeWorkbench from './compose/ComposeWorkbench'
 import NotificationBell from './NotificationBell'
+import UpdateReadyBar from './UpdateReadyBar'
 
 /** 右侧图标按钮样式：激活=页面页签正在前台。 */
 const iconBtnCls = (active: boolean) =>
@@ -355,6 +356,8 @@ export default function Layout() {
   return (
     <div className="flex h-full flex-col bg-gray-50 text-gray-900">
       <WorkspaceTabs />
+      {/* 更新就绪浮条：后台已装好新版本时全局提示（UPDATE_AND_DESKTOP.md §3.3） */}
+      <UpdateReadyBar />
       {/* 收件箱等页面在写信时仅隐藏不卸载（keep-alive），切回即恢复列表与阅读状态 */}
       <div className="relative min-h-0 flex-1">
         <main

@@ -26,7 +26,7 @@ import httpx
 
 from app.config import APP_VERSION, get_data_dir
 from app.core import channel
-from app.core.update_check import RELEASES_API, _is_newer, _parse_version
+from app.core.update_check import RELEASES_API, _is_newer, _parse_version, notify_ready
 from app.db.database import get_setting, set_setting
 
 _STATE_KEY = "update_apply_state"
@@ -125,32 +125,39 @@ def _swap_in_new(new_file: Path) -> None:
 def finish_pending_swap() -> None:
     """启动早段收尾（cli.main 调用，必须零阻塞零抛错）：
     ① 清理上次重启遗留的 *.old；② 上次下载中途退出的 nmail.new 校验后完成换身
-    ——对应版本仍比当前新才换，否则删除归位。"""
-    current = _current_binary()
-    if current is not None:
-        old = current.with_name(current.name + _OLD_SUFFIX)
-        if old.exists():
-            with suppress(OSError):
-                old.unlink()
-    state = _read_state()
-    if state.get("phase") not in ("downloading", "verifying", "staging"):
-        return
-    new_file = _update_dir() / "nmail.new"
-    pending_version = state.get("pending_version") or ""
-    if (new_file.is_file() and _parse_version(pending_version)
-            and _is_newer(pending_version, APP_VERSION)):
-        try:
-            _verify_digest(new_file, state.get("digest"))
-            _swap_in_new(new_file)
-            _set_state(phase="ready", progress=100, staged_version=pending_version, error=None)
-        except Exception:  # noqa: BLE001 — 收尾失败不阻塞启动，清理残局即可
+    ——对应版本仍比当前新才换，否则删除归位。
+
+    全函数整体兜底：首次启动时 KV 表尚未建（迁移在 FastAPI lifespan 才跑），
+    读状态会 OperationalError——收尾失败绝不阻塞服务启动。"""
+    try:
+        current = _current_binary()
+        if current is not None:
+            old = current.with_name(current.name + _OLD_SUFFIX)
+            if old.exists():
+                with suppress(OSError):
+                    old.unlink()
+        state = _read_state()
+        if state.get("phase") not in ("downloading", "verifying", "staging"):
+            return
+        new_file = _update_dir() / "nmail.new"
+        pending_version = state.get("pending_version") or ""
+        if (new_file.is_file() and _parse_version(pending_version)
+                and _is_newer(pending_version, APP_VERSION)):
+            try:
+                _verify_digest(new_file, state.get("digest"))
+                _swap_in_new(new_file)
+                _set_state(phase="ready", progress=100, staged_version=pending_version, error=None)
+                notify_ready(pending_version)
+            except Exception:  # noqa: BLE001 — 收尾失败不阻塞启动，清理残局即可
+                with suppress(OSError):
+                    new_file.unlink()
+                _set_state(phase="failed", error="启动时完成换身失败，已还原")
+        else:
             with suppress(OSError):
                 new_file.unlink()
-            _set_state(phase="failed", error="启动时完成换身失败，已还原")
-    else:
-        with suppress(OSError):
-            new_file.unlink()
-        _set_state(phase="idle")
+            _set_state(phase="idle")
+    except Exception:  # noqa: BLE001 — 首启无表/任何异常都不影响正常启动
+        pass
 
 
 def _verify_digest(path: Path, digest: str | None) -> None:
@@ -239,6 +246,7 @@ def _download_and_swap() -> None:
         return
     _set_state(phase="ready", progress=100, staged_version=tag,
                pending_version=tag, digest=digest, error=None)
+    notify_ready(tag)
 
 
 def _pip_upgrade() -> None:
@@ -255,7 +263,9 @@ def _pip_upgrade() -> None:
     # 版本号取更新检查缓存的 latest_version（刚检查过才有更新任务可言）
     latest = (_read_state().get("pending_version")
               or (get_setting("update_check_state", {}) or {}).get("latest_version") or "")
-    _set_state(phase="ready", progress=100, staged_version=_parse_version_str(latest), error=None)
+    staged = _parse_version_str(latest)
+    _set_state(phase="ready", progress=100, staged_version=staged, error=None)
+    notify_ready(staged)
 
 
 def _parse_version_str(tag: str) -> str:
@@ -287,3 +297,25 @@ def restart_app(port: int) -> dict:
     subprocess.Popen(cmd, **kwargs)  # noqa: S603 — 命令完全由本进程自身形态构成
     threading.Timer(0.5, os._exit, args=(0,)).start()
     return {"ok": True, "restarting": True}
+
+
+# ── 自动更新心跳（UPDATE_AND_DESKTOP.md §3.3，用户拍板口径）──────────────
+
+def auto_update_tick() -> None:
+    """启动延迟触发 + 调度器每日兜底共用：检查开启、自动安装开启、渠道可自更新、
+    且确有新版本时，后台静默下载换身——不打扰当前使用，就绪后通知提示重启。
+    全程零抛错（后台线程，失败静默留待下次）。"""
+    try:
+        if not get_setting("update_check_enabled", True):
+            return
+        if not get_setting("auto_update_enabled", True):
+            return
+        if not channel.can_self_update():
+            return
+        from app.core import update_check  # 延迟导入避免模块加载期耦合
+
+        state = update_check.get_state()  # 24h 缓存节流，无网络也能用缓存
+        if state.get("is_newer"):
+            start_apply()
+    except Exception:  # noqa: BLE001 — 心跳失败不影响主服务
+        pass
