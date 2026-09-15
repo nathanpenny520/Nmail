@@ -56,10 +56,19 @@ def _ps(s: str) -> str:
 
 # ── 各平台产物内容（纯函数，便于测试）───────────────────────────────────
 
-def _mac_exec_line(target: str, args: list[str], data_dir: Path) -> str:
+def _mac_script(target: str, args: list[str], data_dir: Path) -> str:
+    """bundle 启动脚本：服务以子进程运行、本脚本存活等待——若用 exec 把自身
+    替换成服务进程，LaunchServices 会跟丢 bundle，Dock 图标立刻消失（2026-09-15
+    用户实测反馈）。退出信号转发给服务子进程，Dock 右键 Quit 即完整停服。"""
     log = data_dir / "nmail-app.log"
     quoted = " ".join([_sh(target), *(_sh(a) for a in args)])
-    return f"exec {quoted} \"$@\" >> {_sh(str(log))} 2>&1"
+    return (
+        "#!/bin/bash\n"
+        f"{quoted} \"$@\" >> {_sh(str(log))} 2>&1 &\n"
+        "CHILD=$!\n"
+        "trap 'kill \"$CHILD\" 2>/dev/null' TERM INT\n"
+        "wait \"$CHILD\"\n"
+    )
 
 
 def _mac_info_plist() -> str:
@@ -237,14 +246,28 @@ def _run_powershell(script: str) -> list[str]:
 
 def _install_macos() -> list[str]:
     data = get_data_dir()
-    bundle = Path.home() / "Applications" / "Nmail.app"
+    # 用户期望标准位置 /Applications（2026-09-15 反馈）；无写权限（非 admin）回退用户目录
+    bundle = Path("/Applications/Nmail.app")
+    try:
+        bundle.parent.mkdir(parents=True, exist_ok=True)  # 探测写权限
+    except OSError:
+        bundle = Path.home() / "Applications" / "Nmail.app"
     contents = bundle / "Contents"
     (contents / "MacOS").mkdir(parents=True, exist_ok=True)
     (contents / "Resources").mkdir(parents=True, exist_ok=True)
     target, args = _launch_target()
-    launcher = contents / "MacOS" / "nmail"
-    launcher.write_text(f"#!/bin/bash\n{_mac_exec_line(target, args, data)}\n")
-    launcher.chmod(0o755)
+    # 优先用编译好的 ObjC 存根做「应用面」（LaunchServices 只为 GUI 进程注册应用，
+    # 纯脚本 bundle 无 Dock 图标，2026-09-15 用户实测）；无存根资产则退回脚本形态
+    stub = _assets_dir() / "nmail-stub"
+    if stub.is_file():
+        shutil.copyfile(stub, contents / "MacOS" / "nmail")
+        (contents / "MacOS" / "nmail").chmod(0o755)
+        server = contents / "MacOS" / "server"
+        server.write_text(_mac_script(target, args, data))
+        server.chmod(0o755)
+    else:
+        (contents / "MacOS" / "nmail").write_text(_mac_script(target, args, data))
+        (contents / "MacOS" / "nmail").chmod(0o755)
     (contents / "PkgInfo").write_text("APPL????")
     (contents / "Info.plist").write_text(_mac_info_plist())
     shutil.copyfile(_assets_dir() / "nmail.icns", contents / "Resources" / "AppIcon.icns")
@@ -261,7 +284,9 @@ def _install_linux() -> list[str]:
     bin_dir.mkdir(parents=True, exist_ok=True)
     target, args = _launch_target()
     wrapper = bin_dir / "nmail.sh"
-    wrapper.write_text(f"#!/bin/bash\n{_mac_exec_line(target, args, data)}\n")
+    quoted = " ".join([_sh(target), *(_sh(a) for a in args)])
+    # Linux 无 Dock 常驻诉求：exec 原地替换最省一档进程
+    wrapper.write_text(f"#!/bin/bash\nexec {quoted} \"$@\" >> {_sh(str(data / 'nmail-app.log'))} 2>&1\n")
     wrapper.chmod(0o755)
     icon = Path.home() / ".local/share/icons/hicolor/512x512/apps/nmail.png"
     icon.parent.mkdir(parents=True, exist_ok=True)

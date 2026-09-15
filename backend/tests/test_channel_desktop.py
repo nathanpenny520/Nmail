@@ -55,12 +55,15 @@ def test_channel_capabilities_and_hints():
 
 # ── desktop：产物内容纯函数 ────────────────────────────────
 
-def test_mac_info_plist_and_exec_line(tmp_path):
+def test_mac_info_plist_and_script(tmp_path):
     plist = desktop._mac_info_plist()
     assert APP_VERSION in plist and "APPL" in plist and "AppIcon" in plist
-    line = desktop._mac_exec_line("/path with space/nmail", ["--port", "9"], tmp_path)
-    assert "'/path with space/nmail'" in line and "--port" in line
-    assert str(tmp_path / "nmail-app.log") in line
+    script = desktop._mac_script("/path with space/nmail", ["--port", "9"], tmp_path)
+    # exec 会替换进程使 LaunchServices 跟丢 bundle（Dock 图标消失）；必须是保活等待式
+    assert "exec " not in script
+    assert "'/path with space/nmail'" in script and "--port" in script
+    assert str(tmp_path / "nmail-app.log") in script
+    assert "trap 'kill \"$CHILD\" 2>/dev/null' TERM INT" in script and "wait \"$CHILD\"" in script
 
 
 def test_linux_desktop_entry_and_win_wrapper():

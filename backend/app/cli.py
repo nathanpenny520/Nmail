@@ -16,15 +16,34 @@ from contextlib import suppress
 DEFAULT_PORT = 8720
 
 
+def _bind_test(port: int, reuse: bool) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        if reuse:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
 def find_free_port(start: int) -> int:
+    """从 start 起找可用端口。
+
+    占用判定按 TCP 语义分层：有进程在监听（connect 可达）必跳过；裸 bind 失败
+    但 SO_REUSEADDR 下可绑定的端口是 TIME_WAIT 残留（旧实例刚退出、连接未完全
+    收敛），照常使用——否则重启后端口顺延（8720→8721→…），浏览器页面地址漂移
+    （uvicorn 自带 SO_REUSEADDR，其绑定不受 TIME_WAIT 影响）。"""
     port = start
     for _ in range(50):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            try:
-                sock.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                port += 1
+            sock.settimeout(0.2)
+            live = sock.connect_ex(("127.0.0.1", port)) == 0
+        if not live and _bind_test(port, False):
+            return port
+        if not live and _bind_test(port, True):
+            return port
+        port += 1
     raise RuntimeError(f"端口 {start} 起连续 50 个端口均被占用")
 
 

@@ -19,9 +19,9 @@
 
 `nmail` 命令本身已会「起服务+开浏览器」，图标只需包装这一件事。应用内一键安装（设置页卡片 + API），CLI 子命令兜底。
 
-产物（全部只写用户目录）：
+产物：
 - **Windows**：桌面 + 开始菜单 `.lnk`（PowerShell WScript.Shell 生成）。binary 渠道图标用 exe 内嵌；pip/uvx 先把启动命令写进 `%DATA_DIR%/bin/nmail.cmd`，`.lnk` 指向它，图标用随包分发的 `nmail.ico`。
-- **macOS**：`~/Applications/Nmail.app`（Info.plist + MacOS/nmail 启动脚本 + Resources/nmail.icns）。binary 渠道脚本 exec 冻结二进制；pip/uvx exec 对应命令（uvx 绝对路径在安装时以 `shutil.which` 定死）。
+- **macOS**：`/Applications/Nmail.app`（用户期望标准位置，2026-09-15 反馈后由 ~/Applications 改来；无写权限回退 `~/Applications`）（Info.plist + MacOS/nmail + MacOS/server 启动脚本 + Resources/nmail.icns）。binary 渠道脚本 exec 冻结二进制；pip/uvx exec 对应命令（uvx 绝对路径在安装时以 `shutil.which` 定死）。**Dock 图标常驻**依赖编译型存根 `assets/nmail-stub`（scripts/nmail_stub.m，通用二进制）：LaunchServices 不为纯脚本 bundle 注册应用——存根以 NSApplication 身份注册（图标/名称/⌘Q/Dock 右键 Quit），服务是其子进程；Quit → SIGTERM → server 脚本 trap 连带结束 Python；服务退出则应用随退。
 - **Linux**：`~/.local/share/applications/nmail.desktop` + 图标装进 hicolor。
 
 支撑改动：
