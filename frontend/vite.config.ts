@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
@@ -14,5 +15,11 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+  },
+  // 组件测试（审计 B1）：jsdom + RTL；setup 载入 jest-dom 匹配器；globals 开启使 RTL 自动 cleanup 生效
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
   },
 })
