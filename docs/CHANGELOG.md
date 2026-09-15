@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — P7-A：AI 操作历史管理——记录可删除+审计保留期+僵尸对账（REDESIGN_PLAN §18.3 瘦身版）
+## 12ead55 — P7-A：AI 操作历史管理——记录可删除+审计保留期+僵尸对账（REDESIGN_PLAN §18.3 瘦身版）
 - 用户拍板「回滚意义不大不做，历史可追溯可删除」：原撤销补全三项（create_draft/trash/update_draft 撤销）砍掉，既有撤销能力（标记/星标/分类/归档/移动/重命名）保持
 - 记录可删：DELETE /api/ai/agent/actions/{id} 单条 + DELETE /api/ai/agent/actions?scope=old|failed|all 批量（old=90 天前且保留已发送审计）；操作记录行删除按钮 +「清理」下拉（全部清空需 confirm）
 - 保留期落地 cleanup_retention：ai_actions 失败/拒绝/过期/批准未执行 30 天、已执行(非发送)与已撤销 90 天、发送类已执行永久；agent_runs 终态 30 天；启动对账 running>10 分钟→cancelled（上线即清掉 09-14 僵尸 id=1）

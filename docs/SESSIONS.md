@@ -16,10 +16,12 @@
 
 ## 进行中
 
-### S-0915-0754-操作历史管理
+### S-0915-0754-操作历史管理 ✅
 - 目标: 用户拍板瘦身版 P7-A——回滚意义不大不做（create_draft/trash/update_draft 撤销砍掉），只做「AI 操作历史可追溯可删除」：行级删除+批量清理（old/failed/all）+保留期落地+僵尸对账+徽章弱化+_FakeMB 残留清理
 - 范围: backend(app/ai/agent.py, api/ai.py, db/database.py, tests/test_agent.py, tests/test_database.py) + frontend(api/client.ts, pages/SettingsPage.tsx, openapi/schema 快照) + docs(REDESIGN_PLAN §18.3, PRODUCT_PLAN §11.1, CHANGELOG, SESSIONS)
-- 状态: 进行中（2026-09-15 07:54 开工）
+- 产出: 提交 12ead55——DELETE 单条+scope 批量清理（old 保留已发送审计）/cleanup_retention 四档保留期+running>10 分钟对账/徽章弱化+行删除按钮/8 条 _FakeMB 残留已清/顺带修复 actions?status= 筛选歧义列名 500 潜伏 bug；pytest 200 全绿（+2）、ruff、npm build 过、快照再生；8720 重启（12ead55 生效）真实实例 e2e 全过
+- 遗留: 无
+- 状态: 已完成（2026-09-15 上午）
 
 ### S-0915-0745-吊销密钥删除与站点重部署 ✅
 - 目标: 用户两条反馈——①已吊销 API 密钥永久滞留列表 → 加彻底删除（extkeys DELETE 两段语义+已吊销行删除按钮）②网站更新确认（/docs/agent/ 首次 CI 因主仓文档时序失败，重跑成功上线）
