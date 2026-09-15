@@ -88,15 +88,68 @@ jobs:
       - name: 重命名产物
         shell: bash
         run: mv dist/nmail${{ matrix.ext }} "${{ matrix.name }}${{ matrix.ext }}"
+      # macOS 追加标准应用包资产（UPDATE_AND_DESKTOP.md §4，用户已同意）：
+      # 解压拖进「应用程序」即用；结构与 core/desktop.py 运行时生成的一致
+      # （存根为应用面注册 Dock，冻结二进制为其子进程），保证二者可互换。
+      - name: 打包 macOS Nmail.app.zip
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          VERSION=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          mkdir -p Nmail.app/Contents/MacOS Nmail.app/Contents/Resources
+          cp backend/app/assets/nmail-stub Nmail.app/Contents/MacOS/nmail
+          cp "${{ matrix.name }}${{ matrix.ext }}" Nmail.app/Contents/MacOS/nmail-bin
+          chmod +x Nmail.app/Contents/MacOS/nmail Nmail.app/Contents/MacOS/nmail-bin
+          cat > Nmail.app/Contents/MacOS/server <<'SCRIPT'
+          #!/bin/bash
+          "$(dirname "$0")/nmail-bin" "$@" &
+          CHILD=$!
+          trap 'kill "$CHILD" 2>/dev/null' TERM INT
+          wait "$CHILD"
+          SCRIPT
+          cat > Nmail.app/Contents/Info.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key><string>Nmail</string>
+              <key>CFBundleDisplayName</key><string>Nmail</string>
+              <key>CFBundleIdentifier</key><string>com.whizzzest.nmail</string>
+              <key>CFBundleVersion</key><string>${VERSION}</string>
+              <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+              <key>CFBundleExecutable</key><string>nmail</string>
+              <key>CFBundleIconFile</key><string>AppIcon</string>
+              <key>CFBundlePackageType</key><string>APPL</string>
+              <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+              <key>LSMinimumSystemVersion</key><string>11.0</string>
+              <key>NSHighResolutionCapable</key><true/>
+              <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+          </dict>
+          </plist>
+          PLIST
+          echo "APPL????" > Nmail.app/Contents/PkgInfo
+          cp backend/app/assets/nmail.icns Nmail.app/Contents/Resources/AppIcon.icns
+          zip -qry "${{ matrix.name }}.app.zip" Nmail.app
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}${{ matrix.ext }}
+      - name: 上传 .app.zip 构建产物
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}.app.zip
+          path: ${{ matrix.name }}.app.zip
       - name: 附加到 GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.name }}${{ matrix.ext }}
+      - name: .app.zip 附加到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'macos-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.name }}.app.zip
 
   # ③ 同步 Homebrew tap（可选：在仓库 Secrets 配置 HOMEBREW_TAP_TOKEN——
   #    一个可写 nathanpenny520/homebrew-nmail 的 fine-grained PAT；未配置时此 job 直接跳过）
