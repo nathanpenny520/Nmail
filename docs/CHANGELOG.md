@@ -55,6 +55,13 @@
 - 数据库 v23：chat_sessions.memory_json、agent_runs.archived_json/summary_json；AI 档案 API/设置页新增 context_window（0=恢复默认）
 - 验证：pytest 188 全绿（+12 专项：估算器/折叠边界/纪要/摘要解析/记忆读写/分工具预算/循环级 AutoCompact/溢出自愈/记忆注入）、ruff 通过、npm build（tsc+字号门禁）通过；8720 重启（v23 迁移上真库）后真实 e2e——context_window 临时档案往返零残留、DeepSeek 真实两轮对话：台账即时落 memory_json、第二轮传干扰 history 仍凭服务端历史正确复述首轮问答、system 尾部确认注入「# 会话记忆」块；openapi/schema 快照再生
 
+## ee2ffc9 — fix: 压测连环修——多账号搜索锁死主账号+DSML 全角变体泄漏+协议缓存污染
+- 用户注入演练（run 33）实测打出三层连环：①多账号会话 search_emails/list_recent_emails/list_folders 默认 `account_id or primary` 锁死第一个账号（QQ 在前→主账号邮件永远搜不到，模型两轮 0 结果后靠 list_recent 兜底）——读类工具默认改全会话范围 IN 过滤（显式 account_id 仍优先，写类工具维持主账号默认不动）
+- ②模型在 JSON 降级模式下把调用标记当文本输出且用**全角竖线｜**变体（`<｜｜DSML｜｜ invoke>`），防御正则只认 ASCII → 原文泄漏给用户——_INVOKE_BLOCK_RE 改全/半角+任意竖线数宽容匹配，另加任意包装 `invoke name="x"` 的 generic 兜底提取；解析失败的标记在最终回答层二次拦截（友好提示不原文下发）；原生协议系统提示词补「只能通过函数调用通道发起调用」
+- ③根因链：run 25 的**请求内容类 400（配对 bug）被 _call_model 误判成「端点不支持 tools」→ 降级并永久缓存 native=false → 之后所有会话掉进 JSON 弱协议**——加两道守卫（已跑过一步=tools 通道是通的；报错提及 tool_calls=内容问题），如实抛错绝不污染协议缓存
+- 回归：+4（全角 DSML 提取、标记泄漏拦截、内容 400 不毒化缓存、多账号作用域覆盖）；test_database 迁移计数顺手修正为 24（cf39666 漏更，HEAD 上即红）
+- 验证：pytest 208 全绿、ruff 通过；并行会话 WIP（SCHEDULER_ALLOWED/v25/rule_proposals）按惯例外科手术避让未卷入；8720 重启 + agent_native KV 缓存重置（恢复原生协议探测）
+
 ## 76327f5 — fix: Agent 并行调用批遇审批暂停后续跑 400（压测发现）
 - 用户压测任务 4 实测打出：模型并行发两个工具调用（丢弃草稿+重写草稿），第一个写类出审批卡即暂停——同批未执行的 call 没有 tool 回应；批准续跑只回灌了批准的那个，DeepSeek 严格校验 tool_calls 逐 id 回应，缺一即 400（"insufficient tool messages following tool_calls message"）
 - 修复（agent.py resume_stream）：续跑前扫描暂停批（最后一个带 tool_calls 的 assistant），对未回应的 call 逐个补「因等待审批未执行已跳过，如仍需要请重新调用」的 tool 回应——模型可重新发起且仍走全部门控；预算暂停的批在追加 messages 前即被丢弃，天然无此问题
