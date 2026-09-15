@@ -25,6 +25,7 @@
 - 遗留: ①brew 渠道实际可用需下个 release（0.4.1 资产即坏，修复随 0.4.2）②tap 公式改名 `nmail-app` 彻底避撞名（涉 release.sh+CI，待用户拍板）③homebrew core 的 nmail 撞名无法绕过——文档口径已固定为全名安装 ④误装的 core nmail 及其依赖（libmagic/ncurses/xapian）本机待清（autoremove）
 - 时间: 2026-09-15 23:05 开工，23:20 完成
 - 追记（23:40）: 用户拍板「README/网站文档同步更新 + 写入 CLAUDE.md 防再忘」——README 双语、RELEASE、CLAUDE.md 新增工作流规范 #11（对外命令四处同步：INSTALL/README 双语/官网/代码文案）、官网 posts×2 与 docs 镜像全改全名+trust；channel.py 与 UPDATE_AND_DESKTOP 的同口径修改随 4615db7 入库（并行会话提交时卷入共享树，内容无损）；官网 docs 镜像从已提交基线的干净 worktree 同步，避免 WIP 泄入线上
+- 追记2（00:05）: 用户指示「等 S-0915-2225 收官即发版」——挂后台监工等树收净，d9eae83 发版 v0.4.2（CI 2m31s 全绿：PyPI/四资产/tap bump/winget PR #435195/官网联动），本机 brew 全链路实测 `nmail --version` → `Nmail 0.4.2`。用户两反馈收尾：①官网下载页硬编码 brew 命令漏改（上轮 grep head 截断漏了 download.astro——CLAUDE.md #11 补「硬编码文案逐页核对，勿 grep 采样」）②官网新增 macOS .app 压缩包推荐卡置顶，worker/sync-r2 白名单纳入 .zip（nmail-site ba1b2b6）；排障经验：GitHub API 资产名是小写 `nmail-macos-arm64.app.zip`，与 CI 步骤名大小写不同，引用以 API 实测为准。INSTALL.md 补 .app 压缩包推荐行
 
 ### S-0915-2225-更新与桌面图标 ✅
 - 目标: 用户两项拍板落地——①应用内更新：检查到新版本后台静默下载+换身（binary/pip 渠道），提示「重启即更新，下次打开自动生效」，设置页可关（auto_update_enabled 默认开）+「立即更新/立即重启」按钮；brew/winget/uvx 渠道展示升级命令不自换身 ②每种安装方式都有桌面图标：设置页一键安装（Win .lnk / mac Nmail.app / Linux .desktop）+ `nmail install-shortcut` 子命令 + cli 单实例探测 + `--wait-port` 重启参数；发版 CI 追加 Nmail.app.zip 资产（用户已同意）

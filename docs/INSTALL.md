@@ -26,6 +26,8 @@ Nmail 是本地优先的单机应用：任何安装方式都只在本机跑一�
 | `nmail-macos-arm64` | macOS (Apple Silicon) |
 | `nmail-linux-x64` | Linux x64 |
 
+**macOS 更推荐 [Nmail.app 压缩包](https://github.com/nathanpenny520/Nmail/releases/latest/download/nmail-macos-arm64.app.zip)**（v0.4.2 起）：解压，把 Nmail.app 拖进「应用程序」即装——Dock 图标、⌘Q 退出。首次打开需右键 → 打开（未公证）。
+
 - **运行后会发生什么**：出现一个控制台窗口（程序本体，显示日志），几秒后浏览器自动打开 `http://127.0.0.1:8720`。端口被占用会自动顺延，以控制台打印的地址为准。
 - **退出**：关闭控制台窗口即可（终端运行时 Ctrl+C）。
 - **Windows 首次运行**：SmartScreen 弹「已保护你的电脑」（未签名）→ 点「更多信息 → 仍要运行」。首次启动慢几秒是单文件自解压，属正常。若任务栏图标没换成专属图标，是 Windows 图标缓存：重命名一次 exe 或 `ie4uinit -show`。

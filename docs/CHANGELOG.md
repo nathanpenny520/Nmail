@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## d9eae83 — release: v0.4.2 + tag
+- **首个全渠道真实可用的版本**：冻结入口 `__main__` 修复（873ce06）随版生效——此前所有发布（v0.1.0–v0.4.1）的单文件/winget/brew 二进制均静默退出，本版起才真正可运行
+- release.sh 全流程：PyPI nmail-app 0.4.2 ✅、Release 四资产（三平台 + 首个 `nmail-macos-arm64.app.zip`）✅、tap 自动 bump 0.4.2 ✅（本机 brew 全链路实测 `nmail --version` → `Nmail 0.4.2`）、winget PR microsoft/winget-pkgs#435195、官网联动重建
+- 配套文档：INSTALL.md 补 macOS .app 压缩包推荐；官网下载页 brew 命令改全名+trust、新增 .app 压缩包推荐卡（nmail-site ba1b2b6，资产名实测为小写 `nmail-macos-arm64.app.zip`，勿按提交信息想当然）
+- 会话：S-0915-2305-brew安装排查（发版执行，等 S-0915-2225 收官后启动）
+
 ## 31fd015 — fix: Nmail.app 装标准 /Applications + Dock 图标常驻（编译型存根）+ 重启端口不再顺延
 - 用户实测反馈两问题——①.app 装到了用户目录 Applications 而非标准位置 ②点击打开后 Dock 图标不保留
 - 安装位置：macOS 改首选 `/Applications`（用户期望标准位置；无写权限的普通用户自动回退 `~/Applications`）；CLAUDE.md 决策#2「只写用户目录」同步修订
