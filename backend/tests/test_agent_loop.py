@@ -316,6 +316,121 @@ def test_feedback_truncation_keeps_head_and_tail():
     assert "中间过长已省略" in text and "重新获取" in text
 
 
+# ── A4 同批只读并行 / A5 ask_user 澄清中断（AGENT_EXTEND_PLAN §2）──────
+
+def test_parallel_read_batch_runs_concurrently(monkeypatch):
+    """A4：同批全只读 → 并行执行（不同线程），结果按原序回灌保持配对。"""
+    import threading
+    import time
+
+    aid = _aid()
+    _seed_email(aid, 91, "测试邮件")
+    seen_threads: list[int] = []
+    real_execute = T.execute
+
+    def slow_execute(name, args, primary, scope):
+        seen_threads.append(threading.get_ident())
+        time.sleep(0.15)  # 拉长执行窗口：真并行才可能落进不同线程
+        return real_execute(name, args, primary, scope)
+
+    monkeypatch.setattr(agent.T, "execute", slow_execute)
+    _native_script(monkeypatch, [
+        ([], [{"id": "c1", "name": "search_emails", "arguments": {"q": "测试"}},
+              {"id": "c2", "name": "digest_stats", "arguments": {}}]),
+        (["两件事都查完了。"], []),
+    ])
+    events = list(agent.run_stream("查概况和测试邮件", None, None, [aid], "approval", None))
+    assert len(seen_threads) == 2 and len(set(seen_threads)) == 2  # 真并行
+    results = _collect(events, "tool_result")
+    assert [r["call_id"] for r in results] == ["c1", "c2"]  # 原序回灌
+    assert all(r["ok"] for r in results)
+    assert _run_row(events[0]["run_id"])["status"] == "done"
+
+
+def test_mixed_batch_stays_sequential(monkeypatch):
+    """A4：混合批（读+写）不并行——写类顺序敏感且可能遇审批暂停。
+    写类样本用 set_category（纯本地），避免依赖 IMAP 凭据。"""
+    import threading
+
+    aid = _aid()
+    eid = _seed_email(aid, 92, "待分类")
+    seen_threads: list[int] = []
+    real_execute = T.execute
+
+    def spy_execute(name, args, primary, scope):
+        seen_threads.append(threading.get_ident())
+        return real_execute(name, args, primary, scope)
+
+    monkeypatch.setattr(agent.T, "execute", spy_execute)
+    _native_script(monkeypatch, [
+        ([], [{"id": "c1", "name": "digest_stats", "arguments": {}},
+              {"id": "c2", "name": "set_category",
+               "arguments": {"ids": [eid], "category": "work"}}]),
+        (["好的，已整理。"], []),
+    ])
+    events = list(agent.run_stream("整理一下", None, None, [aid], "auto", None))
+    assert len(seen_threads) == 2 and len(set(seen_threads)) == 1  # 串行（同一线程）
+    assert all(r["ok"] for r in _collect(events, "tool_result"))
+    assert _run_row(events[0]["run_id"])["status"] == "done"
+
+
+def test_ask_user_pause_and_answer_resume(monkeypatch):
+    """A5：模型主动澄清 → waiting_input 暂停；带 answer 续跑回灌（配对完整）。"""
+    aid = _aid()
+    _native_script(monkeypatch, [
+        (["我需要确认一下。"], [{"id": "c1", "name": "ask_user",
+                              "arguments": {"question": "转发给谁？",
+                                            "options": ["a@x.com", "b@x.com"]}}]),
+        (["好的，转发给 a@x.com 的事我来处理。"], []),
+    ])
+    events = list(agent.run_stream("帮我转发那封邮件", None, None, [aid], "approval", None))
+    asks = _collect(events, "ask_user")
+    assert asks and asks[0]["question"] == "转发给谁？"
+    assert asks[0]["options"] == ["a@x.com", "b@x.com"]
+    assert _collect(events, "paused")[0]["reason"] == "ask_user"
+    run_id = events[0]["run_id"]
+    assert _run_row(run_id)["status"] == "waiting_input"
+
+    events2 = list(agent.resume_stream(run_id, answer="a@x.com"))
+    assert _collect(events2, "text")[-1]["text"].startswith("好的，转发给 a@x.com")
+    assert _run_row(run_id)["status"] == "done"
+    messages = json.loads(_run_row(run_id)["messages_json"])
+    tool_resp = next(m for m in messages if m.get("role") == "tool" and m.get("tool_call_id") == "c1")
+    assert "a@x.com" in tool_resp["content"]  # 回答以 tool 回应回灌
+    call_ids = {tc["id"] for m in messages for tc in (m.get("tool_calls") or [])}
+    assert call_ids == {m.get("tool_call_id") for m in messages if m.get("role") == "tool"}
+
+
+def test_ask_user_requires_answer(monkeypatch):
+    """A5：缺回答直接续跑 → 明确报错且 run 保持 waiting_input（仍可续，不卡死）。"""
+    aid = _aid()
+    _native_script(monkeypatch, [
+        ([], [{"id": "c1", "name": "ask_user", "arguments": {"question": "发给谁？"}}]),
+    ])
+    events = list(agent.run_stream("帮我转发", None, None, [aid], "approval", None))
+    run_id = events[0]["run_id"]
+    events2 = list(agent.resume_stream(run_id))
+    assert events2[0]["type"] == "error" and "回答" in events2[0]["error"]
+    assert _run_row(run_id)["status"] == "waiting_input"
+    events3 = list(agent.resume_stream(run_id, answer="b@x.com"))
+    assert events3[0]["type"] == "run_started"  # 之后仍可正常回答续跑
+
+
+def test_ask_user_blocked_in_scheduler_whitelist(monkeypatch):
+    """A5：定时运行工具白名单不含 ask_user → 硬拒绝不挂起（无人值守不等人）。"""
+    aid = _aid()
+    _native_script(monkeypatch, [
+        ([], [{"id": "c1", "name": "ask_user", "arguments": {"question": "发给谁？"}}]),
+        (["好的，那我按默认口径处理。"], []),
+    ])
+    events = list(agent.run_stream("转发", None, None, [aid], "auto", None,
+                                   allowed_tools=agent.SCHEDULER_ALLOWED))
+    tr = _collect(events, "tool_result")
+    assert tr and tr[0]["ok"] is False and "不在" in tr[0]["summary"]
+    assert _collect(events, "ask_user") == []
+    assert _run_row(events[0]["run_id"])["status"] == "done"
+
+
 def test_native_json_text_fallback_parse(monkeypatch):
     """原生模式下模型无视 tools 输出裸 JSON 文本 → 兜底解析为工具调用，不泄漏给用户。"""
     aid = _aid()

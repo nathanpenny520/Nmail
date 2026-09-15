@@ -891,8 +891,16 @@ A（当天量级）→ C（记忆，体感最大）→ D（主动式）→ B（�
   系统注记。
 - **A3 工具结果保头尾截断 ✅（2026-09-15）**：`_feedback_text` 超预算改保头 60%+尾 25%（邮件线程
   最新回复在尾部），省略标注+重新获取提示保留。
-- 验证：pytest 218 全绿（+6：触顶小结/预算小结/纠正改口/二次警示/判定矩阵/头尾截断；原步数与预算
-  暂停用例更新为 A1 形态）、ruff 通过；真实实例重启后冒烟待用户日常任务观察（触顶/幻觉断言均为
-  低频路径，压测脚本不覆盖真实模型行为）。
-- 待做：A4 只读并行 → A5 ask_user → A6 事件回填 → A7 技能包 → A8 步级可观测 → B1/B2（B3 缓发），
-  顺序与验收见 AGENT_EXTEND_PLAN §5。
+- **A4 同批只读并行 ✅（2026-09-15）**：`_loop` 同批全为已授权只读工具（kind=read、白名单/授权/日限额
+  预检通过）→ ThreadPoolExecutor（≤4 workers）并行执行、结果按原序回灌（保 tool_call_id 配对）；
+  混合批/写类维持串行（顺序敏感+可遇审批暂停）；SQLite 每线程连接保证并发读安全。
+- **A5 ask_user 澄清中断 ✅（2026-09-15）**：新工具 `ask_user(question, options?≤6)`（kind=meta 不入
+  审计不可直执行；scheduler 白名单天然排除→无人值守硬拒不挂起）；触发置 waiting_input 暂停（pending
+  存问题，resume 状态机可续）——前端「向你确认」卡（选项按钮+输入框，AskCard）回答后带 answer 续跑，
+  回答以 ask_user 调用的 tool 回应回灌（兼保 tool_calls 配对）；缺 answer 续跑报错且 run 保持
+  waiting_input 不卡死。API：内部与 ext 的 /agent/resume 增可选 answer；_build_segments 增 ask_user
+  分段（刷新还原一致）。
+- 验证（A1-A5 合并）：pytest 223 全绿（累计 +11）、ruff 通过、npm build（tsc+字号门禁）通过、
+  openapi/schema 快照再生（resume 增 answer）；8720 已重启 /api/health ok；A5 真实模型触发澄清
+  属低频路径，UI e2e 待用户日常使用观察。
+- 待做：A6 事件回填 → A7 技能包 → A8 步级可观测 → B1/B2（B3 缓发），顺序与验收见 AGENT_EXTEND_PLAN §5。

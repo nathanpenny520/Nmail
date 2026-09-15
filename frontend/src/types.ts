@@ -365,10 +365,10 @@ export interface AgentAction {
   decided_at: string | null
 }
 
-/** Agent SSE 事件（text/tool_call/tool_result/approval_required/error/done） */
+/** Agent SSE 事件（text/tool_call/tool_result/approval_required/ask_user/error/done） */
 export interface AgentEvent {
   type: 'text' | 'text_delta' | 'run_started' | 'tool_call' | 'tool_result'
-    | 'approval_required' | 'paused' | 'error' | 'done' | string
+    | 'approval_required' | 'ask_user' | 'paused' | 'error' | 'done' | string
   text?: string
   delta?: string
   tool?: string
@@ -382,13 +382,15 @@ export interface AgentEvent {
   run_id?: number
   meta?: Record<string, unknown>
   error?: string
+  question?: string
+  options?: string[]
   /** 前端卡片状态（审批处理后/撤销后本地更新用，非后端字段） */
   status?: string
 }
 
 /** Agent 消息分段（REDESIGN_PLAN §17.4，与后端 _build_segments 同构） */
 export interface AgentSegment {
-  kind: 'text' | 'step' | 'approval' | 'error'
+  kind: 'text' | 'step' | 'approval' | 'ask_user' | 'error'
   content?: string
   tool?: string
   call_id?: string
@@ -400,6 +402,8 @@ export interface AgentSegment {
   meta?: Record<string, unknown>
   run_id?: number
   echo?: boolean
+  question?: string
+  options?: string[]
 }
 
 /** 通讯录联系人（2026-09-12 改版：聚合行）——同邮箱多账号聚合为一行，sources 为来源集合 */

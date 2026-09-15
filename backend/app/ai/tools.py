@@ -712,6 +712,11 @@ SEARCH_PROPS = {
     "limit": _int("返回条数上限（默认 10，最大 50）"),
 }
 
+def _t_ask_user(args: dict, primary: int, scope: list[int]) -> dict:
+    """ask_user 不经 execute 执行——循环层挂起等用户回答（AGENT_EXTEND_PLAN A5）。"""
+    return {"error": "ask_user 由会话循环处理，不能直接执行"}
+
+
 TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
     ToolSpec("search_emails", "read", "read",
              "按关键词与条件搜索邮件（默认全部文件夹含归档；支持分类/发件人/未读/日期过滤）",
@@ -837,6 +842,15 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
              '{"memory_id": "记忆id"}',
              _obj({"memory_id": _int("记忆 id")}, ["memory_id"]),
              _t_delete_memory),
+    ToolSpec("ask_user", "meta", "read",
+             "向用户提出澄清问题并等待回答（收件人有歧义、多个候选、拿不准是否该执行时用；"
+             "不要用日常汇报或已知信息的确认来打扰用户）",
+             '{"question": "问题", "options?": ["选项A", "选项B"]}',
+             _obj({"question": _str("要问用户的问题（具体、可直接回答）"),
+                   "options": {"type": "array", "items": {"type": "string"},
+                               "description": "候选项（单选，最多 6 个；开放问题可不传）",
+                               "maxItems": 6}}, ["question"]),
+             _t_ask_user),
 ]}
 
 
@@ -870,6 +884,7 @@ _PARAM_TYPES: dict[str, dict[str, str]] = {
     "remove_sender_list": {"entry_id": "int", "pattern": "str"},
     "save_memory": {"content": "str", "evidence": "str"},
     "delete_memory": {"memory_id": "int"},
+    "ask_user": {"question": "str", "options": "strs"},
 }
 _REQUIRED_ARGS: dict[str, tuple[str, ...]] = {
     "read_email": ("email_id",),
@@ -922,6 +937,12 @@ def normalize_args(name: str, args: dict) -> dict:
                     out[key] = bool(v)
             elif typ == "str":
                 out[key] = str(v)
+            elif typ == "strs":
+                if isinstance(v, (str, int)):
+                    v = [v]
+                if not isinstance(v, list):
+                    raise ValueError
+                out[key] = [str(x) for x in v]
         except (TypeError, ValueError):
             raise ValueError(f"参数 {key} 的类型应为 {typ}") from None
     return out

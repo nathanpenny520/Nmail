@@ -315,6 +315,11 @@ def _build_segments(events: list[dict]) -> list[dict]:
                          "tool": ev.get("tool"), "args": ev.get("args") or {},
                          "reason": ev.get("reason"), "meta": ev.get("meta") or {},
                          "run_id": ev.get("run_id")})
+        elif t == "ask_user":
+            segs.append({"kind": "ask_user", "call_id": ev.get("call_id"),
+                         "question": ev.get("question") or "",
+                         "options": ev.get("options") or [],
+                         "run_id": ev.get("run_id")})
         elif t == "error":
             segs.append({"kind": "error", "content": ev.get("error") or "执行出错"})
     return segs
@@ -357,16 +362,17 @@ class _AgentSSE:
     循环）。续跑前把审批决定回写进前一条消息的 waiting step（§17.4）。"""
 
     def __init__(self, payload: AgentStreamIn | None = None, origin: str = "ui",
-                 resume_run_id: int | None = None):
+                 resume_run_id: int | None = None, resume_answer: str | None = None):
         self.payload = payload
         self.origin = origin
         self.resume_run_id = resume_run_id
+        self.resume_answer = resume_answer
         self.events: list[dict] = []
 
     def stream(self):
         payload = self.payload
         if self.resume_run_id is not None:
-            gen = agent.resume_stream(self.resume_run_id)
+            gen = agent.resume_stream(self.resume_run_id, self.resume_answer)
         else:
             account_ids = payload.account_ids or [
                 int(r["id"]) for r in get_conn().execute("SELECT id FROM accounts").fetchall()
@@ -434,12 +440,13 @@ def agent_stream(payload: AgentStreamIn):
 
 class AgentResumeIn(BaseModel):
     run_id: int
+    answer: str | None = None  # waiting_input（ask_user 澄清）续跑时的用户回答
 
 
 @router.post("/agent/resume")
 def agent_resume(payload: AgentResumeIn):
-    """续跑 Agent 运行（SSE）：审批决定后 / 步数预算触顶后由前端自动调用。"""
-    return _AgentSSE(resume_run_id=payload.run_id).response()
+    """续跑 Agent 运行（SSE）：审批决定后 / 步数预算触顶后 / 澄清回答后由前端调用。"""
+    return _AgentSSE(resume_run_id=payload.run_id, resume_answer=payload.answer).response()
 
 
 @router.post("/agent/action/{action_id}/decide")

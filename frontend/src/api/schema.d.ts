@@ -1088,7 +1088,7 @@ export interface paths {
         put?: never;
         /**
          * Agent Resume
-         * @description 续跑 Agent 运行（SSE）：审批决定后 / 步数预算触顶后由前端自动调用。
+         * @description 续跑 Agent 运行（SSE）：审批决定后 / 步数预算触顶后 / 澄清回答后由前端调用。
          */
         post: operations["agent_resume_api_ai_agent_resume_post"];
         delete?: never;
@@ -2056,7 +2056,7 @@ export interface paths {
         put?: never;
         /**
          * Ext Agent Resume
-         * @description 续跑 Agent 运行（审批决定后 / 步数预算触顶后），事件结构同 /agent/chat。
+         * @description 续跑 Agent 运行（审批决定后 / 步数预算触顶后 / 澄清回答后），事件结构同 /agent/chat。
          */
         post: operations["ext_agent_resume_api_ext_v1_agent_resume_post"];
         delete?: never;
@@ -2246,6 +2246,8 @@ export interface components {
         AgentResumeIn: {
             /** Run Id */
             run_id: number;
+            /** Answer */
+            answer?: string | null;
         };
         /** AgentStreamIn */
         AgentStreamIn: {
@@ -2429,6 +2431,8 @@ export interface components {
         ExtAgentResumeIn: {
             /** Run Id */
             run_id: number;
+            /** Answer */
+            answer?: string | null;
         };
         /** ExtDraftIn */
         ExtDraftIn: {

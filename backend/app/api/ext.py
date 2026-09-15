@@ -440,13 +440,14 @@ def ext_agent_chat(payload: ExtAgentIn, _: Any = AGENT_KEY) -> dict:
 
 class ExtAgentResumeIn(BaseModel):
     run_id: int
+    answer: str | None = None  # waiting_input（ask_user 澄清）续跑时的用户回答
 
 
 @router.post("/agent/resume")
 def ext_agent_resume(payload: ExtAgentResumeIn, _: Any = AGENT_KEY) -> dict:
-    """续跑 Agent 运行（审批决定后 / 步数预算触顶后），事件结构同 /agent/chat。"""
+    """续跑 Agent 运行（审批决定后 / 步数预算触顶后 / 澄清回答后），事件结构同 /agent/chat。"""
     try:
-        events = list(agent.resume_stream(payload.run_id))
+        events = list(agent.resume_stream(payload.run_id, payload.answer))
     except tasks.AINotConfigured as exc:
         raise HTTPException(400, str(exc)) from None
     except Exception as exc:  # noqa: BLE001

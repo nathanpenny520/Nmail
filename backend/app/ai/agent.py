@@ -33,6 +33,7 @@ import json
 import re
 import time
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from app.ai import context as C
@@ -371,7 +372,7 @@ class RunState:
     emergency_window: int | None = None  # 溢出自愈后收缩的有效窗口
 
 
-_RESUMABLE = ("waiting_approval", "paused_max_steps", "paused_budget")
+_RESUMABLE = ("waiting_approval", "paused_max_steps", "paused_budget", "waiting_input")
 
 
 def _create_run(state: RunState) -> int:
@@ -885,6 +886,46 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
 
             _append_assistant_calls(state, mode_used, content or "", calls)
 
+            # A4（AGENT_EXTEND_PLAN §2-A4）：同批全为已授权只读工具 → 并行执行，
+            # 结果按原序回灌（保 tool_call_id 配对）。混合批/写类维持串行——写类
+            # 顺序敏感且可能中途遇审批暂停。SQLite 每线程连接（并发读安全）。
+            names = [str(c.get("name") or "") for c in calls]
+            specs = [T.TOOLS.get(n) for n in names]
+            if (len(calls) > 1
+                    and all(s is not None and s.kind == "read" for s in specs)
+                    and (state.allowed is None or set(names) <= state.allowed)
+                    and all(s.grant in grants for s in specs)
+                    and state.daily_actions + len(calls) <= DAILY_ACTION_LIMIT):
+                for c, n in zip(calls, names, strict=True):
+                    yield {"type": "tool_call", "tool": n, "call_id": c.get("id"),
+                           "args": c.get("arguments") or {}, "grant": "read"}
+                prepared: list[tuple[dict, dict | ValueError]] = []
+                for c, n in zip(calls, names, strict=True):
+                    try:
+                        prepared.append((c, T.normalize_args(n, c.get("arguments") or {})))
+                    except ValueError as exc:
+                        prepared.append((c, exc))
+
+                def _run_one(item: tuple[dict, dict | ValueError]) -> dict:
+                    call, prep = item
+                    if isinstance(prep, ValueError):
+                        return {"error": f"参数校验失败：{prep}"}
+                    return T.execute(str(call.get("name") or ""), prep, primary, state.account_ids)
+
+                with ThreadPoolExecutor(max_workers=min(4, len(prepared))) as pool:
+                    results = list(pool.map(_run_one, prepared))
+                for (call, _prep), result in zip(prepared, results, strict=True):
+                    ok_run = "error" not in result
+                    summary = _summarize_result(str(call.get("name") or ""), result)
+                    yield {"type": "tool_result", "tool": call.get("name"),
+                           "call_id": call.get("id"), "ok": ok_run, "summary": summary}
+                    if state.session_id:
+                        C.append_ledger(state.session_id, f"{call.get('name')}：{summary}")
+                    _append_feedback(state, mode_used, call, result, summary, ok=ok_run)
+                state.daily_actions += len(calls)
+                _save_run(state, "running")
+                continue
+
             for call in calls:
                 tool_name = str(call.get("name") or "")
                 spec = T.TOOLS.get(tool_name)
@@ -924,6 +965,26 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
                     _append_feedback(state, mode_used, call, {"error": err}, err, ok=False,
                                      hint="请向用户说明权限不足，不要重试同类操作。")
                     continue
+
+                # A5 澄清中断（AGENT_EXTEND_PLAN §2-A5）：不入审计不执行——
+                # 挂起等用户回答（resume 带 answer 续跑回灌）。scheduler 白名单
+                # 天然不含 ask_user，无人值守运行在上面已被拒。
+                if tool_name == "ask_user":
+                    state.pending = {"kind": "ask_user", "call_id": call.get("id"),
+                                     "tool": "ask_user",
+                                     "args": {"question": str(call_args.get("question") or "")}}
+                    _save_run(state, "waiting_input")
+                    if state.session_id:
+                        C.append_ledger(state.session_id, "ask_user：已向用户澄清提问")
+                    yield {"type": "tool_result", "tool": tool_name, "call_id": call.get("id"),
+                           "ok": True, "summary": "已向用户提问，等待回答"}
+                    yield {"type": "ask_user", "call_id": call.get("id"),
+                           "question": str(call_args.get("question") or ""),
+                           "options": [str(o) for o in (call_args.get("options") or [])][:6],
+                           "run_id": state.run_id}
+                    yield {"type": "paused", "reason": "ask_user", "run_id": state.run_id}
+                    yield {"type": "done"}
+                    return
 
                 # 双模式与安全约束（§6.5/§6.6/§17.6-2）
                 need_reason = _approval_reason(state, tool_name, call_args)
@@ -1010,7 +1071,7 @@ def run_stream(question: str, history: list[dict] | None, session_id: int | None
                origin: str = "ui",
                allowed_tools: frozenset[str] | None = None) -> Generator[dict, None, None]:
     """Agent 主循环入口（新问题）。事件：run_started / text_delta / text /
-    tool_call / tool_result / approval_required / paused / error / done。"""
+    tool_call / tool_result / approval_required / ask_user / paused / error / done。"""
     if not account_ids:
         yield {"type": "error", "error": "没有可用账号，无法使用总管家"}
         yield {"type": "done"}
@@ -1060,8 +1121,9 @@ def run_stream(question: str, history: list[dict] | None, session_id: int | None
     yield from _loop(state)
 
 
-def resume_stream(run_id: int) -> Generator[dict, None, None]:
-    """续跑入口：审批决定后（waiting_approval）或步数/预算触顶后（前端「继续」）。"""
+def resume_stream(run_id: int, answer: str | None = None) -> Generator[dict, None, None]:
+    """续跑入口：审批决定后（waiting_approval）/ 步数预算触顶后（前端「继续」）/
+    澄清回答后（waiting_input，answer=用户对 ask_user 的回答）。"""
     state = _load_run(run_id)
     if state is None:
         yield {"type": "error", "error": "运行不存在或已清理"}
@@ -1074,11 +1136,28 @@ def resume_stream(run_id: int) -> Generator[dict, None, None]:
     state.window = C.resolve_window(state.profile_id)  # 窗口计量不落库，续跑按档案重解析
     # 步数/预算触顶续跑 = 用户点了「继续」，授予新的一段预算/步数
     resuming_from = state.status
+    if resuming_from == "waiting_input" and not (answer or "").strip():
+        # 缺回答不入态：run 保持 waiting_input 仍可续，不产生卡死的 running 态
+        yield {"type": "error", "error": "缺少回答内容（answer），请提供对澄清问题的回答"}
+        yield {"type": "done"}
+        return
     state.steps = 0
     state.budget_used_s = 0.0
     _save_run(state, "running")
     yield {"type": "run_started", "run_id": state.run_id}
-    if resuming_from == "waiting_approval" and state.pending:
+    if resuming_from == "waiting_input" and state.pending:
+        # A5 澄清回答回灌：作为 ask_user 调用的 tool 回应（兼保 tool_calls 配对）
+        call = {"id": state.pending.get("call_id") or "ask0",
+                "name": state.pending.get("tool") or "ask_user"}
+        text = (answer or "").strip()
+        result = {"answer": text}
+        summary = "用户已回答"
+        yield {"type": "tool_result", "tool": call["name"], "call_id": call["id"],
+               "ok": True, "summary": summary}
+        _append_feedback(state, "native" if state.native else "json", call, result,
+                         summary, ok=True)
+        state.pending = None
+    elif resuming_from == "waiting_approval" and state.pending:
         action_id = int(state.pending.get("action_id") or 0)
         row = get_conn().execute("SELECT * FROM ai_actions WHERE id = ?", (action_id,)).fetchone()
         if row is None:
@@ -1121,7 +1200,7 @@ def resume_stream(run_id: int) -> Generator[dict, None, None]:
                 if tid and tid not in answered:
                     state.messages.append({
                         "role": "tool", "tool_call_id": tid,
-                        "content": "（同批并行调用：因等待审批未执行，已跳过。如仍需要请重新调用，会再走审批。）",
+                        "content": "（同批并行调用：因等待用户处理（审批/回答）未执行，已跳过。如仍需要请重新调用。）",
                     })
             break
     if resuming_from in ("paused_max_steps", "paused_budget"):

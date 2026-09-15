@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Check, ChevronDown, Clock, Loader2, Pencil, Pin, PinOff, Plus, Send, ShieldAlert,
-  Sparkles, Square, Trash2, Undo2, X,
+  Check, ChevronDown, Clock, Loader2, MessageCircle, Pencil, Pin, PinOff, Plus, Send,
+  ShieldAlert, Sparkles, Square, Trash2, Undo2, X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
@@ -43,6 +43,7 @@ type RenderItem =
   | { type: 'text'; content: string }
   | { type: 'process'; steps: AgentSegment[] }
   | { type: 'approval'; seg: AgentSegment }
+  | { type: 'ask'; seg: AgentSegment }
   | { type: 'error'; content: string }
 
 /** 分段 → 渲染项：连续 step 合并为一个可折叠过程块（Claude Code 式，§17.4） */
@@ -58,6 +59,8 @@ function groupSegments(segs: AgentSegment[]): RenderItem[] {
       if (seg.content?.trim()) items.push({ type: 'text', content: seg.content })
     } else if (seg.kind === 'approval') {
       items.push({ type: 'approval', seg })
+    } else if (seg.kind === 'ask_user') {
+      items.push({ type: 'ask', seg })
     } else if (seg.kind === 'error') {
       items.push({ type: 'error', content: seg.content || '执行出错' })
     }
@@ -207,8 +210,23 @@ export default function ManagerPage() {
           args: ev.args, reason: ev.reason, meta: ev.meta, run_id: ev.run_id })
         return next
       })
+    } else if (ev.type === 'ask_user') {
+      // A5 澄清卡：问题+可选项渲染，用户回答后带 answer 续跑
+      patchLastSegments((segs) => {
+        const next = [...segs]
+        for (let i = next.length - 1; i >= 0; i--) {
+          const s = next[i]
+          if (s.kind === 'step' && s.status === 'running' && s.tool === 'ask_user') {
+            next[i] = { ...s, status: 'ok', summary: '已向用户提问，等待回答' }
+            break
+          }
+        }
+        next.push({ kind: 'ask_user', call_id: ev.call_id, question: ev.question || '',
+          options: ev.options, run_id: ev.run_id })
+        return next
+      })
     } else if (ev.type === 'paused') {
-      if (ev.reason === 'approval' && ev.run_id) runIdRef.current = ev.run_id
+      if ((ev.reason === 'approval' || ev.reason === 'ask_user') && ev.run_id) runIdRef.current = ev.run_id
       else if (ev.run_id) setPausedRun({ runId: ev.run_id, reason: ev.reason || '' })
     } else if (ev.type === 'error') {
       patchLastSegments((segs) => [...segs, { kind: 'error', content: ev.error || '执行出错' }])
@@ -222,7 +240,7 @@ export default function ManagerPage() {
     queryClient.invalidateQueries({ queryKey: ['accounts'] })
   }
 
-  const runResume = async (runId: number) => {
+  const runResume = async (runId: number, answer?: string) => {
     if (pending) return
     runIdRef.current = runId
     setPausedRun(null)
@@ -230,7 +248,7 @@ export default function ManagerPage() {
     setPending(true)
     abortRef.current = new AbortController()
     try {
-      await streamAgentEvents('/api/ai/agent/resume', { run_id: runId },
+      await streamAgentEvents('/api/ai/agent/resume', answer ? { run_id: runId, answer } : { run_id: runId },
         (ev) => handleAgentEvent(ev as unknown as AgentEvent), abortRef.current.signal)
       invalidateAfter()
     } catch (err) {
@@ -241,6 +259,15 @@ export default function ManagerPage() {
     } finally {
       setPending(false)
     }
+  }
+
+  /** A5 澄清回答：就地落定提问卡后带 answer 续跑 */
+  const answerAsk = (runId: number | undefined, answer: string) => {
+    if (!runId || pending || !answer.trim()) return
+    patchLastSegments((segs) => segs.map((s) => (
+      s.kind === 'ask_user' && s.run_id === runId && !s.status
+        ? { ...s, status: '已回答', summary: answer } : s)))
+    void runResume(runId, answer.trim())
   }
 
   const ask = async (question: string) => {
@@ -583,6 +610,9 @@ export default function ManagerPage() {
                     if (item.type === 'approval') {
                       return <ApprovalCard key={j} seg={item.seg} onDecide={decide} runId={item.seg.run_id} />
                     }
+                    if (item.type === 'ask') {
+                      return <AskCard key={j} seg={item.seg} onAnswer={answerAsk} />
+                    }
                     return (
                       <div key={j} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 t-sm text-red-600">
                         {item.content}
@@ -821,6 +851,67 @@ function ApprovalCard({ seg, onDecide, runId }: {
             <X className="h-3.5 w-3.5" /> 拒绝
           </button>
         </div>
+      )}
+    </div>
+  )
+}
+
+/** A5 澄清卡（AGENT_EXTEND_PLAN §2-A5）：agent 主动提问——点选项或输入回答后带 answer 续跑 */
+function AskCard({ seg, onAnswer }: {
+  seg: AgentSegment
+  onAnswer: (runId: number | undefined, answer: string) => void
+}) {
+  const [draft, setDraft] = useState('')
+  const st = seg.status // 已回答后留档禁用
+  const submit = (text: string) => {
+    const v = text.trim()
+    if (!v) return
+    onAnswer(seg.run_id, v)
+    setDraft('')
+  }
+  return (
+    <div className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <MessageCircle className="h-4 w-4 shrink-0 text-sky-600" />
+        <span className="t-sm font-medium text-sky-800">向你确认</span>
+        {st && <span className="ml-auto t-xs text-gray-500">{st}</span>}
+      </div>
+      <div className="mt-1 t-sm text-gray-800">{seg.question}</div>
+      {st ? (
+        seg.summary && (
+          <div className="mt-1.5 rounded-lg bg-white/70 px-2 py-1.5 t-xs text-gray-600">回答：{seg.summary}</div>
+        )
+      ) : (
+        <>
+          {Array.isArray(seg.options) && seg.options.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {seg.options.map((o) => (
+                <button key={o}
+                  className="rounded-lg border border-sky-300 bg-white px-2.5 py-1 t-sm text-sky-700 hover:bg-sky-100"
+                  onClick={() => submit(o)}
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="mt-2 flex gap-1.5">
+            <input
+              className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 t-sm outline-none focus:border-sky-400"
+              placeholder="输入你的回答…"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submit(draft) }}
+            />
+            <button
+              className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-2.5 py-1.5 t-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+              disabled={!draft.trim()}
+              onClick={() => submit(draft)}
+            >
+              <Send className="h-3.5 w-3.5" /> 发送
+            </button>
+          </div>
+        </>
       )}
     </div>
   )

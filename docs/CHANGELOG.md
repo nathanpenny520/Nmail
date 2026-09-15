@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — Agent 扩展 A4-A5：同批只读并行执行 + ask_user 澄清中断（REDESIGN_PLAN §20 / AGENT_EXTEND_PLAN）
+- A4 同批只读并行：`_loop` 同批全为已授权只读工具时 ThreadPoolExecutor（≤4 workers）并行执行、结果按原序回灌（保 tool_call_id 配对）；混合批/写类维持串行（顺序敏感+可遇审批暂停）；日限额按批预检，SQLite 每线程连接保证并发读安全
+- A5 澄清中断：新工具 `ask_user(question, options?≤6)`（kind=meta——不入审计、不可直执行、scheduler 白名单天然排除即无人值守硬拒不挂起）；触发置 waiting_input 暂停，前端「向你确认」卡（选项按钮+自由输入）回答后带 answer 经 /agent/resume 续跑，回答以 ask_user 调用的 tool 回应回灌（兼保 tool_calls 配对）；缺 answer 续跑明确报错且 run 保持可续不卡死
+- 配套：内部与 ext 的 `/agent/resume` 增可选 `answer`；`_build_segments` 增 ask_user 分段（刷新后还原一致）；前端 AskCard + 事件处理（types/ManagerPage）
+- 验证：pytest 223 全绿（+5：只读并行线程断言/混合批串行/澄清暂停与回答续跑/缺回答不卡死/白名单硬拒）、ruff 通过、npm build（tsc+字号门禁）通过、openapi/schema 快照再生；8720 重启 /api/health ok；A4/A5 真实模型行为待用户日常使用观察
+
 ## fc5f763 — Agent 扩展 A1-A3：触顶强制小结收尾+完成断言校验+保头尾截断（REDESIGN_PLAN §20 / AGENT_EXTEND_PLAN）
 - 用户拍板触顶行为=「小结+手动继续」（不加自动续段：纯读类循环不占每日动作限额，步数/时间是唯一成本闸，自动续跑无人踩刹车）；方案（deer-flow 2.0/smolagents 1.27 调研）见 docs/AGENT_EXTEND_PLAN.md，拍板与落地记 REDESIGN_PLAN §20
 - A1 触顶强制收尾：`_wrap_up_events` 步数/时间预算耗尽先临时注入收尾指令+禁工具要一段进度小结（指令无论成败弹出；小结 assistant 落库+流式下发）再 paused——scheduler 晨报无人值守跑满步数不再零产出空悬；resume 对触顶暂停注入「用户选择继续」锚点
