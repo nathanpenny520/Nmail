@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — docs: 对外 brew/winget 命令全名同步（README 双语/官网/代码文案）
+## 0d2aace — docs: 对外 brew/winget 命令全名同步（README 双语/官网/代码文案）
 - README 双语、官网 posts×2、UPDATE_AND_DESKTOP、RELEASE 的 brew 命令统一改 tap 全名 `brew upgrade nathanpenny520/nmail/nmail`，安装命令补 `brew trust` 步骤与 core 撞名警告；CLAUDE.md 新增工作流规范 #11：对外命令/渠道说明改动同一轮同步 INSTALL/README 双语/官网/代码文案四处
 - 会话：S-0915-2305-brew安装排查
 
