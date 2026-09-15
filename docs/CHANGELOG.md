@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交4 — feat: 自动更新（后台静默安装、重启生效）+ 全局就绪浮条
+## 4615db7 — feat: 自动更新（后台静默安装、重启生效）+ 全局就绪浮条
 - settings 新键 `auto_update_enabled`（默认开，设置-关于 紧挨「自动检查更新」；检查关闭时该开关置灰）
 - 自动触发链：main lifespan 启动 8s 后静默检查一次（复用 24h 缓存）+ scheduler 每小时 `update_tick` 兜底——检查开启+自动安装开启+渠道可自更新+确有新版本四重门控全过才后台启动更新任务，全程不打扰当前使用
 - 就绪提示（文案按用户定稿从简）：通知中心该版本通知在就位时改写为「新版本 X 已就绪，重启即更新；下次打开自动生效。可在 设置-关于 调整自动更新」；前端全局浮条 UpdateReadyBar（每分钟轮询，仅「就绪且未重启」出现，叉掉按版本记忆不再打扰），「立即重启」与设置页共用抽出的 `restartForUpdateThenReload`
@@ -11,7 +11,7 @@
 - 自动心跳门控 5 分支单测；openapi/schema 快照再生（settings 新键）
 - 会话：S-0915-2225-更新与桌面图标
 
-## 待提交3 — fix: 冻结单文件缺 `__main__` 入口保护，静默退出（brew 渠道不可用根因）
+## 873ce06 — fix: 冻结单文件缺 `__main__` 入口保护，静默退出（brew 渠道不可用根因）
 - cli.py 补 `if __name__ == "__main__": main()`——PyInstaller 冻结单文件以本文件为入口脚本执行，此前无任何调用点，二进制加载完 stdlib 即 exit 0（无输出无报错），Homebrew/Release 分发的 macOS/Linux 二进制自发布以来从未真正运行过；源码（run.py）与 PyPI console script 入口不受影响
 - 排障记录：用户 brew 安装后 `nmail --version` 静默无输出；逐步排除法——同机构建 hello-world 冻结二进制正常（排除 PyInstaller 与 macOS 27 兼容性）→ 分步导入诊断二进制正常（排除依赖）→ 唯差异为入口脚本本身 → 发现缺 `__main__` 保护
 - 验证：重打包实测 `--version` 输出 `Nmail 0.4.1`（Homebrew formula 测试断言同样通过）；ruff 通过、pytest 247 全绿
@@ -23,7 +23,7 @@
 - 后续建议（未实施，待拍板）：tap 公式可改名 `nmail-app`（与 PyPI 包名一致）彻底规避撞名心智负担，涉及 release.sh tap 同步与 CI，下轮处理
 - 会话：S-0915-2305-brew安装排查
 
-## 待提交2 — feat: 应用内「立即更新」与一键重启（binary/pip 渠道自更新）
+## 029b0e4 — feat: 应用内「立即更新」与一键重启（binary/pip 渠道自更新）
 - core/update_apply.py 更新执行层：Release 资产流式下载（进度节流落 KV）→ SHA256 校验（GitHub 资产 digest）→ **换身**（运行中的可执行文件可 rename 不可覆写：当前二进制 rename 为 *.old 后原路径原子落位新文件，旧进程跑旧 inode 不受影响，失败自动回滚还原）→ `ready`；pip 渠道走 `{sys.executable} -m pip install --upgrade nmail-app` 原地升级
 - `POST /api/update-apply` 启动后台更新（进行中幂等）、`GET /api/update-apply` 渠道能力+进度状态、`POST /api/update-apply/restart?port=` 一键重启：新进程 `--wait-port` 接管同一端口后旧进程退出，浏览器页面地址不变
 - cli `wait_for_port` 两段式回绑：先探活确认旧进程退净，再带 SO_REUSEADDR 试绑——实测发现旧进程退出后的 TIME_WAIT 残留会让裸 bind 在 macOS 上报 EADDRINUSE 等满 30s 超时、错误顺延到 8721（浏览器页面就此丢失）
@@ -31,7 +31,7 @@
 - 换身舞步/回滚/启动收尾（finish_pending_swap 处理下载中途退出的残局）补 4 项单元测试；重启链路 8720 真实实例 e2e（旧进程退净、单实例回绑同端口、health 恢复）
 - 会话：S-0915-2225-更新与桌面图标
 
-## 待提交 — feat: 桌面图标一键安装（各安装方式）+ 渠道识别 + CLI 单实例探测
+## 597d0f0 — feat: 桌面图标一键安装（各安装方式）+ 渠道识别 + CLI 单实例探测
 - 新增 `core/channel.py`：启动时识别安装渠道（binary/brew/winget/pip/uvx）——自更新与桌面集成都按渠道分流；uvx 经 uv 缓存路径特征识别，brew/winget 冻结二进制按安装路径识别
 - 新增 `core/desktop.py`：一键生成桌面图标——Windows 桌面+开始菜单 .lnk（PowerShell COM）、macOS `~/Applications/Nmail.app` 包（Info.plist+icns）、Linux .desktop+hicolor 图标；状态检测/移除/重装；binary 渠道直接包装自身，pip/uvx 先落启动命令包装器再包装
 - 图标资产随包分发：`backend/app/assets/`（ico/icns/512png 入库入 wheel package-data，nmail.spec datas 打入冻结包），gen_icons.py 产出时同步写入
