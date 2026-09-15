@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nmail-cli"
-version = "0.4.1"  # 与 app 同一条版本线：勿手改，python3 scripts/sync_version.py 统一维护
+version = "0.4.2"  # 与 app 同一条版本线：勿手改，python3 scripts/sync_version.py 统一维护
 description = "Nmail 对外 API 命令行客户端——为 agent/skill 设计（JSON envelope + exit code 契约 + 两阶段确认）"
 readme = "README.md"
 requires-python = ">=3.11"
