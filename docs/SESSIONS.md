@@ -33,7 +33,8 @@
 - 产出: 三步三提交——597d0f0（渠道识别+桌面图标+CLI 单实例探测）、029b0e4（立即更新/一键重启+wait_for_port 两段式回绑）、4615db7（自动更新开关+触发链+就绪浮条+冻结收尾零抛错）；CI 的 Nmail.app.zip 资产未做（见遗留）
 - 验证: ruff + pytest 248 全绿（+18：渠道判定/产物内容/换身舞步回滚/启动收尾/心跳门控）；npm build（字号→vitest→tsc→vite）通过；真实实例 e2e——桌面图标安装/失效检测/移除/重装、启动器脚本单实例探测（8720 已在运行→开浏览器退出）、重启端点端口接管（旧退新接同端口、单实例回绑）；**冻结包真机核验**（本地 PyInstaller 构建+隔离数据目录）：fresh 启动、binary 渠道识别、冻结态生成 .app、冻结态重启全过；发现并修复全新数据目录下启动收尾读 KV 崩溃（收尾改全函数零抛错）
 - 关键决策: 换身依赖「运行中可执行文件可 rename 不可覆写」三平台通用事实，ready=文件就位（下次启动天然新版），重启只是即时生效的便捷动作（用户拍板弃倒计时方案）；wait_for_port 两段式（探活+SO_REUSEADDR 试绑）——TIME_WAIT 残留会让裸 bind 在 macOS 报 EADDRINUSE 等满超时、错误顺延 8721 丢页面；自动更新语义=后台下载就位零打扰
-- 遗留: ①release.yml 的 Nmail.app.zip 追加资产未做（方案 §4 已定稿，随下次发版前补）②Windows 渠道（.lnk/WinGet 路径识别/换身）无法本机实测，待用户双机验证 ③uvx/brew/winget 升级命令提示待真机走查 ④本机 ~/Applications/Nmail.app 已装（指向 .venv，源码渠道语义）⑤与 S-0915-2305 并行：其 cli `__main__` 入口保护修复与本会话冻结核验互为印证
+- 追记2（23:55）: release.yml macos leg 追加 Nmail-macos-arm64.app.zip 发行资产（结构与运行时生成一致：stub 应用面 + 冻结二进制子进程，YAML 校验过）——遗留①完成。已知取舍：应用内更新重启后 Dock 图标随旧存根退出，服务仍在新进程运行（重新点图标即恢复，浏览器地址不变）
+- 遗留: ②Windows 渠道（.lnk/WinGet 路径识别/换身）无法本机实测，待用户双机验证 ③uvx/brew/winget 升级命令提示待真机走查 ④本机 ~/Applications/Nmail.app 已装（指向 .venv，源码渠道语义）⑤与 S-0915-2305 并行：其 cli `__main__` 入口保护修复与本会话冻结核验互为印证
 - 追记（23:40）: 用户实测反馈「.app 装错位置 + Dock 图标消失」——三件修复：①macOS 改装 /Applications（回退 ~/Applications，决策#2 修订）②编译型 ObjC 存根 nmail-stub（scripts/nmail_stub.m，LaunchServices 只为 GUI 进程注册应用，纯脚本 bundle 无 Dock 图标；存根注册 NSApplication、服务为其子进程、Quit 链式停服、服务退则应用退）③find_free_port TIME_WAIT 分层判定（重启端口漂移根治，与 wait_for_port 同源问题）。真实实例实测：LS ASN 注册/Dock 常驻/quit 停服零残留/重启收敛 8720 全过
 - 时间: 2026-09-15 22:25 开工，23:25 完成（23:45 追记收官）
 
