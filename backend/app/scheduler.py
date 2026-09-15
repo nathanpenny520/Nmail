@@ -90,8 +90,9 @@ def _run_daily_brief() -> None:
         text = "".join(e.get("text", "") for e in events if e.get("type") == "text").strip()
         if text:
             store_agent_brief(text)
+            # 通知正文带晨报全文（通知中心可展开阅读；跳转去摘要页看完整排版）
             add_notification("digest", "AI 晨报已生成",
-                             "今日晨报已写入「每日摘要」页；拟好的回复草稿在待审列表等你确认")
+                             text[:2000] + "\n\n—— 拟好的回复草稿在待审列表；点击前往「每日摘要」页")
             logger.info("agent daily brief finished (chars=%d)", len(text))
         else:
             # 无产出（步数/预算触顶等）：回退旧版摘要，当天内容不缺席

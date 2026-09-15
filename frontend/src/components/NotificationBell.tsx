@@ -23,6 +23,7 @@ const NOTIFY_TYPE_GROUP: Record<string, 'new_mail' | 'ai_draft' | 'digest' | 'ac
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
   const [perm, setPerm] = useState<NotifyPermission>(notifyPermission())
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -180,7 +181,26 @@ export default function NotificationBell() {
                     {!n.is_read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />}
                     <div className="min-w-0">
                       <div className="truncate t-sm font-medium text-gray-800">{n.title}</div>
-                      {n.body && <div className="mt-0.5 line-clamp-2 t-xs text-gray-500">{n.body}</div>}
+                      {n.body && (
+                        <div
+                          className={`mt-0.5 t-xs text-gray-500 ${
+                            expandedId === n.id ? 'whitespace-pre-wrap' : 'line-clamp-2'
+                          }`}
+                        >
+                          {n.body}
+                        </div>
+                      )}
+                      {n.body && n.body.length > 90 && (
+                        <button
+                          className="mt-1 t-xs text-indigo-500 hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation() // 展开阅读不触发跳转
+                            setExpandedId(expandedId === n.id ? null : n.id)
+                          }}
+                        >
+                          {expandedId === n.id ? '收起' : '展开全文'}
+                        </button>
+                      )}
                       <div className="mt-0.5 t-xs text-gray-300">{n.created_at}</div>
                     </div>
                   </div>
