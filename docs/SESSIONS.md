@@ -16,10 +16,13 @@
 
 ## 进行中
 
-### S-0915-0829-跨会话记忆
+### S-0915-0829-跨会话记忆 ✅
 - 目标: P7-C 落地（REDESIGN_PLAN §18.5）——agent_memory 表（v24，evidence 用户原话硬要求防脑补）+ save/list/delete_memory 三工具（写类 organize 审批审计照常）+ 系统提示词尾部「# 用户长期偏好」注入（与 §17.8 L3 会话内记忆分层）+ 设置页 AI 用量区「AI 记忆」卡查看/逐条删
 - 范围: backend(app/ai/tools.py, agent.py, api/ai.py, db/database.py, tests/test_agent.py) + frontend(types.ts, api/client.ts, pages/SettingsPage.tsx, 快照) + docs(REDESIGN_PLAN §18.5, ARCHITECTURE, PRODUCT_PLAN §11.2, CHANGELOG, SESSIONS)
-- 状态: 进行中（2026-09-15 08:29 开工）
+- 产出: 提交 cf39666——v24 迁移/工具 26→29（evidence 硬要求+同文去重+上限 100）/提示词注入最近 30 条/API GET|DELETE /api/ai/memory/设置页记忆卡；ARCHITECTURE 补齐 v22-v24 版本线与端点清单（P7-A 端点一并补记）；pytest 204 全绿（+4）、ruff、npm build、快照再生（110 端点）
+- 验收: 真实实例 e2e——「请记住…」→模型调 save_memory→审批卡拦截→批准执行→独立新对话零历史传入仍完整召回（复述偏好+逐字引用原话）→DELETE 清理零残留
+- 遗留: 规则提议（观察手动整理→提议卡）不在本轮，后续单独评估
+- 状态: 已完成（2026-09-15 上午）
 
 ### S-0915-0754-操作历史管理 ✅
 - 目标: 用户拍板瘦身版 P7-A——回滚意义不大不做（create_draft/trash/update_draft 撤销砍掉），只做「AI 操作历史可追溯可删除」：行级删除+批量清理（old/failed/all）+保留期落地+僵尸对账+徽章弱化+_FakeMB 残留清理

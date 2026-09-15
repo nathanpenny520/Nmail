@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — P7-C：跨会话记忆——AI 记住你的长期偏好（REDESIGN_PLAN §18.5）
+## cf39666 — P7-C：跨会话记忆——AI 记住你的长期偏好（REDESIGN_PLAN §18.5）
 - agent_memory 表（v24：content/evidence 必填/source/时间戳）；工具 26→29——save_memory（write/organize，evidence 硬要求=用户原话逐字引用防从邮件内容脑补，同文去重更新，上限 100 条）/list_memory（读）/delete_memory（写）
 - 系统提示词尾部注入「# 用户长期偏好」块（最近 30 条，每条附原话佐证；与 §17.8 L3 会话内记忆 memory_json 分层——run 级简报 vs 跨会话持久偏好）
 - 设置-AI 用量区新增「AI 记忆」卡：查看（含佐证原话）/逐条删除；API GET|DELETE /api/ai/memory
