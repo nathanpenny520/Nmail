@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — 安全加固：公网隧道管理面拦截（CF-* 边缘头 403，审计 A1）
+- 审计背景：文档推荐的 cloudflared 公网隧道默认把转发请求的 Host 重写为 origin 地址、curl 类客户端不带 Origin——Host/Origin 两道本机校验双双失效，管理面明文回显端点（/api/accounts、/api/extkeys）经公网域名无需任何 Key 即可达（本机探针实证；方案与证据链在 personal-data/审计方案-2026-09-15.md，不入库）
+- 修复（main.py 来源守卫第三层）：非 `/api/ext/*` 请求携带 CF-* 头（Cloudflare 边缘特征，cloudflared 原样转发）一律 403——SSH 隧道（无附加头）与 Tailscale serve（仅 X-Forwarded-*）不受影响；`/api/ext/*` 在守卫之前已放行，持 Key 公网调用不变
+- 测试：test_source_guard.py +4（CF 头矩阵拒绝 / ext 带 CF 头放行 / X-Forwarded-* 不拦 / ext Host 豁免）；顺带清 test_agent_loop.py 一处 F841；pytest 228 全绿（+4）、ruff 通过
+- 文档：隐私与安全（网络边界改三层校验 + 明确隧道分工：Web 界面走 SSH/Tailscale、公网 CF 隧道仅用于 ext）、对外API使用指南（§3.1 ingress 路径白名单 + 安全边界提示）、ARCHITECTURE（来源校验条目）
+
 ## b247eae — Agent 扩展收官 A6-A8 + B1-B3：运行观测/技能层/CLI 全量对齐（REDESIGN_PLAN §20 / AGENT_EXTEND_PLAN 全部落地）
 - 用户指示「全部完成」——§20 剩余六项一次收尾；B3 按拍板 3 落地，A7 技能存放按推荐值内置层先行
 - A6+A8 运行观测：`GET /api/ai/agent/runs`（列表）+ `/agent/runs/{id}`（状态/pending/步级 token——聚合 ai_logs 'run {id} step {n}' 行，零新表）；前端 openSession 查最新运行、停在触顶态时恢复「继续」横幅（刷新不再丢续跑入口）

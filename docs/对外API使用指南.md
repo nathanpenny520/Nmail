@@ -134,6 +134,17 @@ cloudflared tunnel --url http://127.0.0.1:8720 run nmail
 远程设备调用：`curl https://nmail.example.com/api/ext/v1/emails -H "X-Api-Key: ..."`。
 稳定使用建议写 `~/.cloudflared/config.yml`（`tunnel: nmail` + `ingress:` 映射）并安装为系统服务（`cloudflared service install`）。
 
+> **安全边界（2026-09-15 起）**：Cloudflare Tunnel 走公网边缘，**只用于对外 API**——Nmail 服务端已拒绝携带 CF-* 边缘头的请求访问内部 API（设置页/管理面），隧道场景下仅 `/api/ext/*` 与 `/health` 可用。远程访问 Web 界面请走 SSH 或 Tailscale。建议 ingress 只放行 ext 路径作第二道保险：
+>
+> ```yaml
+> tunnel: nmail
+> ingress:
+>   - hostname: nmail.example.com
+>     path: ^/api/ext/
+>     service: http://127.0.0.1:8720
+>   - service: http_status:404
+> ```
+
 ### 3.2 Tailscale（推荐：自己设备间互访，零暴露公网）
 
 ```bash

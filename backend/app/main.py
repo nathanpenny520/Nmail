@@ -128,6 +128,18 @@ async def _local_source_guard(request: Request, call_next):
             await run_in_threadpool(_log_ext_call, request, response.status_code)
         return response
 
+    # ── 公网隧道管理面拦截（2026-09-15 安全审计 A1）─────────────────────────
+    # CF-* 请求头只会经 Cloudflare 边缘注入（cloudflared 原样转发），而 cloudflared
+    # 默认把转发请求的 Host 重写为 origin 地址、curl 类客户端不带 Origin——按文档开
+    # 公网隧道时下面两道本机校验双双失效，管理面明文回显端点等于公网裸奔。故管理面
+    # 拒绝一切携带 CF-* 头的请求。SSH 隧道无附加头、Tailscale serve 仅加
+    # X-Forwarded-*，均不受影响；/api/ext/* 已在上方提前放行（持 Key 面向公网）。
+    if any(name.startswith("cf-") for name in request.headers):
+        return JSONResponse(
+            {"detail": "拒绝经公网代理的管理面请求（检测到 Cloudflare 边缘特征）"},
+            status_code=403,
+        )
+
     server = request.scope.get("server")
     server_port = server[1] if server else None
 

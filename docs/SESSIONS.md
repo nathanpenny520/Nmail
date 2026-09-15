@@ -16,6 +16,12 @@
 
 ## 进行中
 
+### S-0915-1420-安全审计修补
+- 目标: 四项审计短板的 A+B 阶段修补——A1 隧道管理面暴露修复（CF-* 边缘头拒绝）+ A2 密钥面加固（日志泄漏/XSS 链路扫描）+ A3 SQL 拼接抽查 + B 测试基建（前端 Vitest 首批冒烟、后端覆盖率报告）
+- 范围: backend(app/main.py, tests/test_source_guard.py) + frontend(测试基建: package.json, vite.config, 首批组件测试) + docs(隐私与安全, 对外API使用指南, ARCHITECTURE, CHANGELOG, SESSIONS)
+- 方案: personal-data/审计方案-2026-09-15.md（不入库——公开仓库不发布未修补漏洞细节；用户已确认范围 A+B、修后允许 quick tunnel 实测、代码级修复取向）
+- 状态: 进行中（2026-09-15 下午，等并行会话 S-0915-1130 收官后开工）
+
 ### S-0915-1130-Agent扩展收官A6-B3 ✅
 - 目标: 用户指示「全部完成」——AGENT_EXTEND_PLAN 剩余六项一次收尾：A6 运行观测+跨刷新恢复继续入口、A7 内置技能层（read_skill+索引注入，四个内置技能）、A8 步级可观测（并入 runs/{id}）、B1 CLI folders、B2 版本协商 _notice.update、B3 CLI 总管家通道（agent ask/decide/resume）；SKILL.md v1.2.0
 - 范围: backend(app/ai/skills_builtin.py 新增, app/ai/tools.py, app/ai/agent.py, app/api/ai.py, app/api/ext.py, tests) + nmail-cli(cli.py+tests) + frontend(types, api/client.ts, pages/ManagerPage.tsx, openapi/schema 快照) + skills/SKILL.md + docs(REDESIGN_PLAN §20, ARCHITECTURE, CHANGELOG, SESSIONS)

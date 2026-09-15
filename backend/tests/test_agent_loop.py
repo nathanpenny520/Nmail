@@ -195,7 +195,7 @@ def test_max_steps_wrapup_summary_before_pause(monkeypatch):
     再 paused_max_steps；小结前注入的收尾指令是临时消息（不留在历史）。"""
     aid = _aid()
     monkeypatch.setattr(agent, "MAX_STEPS", 2)
-    rec = _native_script(monkeypatch, [
+    _native_script(monkeypatch, [
         ([], [{"id": "c1", "name": "digest_stats", "arguments": {}}]),
         ([], [{"id": "c2", "name": "digest_stats", "arguments": {}}]),
         (["小结：已查两轮概况，收件箱无异常。"], []),  # 第 3 次调用=触顶收尾小结
