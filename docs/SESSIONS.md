@@ -20,7 +20,7 @@
 - 目标: 用户指示推送代码并发布 v0.4.0——按 docs/RELEASE.md 一条命令发版 + 收尾清单
 - 范围: pyproject.toml（版本号）、docs/CHANGELOG.md、docs/SESSIONS.md；外部渠道（PyPI/Release/tap/winget/官网）
 - 产出: 提交 e9a6946（release: v0.4.0 + tag）；CI run 34941786990——PyPI nmail-app 0.4.0 ✅、nmail-cli 0.1.0 首发 ✅、三平台资产 ✅、homebrew-tap ❌ 403 复发（token 待用户续期）；tap 手动兜底 5045fdf；winget PR #434983（fork 分支 nmail-0.4.0，三 manifest）；官网部署 run 34944037912（补触发以含 S-0915-1545 官网提交）
-- 遗留: ① HOMEBREW_TAP_TOKEN 续期只能用户做（连续两版 403，下版本前必须修）② winget 0.1.0/0.3.0/0.4.0 三个 PR 校验通过后均待社区审核（用户可去 PR 页开 auto-merge）
+- 遗留: ① ~~HOMEBREW_TAP_TOKEN 续期~~（用户当日已续期，tap job 重跑 ✅、run 整体转绿）② winget 0.1.0/0.3.0/0.4.0 三个 PR 校验通过后均待社区审核（用户可去 PR 页开 auto-merge）
 - 状态: 已完成（2026-09-15 傍晚）
 
 ### S-0915-1545-v040文档官网同步 ✅
