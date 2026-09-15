@@ -10,6 +10,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from app.ai import agent
+from app.ai import tools as T
 from app.db import database
 from app.main import app
 
@@ -355,3 +356,82 @@ def test_delete_and_clear_actions():
     total = conn.execute("SELECT COUNT(*) n FROM ai_actions").fetchone()["n"]
     assert agent.clear_actions("all") == {"deleted": total}
     assert conn.execute("SELECT COUNT(*) n FROM ai_actions").fetchone()["n"] == 0
+
+
+# ── 跨会话记忆（REDESIGN_PLAN §18.5）──────────────────────────────
+
+def test_memory_tools_crud():
+    """save/list/delete + 同文去重更新 + evidence 硬要求。"""
+    conn = database.get_conn()
+    conn.execute("DELETE FROM agent_memory")
+    conn.commit()
+    assert "error" in T.execute("save_memory", {"content": "正式"}, 0)  # 缺 evidence
+    r1 = T.execute("save_memory", {"content": "给张总回信要正式", "evidence": "给张总回信要正式一点"}, 0)
+    assert "saved" in r1
+    r2 = T.execute("save_memory", {"content": "给张总回信要正式", "evidence": "对张总正式些"}, 0)
+    assert "updated" in r2 and r2["updated"] == r1["saved"]  # 同文去重更新
+    r3 = T.execute("save_memory", {"content": "广告邮件直接归档", "evidence": "广告类直接归档"}, 0)
+    assert "saved" in r3
+    lst = T.execute("list_memory", {}, 0)
+    assert lst["count"] == 2
+    assert any(m["evidence"] == "对张总正式些" for m in lst["memories"])
+    assert T.execute("delete_memory", {"memory_id": r3["saved"]}, 0) == {"deleted": r3["saved"]}
+    assert "error" in T.execute("delete_memory", {"memory_id": r3["saved"]}, 0)
+    conn.execute("DELETE FROM agent_memory")
+    conn.commit()
+
+
+def test_memory_in_system_prompt():
+    """有记忆注入系统提示词尾部；清空后无该块。"""
+    conn = database.get_conn()
+    conn.execute("DELETE FROM agent_memory")
+    conn.commit()
+    assert "用户长期偏好" not in agent._system_prompt([], True)
+    r = T.execute("save_memory", {"content": "给张总回信要正式", "evidence": "给张总回信要正式一点"}, 0)
+    prompt = agent._system_prompt([], True)
+    assert "用户长期偏好" in prompt
+    assert "给张总回信要正式" in prompt and "「给张总回信要正式一点」" in prompt
+    T.execute("delete_memory", {"memory_id": r["saved"]}, 0)
+    assert "用户长期偏好" not in agent._system_prompt([], True)
+
+
+def test_agent_saves_memory_in_loop(monkeypatch):
+    """用户说「记住…」→ auto 模式直接执行（organize 授权）→ 审计留痕 + 注入提示词。"""
+    conn = database.get_conn()
+    conn.execute("DELETE FROM agent_memory")
+    conn.commit()
+    _script(monkeypatch, [
+        json.dumps({"tool": "save_memory",
+                    "args": {"content": "广告邮件直接归档", "evidence": "记住：广告类邮件直接归档"}}),
+        "已记住，之后广告类邮件我会直接归档。",
+    ])
+    aid = _aid()
+    events = list(agent.run_stream("记住：广告类邮件直接归档", None, None, [aid], "auto", None))
+    tr = _collect(events, "tool_result")[0]
+    assert tr["ok"] is True and tr["tool"] == "save_memory"
+    row = conn.execute(
+        "SELECT id, evidence FROM agent_memory WHERE content = '广告邮件直接归档'"
+    ).fetchone()
+    assert row is not None and row["evidence"] == "记住：广告类邮件直接归档"
+    act = conn.execute(
+        "SELECT status FROM ai_actions WHERE tool = 'save_memory' ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    assert act["status"] == "executed"
+    assert "广告邮件直接归档" in agent._system_prompt([aid], True)
+
+
+def test_memory_api():
+    """设置页查看/删除端点。"""
+    conn = database.get_conn()
+    conn.execute("DELETE FROM agent_memory")
+    conn.commit()
+    r = T.execute("save_memory", {"content": "偏好 A", "evidence": "原话 A"}, 0)
+    client = TestClient(app, base_url="http://127.0.0.1")  # 过 S1 本机 Host 校验
+    resp = client.get("/api/ai/memory")
+    assert resp.status_code == 200
+    items = resp.json()["memories"]
+    assert len(items) == 1 and items[0]["content"] == "偏好 A" and items[0]["evidence"] == "原话 A"
+    resp = client.delete(f"/api/ai/memory/{r['saved']}")
+    assert resp.status_code == 200 and resp.json()["ok"] is True
+    resp = client.delete(f"/api/ai/memory/{r['saved']}")
+    assert resp.json().get("error") == "记忆不存在"

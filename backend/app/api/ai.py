@@ -496,6 +496,26 @@ def agent_actions_clear(scope: str = "failed") -> dict:
     return agent.clear_actions(scope)
 
 
+@router.get("/memory")
+def memory_list() -> dict:
+    """用户长期偏好（agent_memory，§18.5）：设置页查看。"""
+    rows = get_conn().execute(
+        "SELECT id, content, evidence, source, created_at, updated_at"
+        " FROM agent_memory ORDER BY updated_at DESC"
+    ).fetchall()
+    return {"memories": [dict(r) for r in rows]}
+
+
+@router.delete("/memory/{memory_id}")
+def memory_delete(memory_id: int) -> dict:
+    """删除一条用户长期偏好。"""
+    cur = get_conn().execute("DELETE FROM agent_memory WHERE id = ?", (memory_id,))
+    get_conn().commit()
+    if cur.rowcount == 0:
+        return {"error": "记忆不存在"}
+    return {"ok": True, "deleted": memory_id}
+
+
 @router.post("/organize")
 def organize(payload: OrganizeIn) -> dict:
     """为未分类邮件补跑分类（「AI 整理」按钮）——异步任务。

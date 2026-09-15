@@ -505,6 +505,22 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE agent_runs ADD COLUMN summary_json TEXT;
         """,
     ),
+    (
+        24,
+        """
+        -- 跨会话记忆（REDESIGN_PLAN §18.5，2026-09-15）：用户长期偏好——
+        -- 只存用户本人原话要求（evidence 佐证必填防脑补），注入总管家系统提示词
+        -- 尾部；设置页可查看逐条清除；与 §17.8 会话内记忆（memory_json）分层。
+        CREATE TABLE IF NOT EXISTS agent_memory (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            content     TEXT NOT NULL,
+            evidence    TEXT NOT NULL,
+            source      TEXT NOT NULL DEFAULT 'agent',
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """,
+    ),
 ]
 
 

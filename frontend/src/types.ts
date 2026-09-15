@@ -325,6 +325,15 @@ export interface UserDraft {
 }
 
 /** AI Agent 动作审计行（v0.4 P6，ai_actions 表） */
+export interface AgentMemory {
+  id: number
+  content: string
+  evidence: string
+  source: string
+  created_at: string
+  updated_at: string
+}
+
 export interface AgentAction {
   id: number
   session_id: number | null

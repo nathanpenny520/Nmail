@@ -3,6 +3,7 @@ import type {
   AITestResult,
   Account,
   AgentAction,
+  AgentMemory,
   AccountAddPayload,
   AIProfile,
   AIProfilesResp,
@@ -276,6 +277,9 @@ export const api = {
     request<{ deleted?: number; error?: string }>(`/api/ai/agent/actions/${id}`, { method: 'DELETE' }),
   clearAgentActions: (scope: 'old' | 'failed' | 'all') =>
     request<{ deleted: number }>(`/api/ai/agent/actions?scope=${scope}`, { method: 'DELETE' }),
+  getAgentMemory: () => request<{ memories: AgentMemory[] }>('/api/ai/memory'),
+  deleteAgentMemory: (id: number) =>
+    request<{ ok?: boolean; error?: string }>(`/api/ai/memory/${id}`, { method: 'DELETE' }),
   updateAiGrants: (id: number, payload: {
     read: boolean; draft: boolean; organize: boolean; send: boolean; delete: boolean
     is_ai_mailbox?: boolean

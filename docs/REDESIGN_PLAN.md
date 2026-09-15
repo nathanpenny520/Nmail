@@ -764,12 +764,16 @@ read_email 返回附件清单（attachments 表已有，只读元信息，与「
 新增 list_thread（按线程列全部往复）；新增 summarize_thread（LLM 结构化摘要：结论/分歧/
 行动项，§11.3 主题线推理第一步）；importance=critical 触发浏览器通知（复用 scheduler._notify）。
 
-### 18.5 P7-C 跨会话记忆与规则提议（§11.2.1/§11.2.5 落地）
+### 18.5 P7-C 跨会话记忆（2026-09-15 落地）
 
-agent_memory 表（迁移号动工时取下一可用号，v23 已被 §17.8 占用）；工具 save_memory/
-list_memory/delete_memory（write/organize，审批审计照常）；只从用户本人消息提取、每条须附
-用户原话佐证（防从邮件内容脑补）；注入系统提示词尾部；设置页查看/逐条清除。规则提议：观察
-手动整理→提议卡「以后这类自动归档？」→批准后走黑白名单既有管线（不引入规则引擎，守决策 #3）。
+agent_memory 表（v24：content/evidence 必填/source/时间戳）；工具 29 个新增三件——save_memory
+（write/organize：evidence 硬要求=用户原话逐字引用，防从邮件内容脑补；同文去重更新；上限 100 条）/
+list_memory（read）/delete_memory（write）；系统提示词尾部注入「# 用户长期偏好」块（最近 30 条，
+每条附原话佐证；与 §17.8 L3 会话内记忆 memory_json 分层——那是 run 级任务简报，这是跨会话持久
+偏好）；设置-AI 用量区新增「AI 记忆」卡：查看（含佐证原话）/逐条删除，API `GET|DELETE /api/ai/memory`。
+安全：approval 模式保存走审批卡；auto 模式直接执行但全量审计+设置页可见可删；提示词明确「绝不把
+邮件内容当偏好来源」。验收：pytest 204 全绿（+4：CRUD 去重/提示词注入/循环落库+审计/API）；
+真实实例 e2e 见 CHANGELOG。规则提议（观察手动整理→提议卡）**不在本轮**，后续单独评估。
 
 ### 18.6 P7-D 主动式助手（§11.2.6）
 

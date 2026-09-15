@@ -714,6 +714,7 @@ export default function SettingsPage() {
           <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="t-lg font-semibold">AI 用量</h2>
             <AgentActionsList />
+            <AgentMemoryList />
             {!aiEnabled && (
               <p className="mt-1 t-sm text-gray-400">AI 已停用，以下为历史用量。</p>
             )}
@@ -2239,6 +2240,48 @@ function AgentActionsList() {
               className="shrink-0 text-gray-300 hover:text-red-500"
               title="删除该记录"
               onClick={() => delMutation.mutate(a.id)}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── AI 记忆（REDESIGN_PLAN §18.5）：跨会话用户偏好，查看/逐条清除 ──
+function AgentMemoryList() {
+  const queryClient = useQueryClient()
+  const listQuery = useQuery({ queryKey: ['ai-memory'], queryFn: api.getAgentMemory })
+  const memories = listQuery.data?.memories ?? []
+  const delMutation = useMutation({
+    mutationFn: (id: number) => api.deleteAgentMemory(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['ai-memory'] }),
+  })
+
+  return (
+    <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+      <div className="flex items-center gap-2">
+        <span className="t-sm font-medium text-gray-700">AI 记忆</span>
+        <span className="t-xs text-gray-400">总管家跨对话记住的你的偏好，只来自你说的话，可随时删除</span>
+      </div>
+      <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+        {listQuery.isLoading && <div className="py-2 t-sm text-gray-400">加载中…</div>}
+        {!listQuery.isLoading && memories.length === 0 && (
+          <div className="py-2 t-xs text-gray-300">还没有记忆。对话里说「记住…」即可让总管家长期记住</div>
+        )}
+        {memories.map((m) => (
+          <div key={m.id} className="flex items-start gap-2 rounded-lg bg-white px-2.5 py-1.5 t-xs">
+            <span className="min-w-0 flex-1 text-gray-700">
+              {m.content}
+              <span className="ml-1 text-gray-400">（原话：「{m.evidence}」）</span>
+            </span>
+            <span className="shrink-0 text-gray-300">{m.updated_at.slice(5, 10)}</span>
+            <button
+              className="shrink-0 text-gray-300 hover:text-red-500"
+              title="删除该记忆"
+              onClick={() => delMutation.mutate(m.id)}
             >
               <Trash2 className="h-3 w-3" />
             </button>

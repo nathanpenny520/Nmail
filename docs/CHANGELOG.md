@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — P7-C：跨会话记忆——AI 记住你的长期偏好（REDESIGN_PLAN §18.5）
+- agent_memory 表（v24：content/evidence 必填/source/时间戳）；工具 26→29——save_memory（write/organize，evidence 硬要求=用户原话逐字引用防从邮件内容脑补，同文去重更新，上限 100 条）/list_memory（读）/delete_memory（写）
+- 系统提示词尾部注入「# 用户长期偏好」块（最近 30 条，每条附原话佐证；与 §17.8 L3 会话内记忆 memory_json 分层——run 级简报 vs 跨会话持久偏好）
+- 设置-AI 用量区新增「AI 记忆」卡：查看（含佐证原话）/逐条删除；API GET|DELETE /api/ai/memory
+- 安全：approval 模式保存走审批卡；auto 模式直接执行但全量审计+设置页可见可删；提示词明确「绝不把邮件内容当偏好来源」
+- 验证：pytest 204 全绿（+4：CRUD 同文去重/提示词注入/循环 auto 落库+审计/TestClient API）、ruff 通过、npm build（tsc+字号门禁）通过、openapi 快照再生（110 端点）；8720 重启迁移 v24 后真实实例 e2e 全程——「请记住…」→模型调 save_memory→审批卡拦截→批准执行→独立新对话零历史传入仍凭注入块完整召回（复述偏好+逐字引用原话）→DELETE 清理零残留
+
 ## 12ead55 — P7-A：AI 操作历史管理——记录可删除+审计保留期+僵尸对账（REDESIGN_PLAN §18.3 瘦身版）
 - 用户拍板「回滚意义不大不做，历史可追溯可删除」：原撤销补全三项（create_draft/trash/update_draft 撤销）砍掉，既有撤销能力（标记/星标/分类/归档/移动/重命名）保持
 - 记录可删：DELETE /api/ai/agent/actions/{id} 单条 + DELETE /api/ai/agent/actions?scope=old|failed|all 批量（old=90 天前且保留已发送审计）；操作记录行删除按钮 +「清理」下拉（全部清空需 confirm）

@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0915-0829-跨会话记忆
+- 目标: P7-C 落地（REDESIGN_PLAN §18.5）——agent_memory 表（v24，evidence 用户原话硬要求防脑补）+ save/list/delete_memory 三工具（写类 organize 审批审计照常）+ 系统提示词尾部「# 用户长期偏好」注入（与 §17.8 L3 会话内记忆分层）+ 设置页 AI 用量区「AI 记忆」卡查看/逐条删
+- 范围: backend(app/ai/tools.py, agent.py, api/ai.py, db/database.py, tests/test_agent.py) + frontend(types.ts, api/client.ts, pages/SettingsPage.tsx, 快照) + docs(REDESIGN_PLAN §18.5, ARCHITECTURE, PRODUCT_PLAN §11.2, CHANGELOG, SESSIONS)
+- 状态: 进行中（2026-09-15 08:29 开工）
+
 ### S-0915-0754-操作历史管理 ✅
 - 目标: 用户拍板瘦身版 P7-A——回滚意义不大不做（create_draft/trash/update_draft 撤销砍掉），只做「AI 操作历史可追溯可删除」：行级删除+批量清理（old/failed/all）+保留期落地+僵尸对账+徽章弱化+_FakeMB 残留清理
 - 范围: backend(app/ai/agent.py, api/ai.py, db/database.py, tests/test_agent.py, tests/test_database.py) + frontend(api/client.ts, pages/SettingsPage.tsx, openapi/schema 快照) + docs(REDESIGN_PLAN §18.3, PRODUCT_PLAN §11.1, CHANGELOG, SESSIONS)
