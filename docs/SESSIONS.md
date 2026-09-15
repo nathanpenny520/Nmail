@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0915-1545-v040文档官网同步 🔄
+- 目标: v0.4.0 发布后的文档/官网对齐——①主仓 README 双语状态行落 v0.4.0 ②使用指南补 v0.4.x 用户向新能力（跨会话记忆/AI 晨报/触顶小结/澄清/技能包/运行恢复）③FAQ 补晨报与记忆两问 ④Agent接入指南补 CLI 总管家通道与版本协商 ⑤官网 nmail-site：版本口径 0.3.0→0.4.0、功能页/首页/项目卡文案、v0.4.0 发布动态帖
+- 范围: README.md, README.zh-CN.md, docs(使用指南, FAQ, Agent接入指南, CHANGELOG, SESSIONS) + nmail-site(独立仓另行提交)
+- 时间: 2026-09-15 15:45 开始
+
 ### S-0915-1420-安全审计修补 ✅
 - 目标: 四项审计短板的 A+B 阶段修补——A1 隧道管理面暴露修复（CF-* 边缘头拒绝）+ A2 密钥面加固（日志泄漏/XSS 链路扫描）+ A3 SQL 拼接抽查 + B 测试基建（前端 Vitest 首批冒烟、后端覆盖率报告）
 - 范围: backend(app/main.py, tests/test_source_guard.py, tests/test_agent_loop.py) + frontend(测试基建: package.json, vite.config, 首批组件测试) + docs(隐私与安全, 对外API使用指南, ARCHITECTURE, CHANGELOG, SESSIONS)

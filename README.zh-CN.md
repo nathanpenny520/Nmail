@@ -6,7 +6,7 @@ AI 驱动的本地聚合邮箱客户端 · 本地优先 · 隐私自持 · MIT �
 
 你只管看信、写信、拍板；AI 负责分类、过滤噪音、预先写好草稿、每天给你汇报。数据全部留在本机，AI 用你自己的 OpenAI 兼容 API key（也可指向 Ollama / LM Studio 实现 100% 本地推理）。收发走标准 IMAP/SMTP，不自建任何邮件服务；Gmail / Outlook 已停用密码直连，Nmail 内置公开凭证支持 OAuth2 一键授权（也可自建 OAuth 应用，详见 [docs/OAuth2 使用指南.md](docs/OAuth2%20使用指南.md)）。
 
-> 产品方案与路线图见 [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)；v0.4 改版主线见 [docs/REDESIGN_PLAN.md](docs/REDESIGN_PLAN.md)；**安装、首次使用与更新详见 [docs/INSTALL.md](docs/INSTALL.md)**；使用手册、常见问题、对外 API、隐私与安全等更多文档见 [docs/](docs/) 目录（官网 <https://nmail.whizzzest.com/docs/> 同步镜像）。当前进度：v0.3.0 已发布；v0.4 改版与 v0.4.x Agent 化（AI 总管家：原生工具调用+可恢复长链+人人对齐工具集+Claude 式过程展示）已落地。
+> 产品方案与路线图见 [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)；v0.4 改版主线见 [docs/REDESIGN_PLAN.md](docs/REDESIGN_PLAN.md)；**安装、首次使用与更新详见 [docs/INSTALL.md](docs/INSTALL.md)**；使用手册、常见问题、对外 API、隐私与安全等更多文档见 [docs/](docs/) 目录（官网 <https://nmail.whizzzest.com/docs/> 同步镜像）。当前进度：**v0.4.0 已发布**——AI 总管家 Agent 化收官（原生工具调用+可恢复长链+人人对齐工具集+Claude 式过程展示），并新增跨会话记忆、AI 晨报、触顶进度小结、ask_user 澄清中断、内置技能包、CLI 总管家通道（`nmail-cli agent ask`）。
 
 ## 快速开始
 
