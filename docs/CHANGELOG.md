@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — 安全加固：公网隧道管理面拦截（CF-* 边缘头 403，审计 A1）
+## 3621831 — 安全加固：公网隧道管理面拦截（CF-* 边缘头 403，审计 A1）
 - 审计背景：文档推荐的 cloudflared 公网隧道默认把转发请求的 Host 重写为 origin 地址、curl 类客户端不带 Origin——Host/Origin 两道本机校验双双失效，管理面明文回显端点（/api/accounts、/api/extkeys）经公网域名无需任何 Key 即可达（本机探针实证；方案与证据链在 personal-data/审计方案-2026-09-15.md，不入库）
 - 修复（main.py 来源守卫第三层）：非 `/api/ext/*` 请求携带 CF-* 头（Cloudflare 边缘特征，cloudflared 原样转发）一律 403——SSH 隧道（无附加头）与 Tailscale serve（仅 X-Forwarded-*）不受影响；`/api/ext/*` 在守卫之前已放行，持 Key 公网调用不变
 - 测试：test_source_guard.py +4（CF 头矩阵拒绝 / ext 带 CF 头放行 / X-Forwarded-* 不拦 / ext Host 豁免）；顺带清 test_agent_loop.py 一处 F841；pytest 228 全绿（+4）、ruff 通过
