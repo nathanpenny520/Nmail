@@ -282,6 +282,65 @@ def test_search_covers_archived_and_filters():
     assert hint.get("count") == 0 and "hint" in hint  # 空结果带下一步建议
 
 
+def test_read_tools_cover_all_scope_accounts():
+    """压测回归（run 33，2026-09-15）：多账号会话读类工具默认只搜主账号——
+    默认应覆盖全会话范围，否则「全部账号」下其余账号永远搜不到。"""
+    aid1 = _aid()
+    aid2 = _aid()
+    eid1 = _seed_email(aid1, 81, "主账号邮件")
+    eid2 = _seed_email(aid2, 82, "安全演练", sender="sec-test@x.local")
+    r = T.execute("search_emails", {"sender": "sec-test"}, aid1, [aid1, aid2])
+    assert r.get("count") == 1 and r["emails"][0]["id"] == eid2  # 副账号能搜到（此前锁主账号→0 封）
+    r2 = T.execute("search_emails", {"q": "安全演练"}, aid1, [aid1, aid2])
+    assert r2.get("count") == 1
+    recent = T.execute("list_recent_emails", {"folder": "INBOX", "limit": 50}, aid1, [aid1, aid2])
+    assert {e["id"] for e in recent["emails"]} >= {eid1, eid2}  # 两账号都覆盖
+    folders = T.execute("list_folders", {}, aid1, [aid1, aid2])
+    assert isinstance(folders.get("accounts"), list) and len(folders["accounts"]) == 2
+    single = T.execute("list_folders", {}, aid1, [aid1])
+    assert "folders" in single  # 单账号维持原返回形态
+
+
+def test_content_400_does_not_poison_native_cache(monkeypatch):
+    """压测回归（run 25→33 连环）：请求内容类 400（配对错误）不得被误判为
+    「端点不支持 tools」而降级+永久缓存——如实抛错，协议探测结果不被污染。"""
+    aid = _aid()
+    import httpx
+    from openai import APIStatusError
+
+    response = httpx.Response(400, request=httpx.Request("POST", "http://x"))
+
+    def fake_iter(base_url, model, api_key, messages, tools=None, tool_choice=None,
+                  max_tokens=2000, temperature=0.3):
+        if False:
+            yield ("text_delta", "")
+        raise APIStatusError(
+            "Error code: 400 - An assistant message with 'tool_calls' must be followed"
+            " by tool messages responding to each 'tool_call_id'",
+            response=response, body=None)
+
+    database.set_setting(f"agent_native::{'http://x'}::test-model", "1")
+    monkeypatch.setattr(agent.tasks, "_ai_config", lambda pid=None: ("http://x", "test-model", None))
+    monkeypatch.setattr(agent, "_native_supported", lambda *a, **k: True)
+    monkeypatch.setattr(agent.llm, "iter_chat_step", fake_iter)
+    events = list(agent.run_stream("概况", None, None, [aid], "approval", None))
+    assert _collect(events, "error")  # 如实报错
+    # 协议缓存未被污染（仍为 1=支持），后续会话继续走原生通道
+    assert database.get_setting(f"agent_native::{'http://x'}::test-model") in (None, "1")
+
+
+def test_leaked_markup_final_answer_is_intercepted(monkeypatch):
+    """压测回归（run 33）：解析失败的调用标记绝不能作为最终回答泄漏给用户。"""
+    aid = _aid()
+    _native_script(monkeypatch, [
+        (['<｜｜DSML｜｜ invoke>残缺无名的标记片段'], []),
+    ])
+    events = list(agent.run_stream("读一下", None, None, [aid], "approval", None))
+    texts = [e["text"] for e in _collect(events, "text")]
+    assert texts and "已拦截" in texts[-1]  # 友好提示而非原文
+    assert "DSML" not in texts[-1] and "invoke" not in texts[-1]
+
+
 def test_set_category_tool_and_undo_roundtrip(monkeypatch):
     """set_category：设置/清除分类与需回复标记，undo 恢复原值。"""
     aid = _aid()

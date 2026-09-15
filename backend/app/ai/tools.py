@@ -90,7 +90,6 @@ def _t_search(args: dict, primary: int, scope: list[int]) -> dict:
     永远搜不到）；空结果返回结构化 hint（工具输出即下一步建议）。
     """
     q = str(args.get("q") or "").strip()
-    account_id = args.get("account_id") or primary
     limit = min(int(args.get("limit") or 10), 50)
     where, params = ["e.archived_local = 0"], []
     if q:
@@ -115,14 +114,17 @@ def _t_search(args: dict, primary: int, scope: list[int]) -> dict:
     if args.get("needs_reply"):
         where.append("e.needs_reply = 1")
     folder = str(args.get("folder") or "").strip()
-    if account_id:
-        where.append("e.account_id = ?")
-        params.append(account_id)
-        if folder and folder.upper() != "ALL":
-            where.append("e.folder = ?")
-            params.append(folder)
-        else:
-            where.append(f"e.folder NOT IN ({', '.join(_SPECIAL_EXCLUDED)})")
+    # 账号范围：显式 account_id 优先，否则全会话范围（压测 run 33 发现：多账号
+    # 会话默认锁主账号，其余账号的邮件永远搜不到）
+    ids = [int(args["account_id"])] if args.get("account_id") \
+        else [int(a) for a in (scope or [primary])]
+    where.append(f"e.account_id IN ({', '.join('?' * len(ids))})")
+    params += ids
+    if folder and folder.upper() != "ALL":
+        where.append("e.folder = ?")
+        params.append(folder)
+    else:
+        where.append(f"e.folder NOT IN ({', '.join(_SPECIAL_EXCLUDED)})")
     date_from = str(args.get("date_from") or "").strip()
     if date_from:
         where.append("COALESCE(e.date_sort, e.date) >= ?")
@@ -148,14 +150,17 @@ def _t_search(args: dict, primary: int, scope: list[int]) -> dict:
 
 
 def _t_list_recent(args: dict, primary: int, scope: list[int]) -> dict:
-    account_id = args.get("account_id") or primary
+    # 账号范围同 _t_search：显式指定优先，否则全会话范围
+    ids = [int(args["account_id"])] if args.get("account_id") \
+        else [int(a) for a in (scope or [primary])]
     folder = str(args.get("folder") or "INBOX")
     limit = min(int(args.get("limit") or 10), MAX_LIST)
+    ph = ", ".join("?" * len(ids))
     rows = get_conn().execute(
-        "SELECT id, subject, sender_name, sender_email, date, snippet, is_read FROM emails"
-        " WHERE account_id = ? AND folder = ? AND archived_local = 0"
-        " ORDER BY COALESCE(date_sort, date) IS NULL, COALESCE(date_sort, date) DESC LIMIT ?",
-        (account_id, folder, limit),
+        f"SELECT id, subject, sender_name, sender_email, date, snippet, is_read FROM emails"
+        f" WHERE account_id IN ({ph}) AND folder = ? AND archived_local = 0"
+        f" ORDER BY COALESCE(date_sort, date) IS NULL, COALESCE(date_sort, date) DESC LIMIT ?",
+        [*ids, folder, limit],
     ).fetchall()
     return {"count": len(rows), "emails": [
         {"id": r["id"], "subject": r["subject"], "from": r["sender_name"] or r["sender_email"],
@@ -182,8 +187,18 @@ def _t_read_email(args: dict, primary: int, scope: list[int]) -> dict:
 
 
 def _t_list_folders(args: dict, primary: int, scope: list[int]) -> dict:
-    account_id = args.get("account_id") or primary
-    return {"folders": [f["name"] for f in folders_core.cached_list(account_id)]}
+    # 账号范围同 _t_search：显式指定优先，否则全会话范围（多账号按账号分组返回）
+    ids = [int(args["account_id"])] if args.get("account_id") \
+        else [int(a) for a in (scope or [primary])]
+    if len(ids) == 1:
+        return {"folders": [f["name"] for f in folders_core.cached_list(ids[0])]}
+    conn = get_conn()
+    accounts = []
+    for aid in ids:
+        row = conn.execute("SELECT email FROM accounts WHERE id = ?", (aid,)).fetchone()
+        accounts.append({"account_id": aid, "account": row["email"] if row else f"#{aid}",
+                         "folders": [f["name"] for f in folders_core.cached_list(aid)]})
+    return {"accounts": accounts}
 
 
 def _t_list_contacts(args: dict, primary: int, scope: list[int]) -> dict:

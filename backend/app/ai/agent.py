@@ -68,6 +68,7 @@ _SYSTEM_NATIVE = """你是「Nmail AI 总管家」，本地邮箱客户端里的
 
 # 输出
 - 面向用户的话用中文、简洁；不要向用户展示工具名、参数 JSON 或内部 id。
+- 发起工具调用只能通过函数调用通道；绝不在回复正文里输出任何调用标记或标签语法（如 DSML/invoke 等）。
 - 调工具前需要说明意图时，先输出一句话再调用。
 
 当前会话范围：{scope_desc}。今天是 {today}。"""
@@ -119,7 +120,8 @@ def _memory_prompt_block() -> str:
             + "\n".join(lines))
 
 
-def _system_prompt(account_ids: list[int], native: bool) -> str:
+def _system_prompt(account_ids: list[int], native: bool,
+                   allowed: frozenset[str] | None = None) -> str:
     conn = get_conn()
     if account_ids:
         ph = ",".join("?" for _ in account_ids)
@@ -130,8 +132,9 @@ def _system_prompt(account_ids: list[int], native: bool) -> str:
     if native:
         return (_SYSTEM_NATIVE.format(scope_desc=scope_desc, today=time.strftime("%Y-%m-%d"))
                 + _memory_prompt_block())
+    tool_specs = [t for t in T.TOOLS.values() if allowed is None or t.name in allowed]
     tool_lines = "\n".join(
-        f"- {t.name} | {t.description} | 参数: {t.params}" for t in T.TOOLS.values()
+        f"- {t.name} | {t.description} | 参数: {t.params}" for t in tool_specs
     )
     return (_SYSTEM_FALLBACK.format(tools=tool_lines, scope_desc=scope_desc,
                                     today=time.strftime("%Y-%m-%d")) + _memory_prompt_block())
@@ -151,12 +154,31 @@ def _native_supported(base_url: str, model: str, api_key: str | None) -> bool:
     return True if v is None else bool(v)
 
 
-# 部分模型会把原生工具调用标记（如 <|DSML|invoke name="x">...）当文本输出——
-# 二次提取为标准动作，避免内部语法泄漏给用户（实测 2026-09-12，v0.4 P6 验收）
+# 部分模型会把原生工具调用标记当文本输出——二次提取为标准动作，避免内部语法
+# 泄漏给用户（实测 2026-09-12 ASCII 竖线、2026-09-15 全角竖线｜变体，压测发现）。
+# 竖线数与全/半角均宽容匹配。
 _INVOKE_BLOCK_RE = re.compile(
-    r'<\|?DSML\|?\s*invoke name="([^"]+)"\s*>(.*?)</\|?DSML\|?\s*invoke>', re.DOTALL,
+    r'<[|｜]{0,2}\s*DSML\s*[|｜]{0,2}\s*invoke\s+name="([^"]+)"\s*>(.*?)'
+    r'</[|｜]{0,2}\s*DSML\s*[|｜]{0,2}\s*invoke\s*>',
+    re.DOTALL | re.IGNORECASE,
 )
 _ARGS_JSON_RE = re.compile(r'\{.*\}', re.DOTALL)
+# 疑似调用标记指纹（含任意变体）：解析失败时拦截原文不下发；generic 兜底提取用
+_MARKUP_HINT_RE = re.compile(r'<[|｜]{0,2}\s*DSML|invoke\s+name\s*=', re.IGNORECASE)
+_GENERIC_INVOKE_RE = re.compile(r'invoke\s+name\s*=\s*"([^"]+)"', re.IGNORECASE)
+
+
+def _extract_invoke_args(text: str, start: int) -> dict:
+    """从 start 起取第一个平衡 JSON 作为调用参数；失败返回空 dict。"""
+    args_m = _ARGS_JSON_RE.search(text[start:])
+    if args_m:
+        try:
+            parsed = json.loads(args_m.group(0))
+            if isinstance(parsed, dict):
+                return parsed
+        except ValueError:
+            pass
+    return {}
 
 
 def _parse_model_action(text: str) -> dict | None:
@@ -167,20 +189,18 @@ def _parse_model_action(text: str) -> dict | None:
         action = None
     if isinstance(action, dict) and action.get("tool"):
         return action
+    if not _MARKUP_HINT_RE.search(text or ""):
+        return None
     for m in _INVOKE_BLOCK_RE.finditer(text or ""):
         tool = m.group(1).strip()
         if not tool:
             continue
-        args: dict = {}
-        args_m = _ARGS_JSON_RE.search(m.group(2))
-        if args_m:
-            try:
-                parsed = json.loads(args_m.group(0))
-                if isinstance(parsed, dict):
-                    args = parsed
-            except ValueError:
-                pass
-        return {"tool": tool, "args": args}
+        return {"tool": tool, "args": _extract_invoke_args(text, m.start(2))}
+    # 兜底：任意包装的 invoke name="x"（标记变体层出不穷，全角竖线为实测案例）
+    gm = _GENERIC_INVOKE_RE.search(text or "")
+    if gm and gm.group(1).strip():
+        return {"tool": gm.group(1).strip(),
+                "args": _extract_invoke_args(text, gm.end())}
     return None
 
 
@@ -325,6 +345,7 @@ class RunState:
     daily_sends: int = 0
     daily_actions: int = 0
     pending: dict | None = None   # {"action_id","call_id","tool","args"}
+    allowed: frozenset[str] | None = None  # §18.6 定时运行工具白名单（None=不限）
     run_id: int = 0
     status: str = "running"
     # 上下文管理（§17.8）：窗口与水位计量（不落库——resume 时按档案重解析）
@@ -341,12 +362,13 @@ def _create_run(state: RunState) -> int:
     conn = get_conn()
     cur = conn.execute(
         "INSERT INTO agent_runs (session_id, mode, origin, account_ids_json, profile_id,"
-        " messages_json, status, steps, budget_used_ms, native)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " messages_json, status, steps, budget_used_ms, native, allowed_json)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (state.session_id, state.mode, state.origin,
          json.dumps(state.account_ids), state.profile_id,
          json.dumps(state.messages, ensure_ascii=False), state.status,
-         state.steps, int(state.budget_used_s * 1000), 1 if state.native else 0),
+         state.steps, int(state.budget_used_s * 1000), 1 if state.native else 0,
+         json.dumps(sorted(state.allowed), ensure_ascii=False) if state.allowed else None),
     )
     conn.commit()
     return int(cur.lastrowid)
@@ -358,11 +380,14 @@ def _save_run(state: RunState, status: str | None = None) -> None:
     conn = get_conn()
     conn.execute(
         "UPDATE agent_runs SET messages_json = ?, pending_json = ?, status = ?, steps = ?,"
-        " budget_used_ms = ?, native = ?, updated_at = datetime('now') WHERE id = ?",
+        " budget_used_ms = ?, native = ?, allowed_json = ?, updated_at = datetime('now')"
+        " WHERE id = ?",
         (json.dumps(state.messages, ensure_ascii=False),
          json.dumps(state.pending, ensure_ascii=False) if state.pending else None,
          state.status, state.steps, int(state.budget_used_s * 1000),
-         1 if state.native else 0, state.run_id),
+         1 if state.native else 0,
+         json.dumps(sorted(state.allowed), ensure_ascii=False) if state.allowed else None,
+         state.run_id),
     )
     conn.commit()
 
@@ -378,12 +403,18 @@ def _load_run(run_id: int) -> RunState | None:
     except ValueError:
         return None
     native = bool(row["native"])  # v22 起落库；旧消息形态推断已不需要
+    try:
+        allowed = (frozenset(json.loads(row["allowed_json"]))
+                   if row["allowed_json"] else None)  # v25：定时运行工具白名单
+    except ValueError:
+        allowed = None
     return RunState(
         session_id=row["session_id"], account_ids=account_ids,
         mode=row["mode"], profile_id=row["profile_id"], origin=row["origin"],
         messages=messages, steps=int(row["steps"]),
         budget_used_s=int(row["budget_used_ms"]) / 1000.0,
-        native=native, pending=pending, run_id=int(row["id"]), status=row["status"],
+        native=native, pending=pending, allowed=allowed,
+        run_id=int(row["id"]), status=row["status"],
     )
 
 
@@ -411,6 +442,12 @@ def _call_model(state: RunState, tools_schema: list[dict] | None, tool_choice: s
             status = getattr(exc, "status_code", None)
             # 已流出部分文本后再降级会重复输出，此时原样抛出
             if status not in _UNSUPPORTED_STATUS or parts:
+                raise
+            # 压测发现（2026-09-15）：请求内容类 400（如消息配对错误）会被误判成
+            # 「端点不支持 tools」→ 降级并永久缓存 → 全部会话掉进 JSON 弱协议。
+            # 两条守卫：跑过至少一步说明 tools 通道是通的；报错提及 tool_calls
+            # 说明是配对/内容问题。二者都如实抛错，绝不污染协议缓存。
+            if state.steps > 0 or "tool_call" in str(exc).lower():
                 raise
             state.native = False
             set_setting(_native_key(base_url, model), False)  # 降级探测结果落缓存
@@ -588,9 +625,10 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
     grants = T.resolve_grants(state.account_ids)
     primary = state.account_ids[0]
     state.daily_sends, state.daily_actions = _daily_counts(state.account_ids)
+    tool_specs = [t for t in T.TOOLS.values() if state.allowed is None or t.name in state.allowed]
     tools_schema = [
         {"name": t.name, "description": t.description, "parameters": t.schema}
-        for t in T.TOOLS.values()
+        for t in tool_specs
     ]
     note_pending = False
     overflow_retry_left = 1  # 溢出自愈只重试一次（§17.8）
@@ -679,6 +717,9 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
 
             if not calls:
                 text = (content or "").strip()
+                if text and _MARKUP_HINT_RE.search(text):
+                    # 二次防御（压测 2026-09-15）：解析失败的工具标记绝不原样下发
+                    text = "（模型输出了一段内部调用标记，已拦截、未执行任何操作。请重试或换个说法。）"
                 if text:
                     # 最终回答也要落 messages（run 记录完整性；JSON 降级路径同样回显）
                     state.messages.append({"role": "assistant", "content": text})
@@ -706,6 +747,15 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
                            "ok": False, "summary": err}
                     _append_feedback(state, mode_used, call, {"error": err}, err, ok=False,
                                      hint="请改用其他工具或直接回答用户。")
+                    continue
+                if state.allowed is not None and tool_name not in state.allowed:
+                    # §18.6 定时运行硬边界：白名单外工具（schema 已过滤，此为模型
+                    # 无视清单时的执行层兜底）直接拒绝并回灌，不落审计、不执行
+                    err = f"{tool_name} 不在本次定时运行的工具范围内，已拒绝"
+                    yield {"type": "tool_result", "tool": tool_name, "call_id": call.get("id"),
+                           "ok": False, "summary": err}
+                    _append_feedback(state, mode_used, call, {"error": err}, err, ok=False,
+                                     hint="本次运行仅限只读、拟草稿与本地标记类工具，请据此调整或如实说明。")
                     continue
                 yield {"type": "tool_call", "tool": tool_name, "call_id": call.get("id"),
                        "args": call.get("arguments") or {}, "grant": spec.grant}
@@ -810,7 +860,8 @@ def _approval_meta(tool_name: str, args: dict, primary: int) -> dict:
 
 def run_stream(question: str, history: list[dict] | None, session_id: int | None,
                account_ids: list[int], mode: str, profile_id: str | None,
-               origin: str = "ui") -> Generator[dict, None, None]:
+               origin: str = "ui",
+               allowed_tools: frozenset[str] | None = None) -> Generator[dict, None, None]:
     """Agent 主循环入口（新问题）。事件：run_started / text_delta / text /
     tool_call / tool_result / approval_required / paused / error / done。"""
     if not account_ids:
@@ -832,8 +883,9 @@ def run_stream(question: str, history: list[dict] | None, session_id: int | None
         mode=mode, profile_id=profile_id, origin=origin,
         native=_native_supported(base_url, model, api_key),
         window=C.resolve_window(profile_id),
+        allowed=allowed_tools,
     )
-    system_prompt = _system_prompt(state.account_ids, state.native)
+    system_prompt = _system_prompt(state.account_ids, state.native, state.allowed)
     # L3 会话记忆：任务简报+动作台账注入 system 尾部（run 内不再变动，前缀缓存友好）
     memory = C.load_memory(session_id)
     if memory["brief"] or memory["ledger"]:

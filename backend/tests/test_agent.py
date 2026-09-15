@@ -89,6 +89,12 @@ def test_native_tool_markup_extraction():
             '</|DSML|parameter></|DSML|invoke></|DSML|calls>')
     action = agent._parse_model_action(text)
     assert action == {"tool": "list_folders", "args": {"account_id": "3"}}
+    # 全角竖线变体（压测 run 33 实测：deepseek 在 JSON 降级模式下输出｜｜DSML｜｜）
+    fullwidth = ('<｜｜DSML｜｜ calls> <｜｜DSML｜｜ invoke name="read_email"> '
+                 '<｜｜DSML｜｜ parameter name="args" string="false">{"email_id": "460"}'
+                 '</｜｜DSML｜｜ parameter> </｜｜DSML｜｜ invoke> </｜｜DSML｜｜ calls>')
+    action2 = agent._parse_model_action(fullwidth)
+    assert action2 == {"tool": "read_email", "args": {"email_id": "460"}}
     # 纯文本（非 JSON 非标记）→ None，作为最终回答展示
     assert agent._parse_model_action("这是给用户的普通回答。") is None
 
