@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — P7-D：AI 晨报（调度定时运行+工具白名单硬边界）+ 规则提议（REDESIGN_PLAN §18.5/§18.6）
+## ecd3789 — P7-D：AI 晨报（调度定时运行+工具白名单硬边界）+ 规则提议（REDESIGN_PLAN §18.5/§18.6）
 - 规则提议（§18.5 拍板落地）：core/rule_proposals 观察用户手动归档/删除（imap_batch 任务体回写，rule_observations 按 email_id 去重），同发件人 14 天 ≥3 次 → pending 提议（agent_proposals；已在名单/已有 pending/rejected 不再提、上限 5 防骚扰）；设置-AI 用量「规则提议」卡采纳/忽略；采纳转调 add_sender_list 既有黑名单管线（不入 agent 审计——用户手动决定），忽略后同发件人不再提；GET 列表懒触发兜底
 - AI 晨报（§18.6，用户拍板：与每日摘要调度骨架结合）：设置-通用新增开关（agent_brief_enabled 默认关），开启后 digest_time 到点由 scheduler 触发 agent 定时运行替代当日摘要（当天标记 KV agent_brief_last_run；独立线程不阻塞 tick）；origin=scheduler+auto 模式+固定指令（总结未读+create_draft 拟稿+set_category 标记）
 - 硬边界=工具白名单：run_stream 新增 allowed_tools（SCHEDULER_ALLOWED=7 读类+create_draft/set_category），schema 过滤+执行层双拦（点名白名单外工具直接拒绝且不落审计），agent_runs.allowed_json 持久化（续跑不丢）；草稿只进待审列表由用户确认发送
