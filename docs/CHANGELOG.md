@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — ci: 发版产物补齐——DMG / Windows zip / Release Notes 自动化 / tap cask（WIND_DOWN_PLAN P1）
+## 051f4c9 — ci: 发版产物补齐——DMG / Windows zip / Release Notes 自动化 / tap cask（WIND_DOWN_PLAN P1）
 - release.yml binaries job：macOS 分支新增 DMG 两栏拖装（Nmail.app + /Applications 软链，hdiutil UDZO）→ 新资产 `nmail-macos-arm64.dmg`；Windows 分支新增 portable zip（Compress-Archive 打包 exe）→ 新资产 `nmail-windows-x64.zip`
 - homebrew-tap job 新增「更新 tap cask」步骤：从 `scripts/cask_template.rb` 渲染版本号与 SHA256 后 create-or-update `Casks/nmail.rb`（首版自动创建，后续自动 bump；指 dmg 资产、`depends_on arch: :arm64`、livecheck github_latest）
 - 本机验证：release.yml YAML 校验过；cask 模板 sed 渲染 + `ruby -c` 语法过；DMG 两栏布局本机 hdiutil 实测（挂载后 Applications 软链 + Nmail.app 就位）

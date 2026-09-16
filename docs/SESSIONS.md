@@ -19,7 +19,9 @@
 ### S-0916-1258-收尾计划 🔄
 - 目标: 收官阶段——按 docs/WIND_DOWN_PLAN.md（用户 2026-09-16 拍板：自家 tap cask、dmg 首选 .app.zip 保留、Intel 放弃、不迁 Tauri、Release Notes 自动化、键盘收尾）落地 P1–P4
 - 范围: .github/workflows/release.yml + 独立仓 homebrew-nmail（Casks/nmail.rb）+ backend(app/core/channel.py 视验证) + frontend(MailBrowser `?` 面板) + docs(INSTALL/README 双语/使用指南/WIND_DOWN_PLAN/CHANGELOG/SESSIONS) + 官网 download.astro
-- 时间: 2026-09-16 12:58 开工
+- 产出: P3 键盘收尾完成（0f9f065：游标可见/焦点陷阱 Esc 脱困/键位 code||key 双通道/阅读态 j/k 切换 + `?` 帮助面板 + 使用指南表补全）；P1 CI 侧完成（051f4c9：release.yml DMG/Windows zip/generate_release_notes + scripts/cask_template.rb + tap job 渲染 create-or-update Casks/nmail.rb；YAML/ruby -c/DMG 本机实测过）
+- 遗留: 发版轮打包做——channel.py bundle 渠道（.app/dmg/cask 不自更新）+ pytest、文档四处同步（INSTALL/README 双语/官网 download.astro DMG 常量/cask 命令）、`bash scripts/release.sh 0.4.3` 实发核对（cask 全链路 brew install --cask、dmg 拖装、Release Notes 渲染）
+- 时间: 2026-09-16 12:58 开工，键盘修复与 P1 CI 已推，发版轮待用户确认后执行
 
 ### S-0916-0020-Windows无窗口化 ✅
 - 目标: 用户反馈 Windows 双击 exe 弹命令行黑窗、误点 X 即杀后端——方案经三轮确认（无窗口化+日志落盘+崩溃兜底+退出入口；备选托盘/.vbs/pywebview 否决）后拍板实施
