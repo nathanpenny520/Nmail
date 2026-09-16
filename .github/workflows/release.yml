@@ -130,6 +130,20 @@ jobs:
           echo "APPL????" > Nmail.app/Contents/PkgInfo
           cp backend/app/assets/nmail.icns Nmail.app/Contents/Resources/AppIcon.icns
           zip -qry "${{ matrix.name }}.app.zip" Nmail.app
+      # DMG 两栏拖装（WIND_DOWN_PLAN 决策 2：dmg 首选，.app.zip 保留）
+      - name: 打包 macOS DMG
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          DMG_DIR=$(mktemp -d)
+          cp -R Nmail.app "$DMG_DIR/"
+          ln -s /Applications "$DMG_DIR/Applications"
+          hdiutil create -volname Nmail -srcfolder "$DMG_DIR" -format UDZO -ov "${{ matrix.name }}.dmg"
+      # Windows 解压即用（WIND_DOWN_PLAN 决策 6：无签名，SmartScreen 警告依旧，仅打包体验升级）
+      - name: 打包 Windows portable zip
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: Compress-Archive -Path ${{ matrix.name }}${{ matrix.ext }} -DestinationPath ${{ matrix.name }}.zip -Force
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
@@ -140,16 +154,39 @@ jobs:
         with:
           name: ${{ matrix.name }}.app.zip
           path: ${{ matrix.name }}.app.zip
+      - name: 上传 DMG 构建产物
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}.dmg
+          path: ${{ matrix.name }}.dmg
+      - name: 上传 Windows zip 构建产物
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}.zip
+          path: ${{ matrix.name }}.zip
       - name: 附加到 GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.name }}${{ matrix.ext }}
+          generate_release_notes: true
       - name: .app.zip 附加到 GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'macos-latest'
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.name }}.app.zip
+      - name: DMG 附加到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'macos-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.name }}.dmg
+      - name: Windows zip 附加到 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.name }}.zip
 
   # ③ 同步 Homebrew tap（可选：在仓库 Secrets 配置 HOMEBREW_TAP_TOKEN——
   #    一个可写 nathanpenny520/homebrew-nmail 的 fine-grained PAT；未配置时此 job 直接跳过）
@@ -182,3 +219,26 @@ jobs:
             "https://api.github.com/repos/nathanpenny520/homebrew-nmail/contents/Formula/nmail.rb" \
             -d "{\"message\":\"nmail ${TAG}\",\"content\":\"${B64}\",\"sha\":\"${BLOB_SHA}\"}" > /dev/null
           echo "tap updated to ${TAG}"
+      # GUI 渠道：渲染 Casks/nmail.rb 并 create-or-update（WIND_DOWN_PLAN 决策 1，自家 tap cask）
+      - name: 更新 tap cask（dmg 拖装，无 Gatekeeper 警告）
+        if: env.TAP_TOKEN != ''
+        run: |
+          set -e
+          TAG_REF="${GITHUB_REF_NAME}"
+          TAG="${TAG_REF#v}"
+          URL="https://github.com/nathanpenny520/Nmail/releases/download/${TAG_REF}/nmail-macos-arm64.dmg"
+          SHA=$(curl -fsSL "$URL" | sha256sum | cut -d' ' -f1)
+          sed -e "s#{{VERSION}}#${TAG}#" -e "s#{{SHA256}}#${SHA}#" scripts/cask_template.rb > /tmp/nmail.rb
+          AUTH="Authorization: Bearer $TAP_TOKEN"
+          HTTP=$(curl -sSL -o /tmp/cask_meta.json -w '%{http_code}' -H "$AUTH" \
+            "https://api.github.com/repos/nathanpenny520/homebrew-nmail/contents/Casks/nmail.rb?ref=main" || true)
+          BLOB_SHA=""
+          if [ "$HTTP" = "200" ]; then
+            BLOB_SHA=$(python3 -c "import json; print(json.load(open('/tmp/cask_meta.json')).get('sha',''))")
+          fi
+          if [ -n "$BLOB_SHA" ]; then SHA_JSON="\"sha\":\"${BLOB_SHA}\","; else SHA_JSON=""; fi
+          B64=$(base64 -w0 /tmp/nmail.rb)
+          curl -fsSL -X PUT -H "$AUTH" \
+            "https://api.github.com/repos/nathanpenny520/homebrew-nmail/contents/Casks/nmail.rb" \
+            -d "{\"message\":\"nmail cask ${TAG}\",${SHA_JSON}\"content\":\"${B64}\"}" > /dev/null
+          echo "cask updated to ${TAG}"

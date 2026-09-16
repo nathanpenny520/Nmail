@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — ci: 发版产物补齐——DMG / Windows zip / Release Notes 自动化 / tap cask（WIND_DOWN_PLAN P1）
+- release.yml binaries job：macOS 分支新增 DMG 两栏拖装（Nmail.app + /Applications 软链，hdiutil UDZO）→ 新资产 `nmail-macos-arm64.dmg`；Windows 分支新增 portable zip（Compress-Archive 打包 exe）→ 新资产 `nmail-windows-x64.zip`
+- homebrew-tap job 新增「更新 tap cask」步骤：从 `scripts/cask_template.rb` 渲染版本号与 SHA256 后 create-or-update `Casks/nmail.rb`（首版自动创建，后续自动 bump；指 dmg 资产、`depends_on arch: :arm64`、livecheck github_latest）
+- 本机验证：release.yml YAML 校验过；cask 模板 sed 渲染 + `ruby -c` 语法过；DMG 两栏布局本机 hdiutil 实测（挂载后 Applications 软链 + Nmail.app 就位）
+- 留发版轮验证：cask 全链路 `brew install --cask`、dmg 拖装实测、Release Notes 渲染效果
+- 会话：S-0916-1258-收尾计划
+
 ## 0f9f065 — fix: 快捷键失灵四连根因修复 + `?` 帮助面板（WIND_DOWN_PLAN P3）
 - 用户报障「上一封/下一封、删除、聚焦搜索用不了」，真机排查为四个叠加根因：①键盘游标（cursorId）在渲染层零引用——j/k 实际在动但毫无视觉反馈，等同失灵；②焦点陷阱——用过 `/` 或点过输入框后焦点困在输入框，守卫让全部快捷键静默失效且无任何提示（主因）；③中文输入法全角标点下 `＃`/`／` 与 `e.key` 不匹配，删除/搜索变死键；④阅读态 j/k 只动不可见游标、不切换邮件
 - 修复（MailBrowser.tsx）：①游标行灰底高亮（bg-gray-100，与选中态 indigo-50 区分）；②Esc 全局优先——焦点在 INPUT/TEXTAREA/SELECT 先 blur 脱困（isComposing 不劫持输入法取消），帮助浮层开着则先关浮层；③键位匹配改「e.code || e.key」双通道——e.code 物理键位免疫全角标点，e.key 兜底合成事件（实测 CDP 把 `/` 合成为 NumpadDivide，纯 code 匹配会漏）；④阅读态 j/k 直接切换上/下一封（Gmail 语义，经 selectEmail 带已读标记）
