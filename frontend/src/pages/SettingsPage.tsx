@@ -868,6 +868,9 @@ export default function SettingsPage() {
             {/* 桌面图标：一键安装（UPDATE_AND_DESKTOP.md §2）——非技术用户不必碰命令行 */}
             <DesktopShortcutCard />
 
+            {/* 退出入口（UPDATE_AND_DESKTOP.md §6）：无窗口平台唯一显式停服方式 */}
+            <QuitCard />
+
             {/* 本机路径：体现软件本地性——数据与程序都在这台电脑上，路径为运行进程实时解析的真实值 */}
             <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
               <div className="t-md font-medium text-gray-700">本机数据</div>
@@ -1084,6 +1087,59 @@ function DesktopShortcutCard() {
         <p className="mt-1 t-sm text-amber-600">快捷方式已失效（目标被移动或删除），重新安装即可修复</p>
       )}
       {actionError && <p className="mt-1 t-sm text-red-600">{actionError}</p>}
+    </div>
+  )
+}
+
+/** 退出卡片（UPDATE_AND_DESKTOP.md §6）：窗口化平台（Windows 不弹黑窗、Linux
+ * 无托盘）没有天然的停服入口——关浏览器标签后服务继续常驻（后台轮询/每日摘要），
+ * 显式退出只能来这里。两段确认；后端延迟强退，成功提示重开方式。 */
+function QuitCard() {
+  const [confirming, setConfirming] = useState(false)
+  const [stopped, setStopped] = useState(false)
+  const quitMutation = useMutation({
+    mutationFn: () => api.quitApp(),
+    onSuccess: () => setStopped(true),
+  })
+  return (
+    <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="t-md font-medium text-gray-700">退出 Nmail</div>
+        <span className="t-sm text-gray-400">停止本地服务与后台同步；双击桌面图标可再次打开</span>
+        <span className="flex-1" />
+        {confirming ? (
+          <>
+            <button
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50"
+              onClick={() => setConfirming(false)}
+            >
+              取消
+            </button>
+            <button
+              className="rounded-lg bg-red-600 px-3 py-1.5 t-sm text-white hover:bg-red-500 disabled:opacity-50"
+              onClick={() => quitMutation.mutate()}
+              disabled={quitMutation.isPending}
+            >
+              {quitMutation.isPending ? '退出中…' : '确认退出'}
+            </button>
+          </>
+        ) : (
+          <button
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 t-sm text-gray-700 hover:bg-gray-50"
+            onClick={() => setConfirming(true)}
+          >
+            退出
+          </button>
+        )}
+      </div>
+      {stopped && (
+        <p className="mt-1 t-sm text-gray-500">
+          Nmail 已退出——本页面失去连接属预期现象，双击桌面图标（或再次运行 nmail）即可重新打开。
+        </p>
+      )}
+      {quitMutation.isError && (
+        <p className="mt-1 t-sm text-red-600">退出失败：{(quitMutation.error as Error).message}</p>
+      )}
     </div>
   )
 }

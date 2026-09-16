@@ -119,6 +119,7 @@ export const api = {
       `/api/update-apply/restart?port=${window.location.port || 8720}`,
       { method: 'POST' },
     ),
+  quitApp: () => request<{ ok: boolean }>('/api/quit', { method: 'POST' }),
   getDesktopShortcut: () => request<DesktopShortcutResp>('/api/desktop-shortcut'),
   installDesktopShortcut: () =>
     request<DesktopShortcutActionResp>('/api/desktop-shortcut', { method: 'POST' }),

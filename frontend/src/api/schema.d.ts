@@ -131,6 +131,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/quit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quit App
+         * @description 退出 Nmail：响应送达后延迟强退，设置页「退出 Nmail」按钮调用。
+         *
+         *     窗口化平台（Windows 无黑窗、Linux 无托盘）没有天然的停服入口——关浏览器
+         *     标签后服务继续常驻（后台轮询/每日摘要），显式退出只能来这里。os._exit
+         *     跳过收尾：SQLite WAL 崩溃安全，调度器随进程终止；与 restart_app 同款节奏。
+         */
+        post: operations["quit_app_api_quit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -3199,6 +3223,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quit_app_api_quit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

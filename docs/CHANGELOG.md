@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — feat: Windows 无窗口化（双击不再弹黑窗）+ 显式退出 + 日志落盘
+- 用户反馈：Windows 双击 exe 弹命令行黑窗，误点 X 即杀后端。nmail.spec `console=(sys.platform != "win32")`——仅 Windows 改窗口子系统，双击即纯后台运行，无窗可误关；macOS/Linux/源码 `run.py` 控制台行为不变，重复双击仍走单实例探测
+- 配套：①cli.py 日志落盘——root logger 挂 RotatingFileHandler（`<DATA_DIR>/nmail.log` 1MB×3 滚动），uvicorn 经 `log_config` 注入同一文件（dictConfig 会整体覆盖其 handlers，必须改配置而非事后挂）；②启动失败兜底——main 薄壳捕获未捕获异常，traceback 落盘 + Windows 冻结包弹原生 MessageBoxW，绝不静默消失；③`POST /api/quit`（延迟 0.8s `os._exit(0)`，与 restart_app 同款节奏）+ 设置-关于「退出 Nmail」卡片两段确认——关浏览器标签不退服（后台轮询/每日摘要常驻，与 macOS Dock 语义一致）
+- 顺带清同类闪窗隐患：`_git_commit` 冻结包短路；desktop.py 两处 PowerShell spawn 补 `CREATE_NO_WINDOW`；pip/uvx 渠道 Windows 图标改指 `pythonw -m app.cli`（console script/.cmd 都闪黑框），pythonw 缺失退回 .cmd
+- 文档四处同步：INSTALL（单文件渠道「运行后/退出/日志」三条）、FAQ（端口占用）、ARCHITECTURE（system 表 + 分发注意点）、UPDATE_AND_DESKTOP 新增 §6 决策记录
+- 验证：ruff 通过；pytest 249 全绿；npm build（含 tsc/字号门禁/vitest）通过；隔离实例实测 `/api/quit` 响应后 1.5s 内进程退出、nmail.log 正常落 uvicorn/access 日志；openapi 快照 + schema.d.ts 同步
+- Windows 真机（黑窗消失/退出/崩溃弹窗）待用户双机实测
+- 会话：S-0916-0020-Windows无窗口化
+
 ## 07edc29 — fix: 更新就绪态自愈，「重启即更新」提示应用后不再悬挂
 - 用户实测：更新到 0.4.2 并重启后，设置-关于 仍显示「新版本 v0.4.2 已就绪，重启即更新」——根因：就绪态（`phase=ready`）设计上跨重启保留、靠前端版本对比隐藏，但关于页 UpdateApplyRow 漏了对比，就绪态本身又永不清除 → 永久悬挂
 - 修复（update_apply.py）：新增 `_heal_applied_ready` 自愈——`phase=ready` 且 `staged_version` 已不比当前新 → 归位 `idle` 并清理过期更新通知；挂启动收尾 `finish_pending_swap` 与 `GET /api/update-apply` 两处（已中招机器读一次即愈）；`staged_version` 三个写入点统一存不含 v 前缀的裸版本号（此前 binary 渠道存 `v0.4.2`，关于页会渲染成「vv0.4.2」、浮条的版本对比也永不匹配）

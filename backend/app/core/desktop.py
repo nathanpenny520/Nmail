@@ -200,9 +200,16 @@ def _install_windows() -> list[str]:
     else:
         icon = bin_dir / "nmail.ico"
         shutil.copyfile(_assets_dir() / "nmail.ico", icon)
-        wrapper = bin_dir / "nmail.cmd"
-        wrapper.write_text(_win_cmd_wrapper(target, args), "utf-8")
-        target = str(wrapper)
+        # .lnk 直指 pythonw：控制台脚本/.cmd 都会闪黑框（§6）。args==[] 即
+        # console-script 模式，包必已装进本解释器环境，pythonw -m app.cli 等价；
+        # pythonw 缺失（老发行版/极端环境）退回 .cmd 包装
+        pythonw = Path(sys.executable).with_name("pythonw.exe")
+        if args == [] and pythonw.is_file():
+            target, args, wrapper = str(pythonw), ["-m", "app.cli"], None
+        else:
+            wrapper = bin_dir / "nmail.cmd"
+            wrapper.write_text(_win_cmd_wrapper(target, args), "utf-8")
+            target = str(wrapper)
     script = "\n".join([
         "$ErrorActionPreference = 'Stop'",
         "$ws = New-Object -ComObject WScript.Shell",
@@ -233,6 +240,8 @@ def _run_powershell(script: str) -> list[str]:
         out = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1],
             capture_output=True, text=True, timeout=30,
+            # 窗口化平台（§6）从设置页安装图标时 spawn powershell 不得闪控制台
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
     finally:
         Path(ps1).unlink(missing_ok=True)
@@ -306,7 +315,9 @@ def _remove_defaults() -> None:
             script = "\n".join(
                 [f"if (Test-Path {t}) {{ Remove-Item {t} -Force }}"] for t in targets)
             subprocess.run(["powershell", "-NoProfile", "-Command", script],
-                           capture_output=True, timeout=30, check=False)
+                           capture_output=True, timeout=30, check=False,
+                           creationflags=subprocess.CREATE_NO_WINDOW
+                           if sys.platform == "win32" else 0)
         else:
             if sys.platform == "darwin":
                 shutil.rmtree(Path.home() / "Applications" / "Nmail.app", ignore_errors=True)

@@ -6,12 +6,17 @@ PyInstaller 冻结单文件。服务仅绑定 127.0.0.1。
 from __future__ import annotations
 
 import argparse
+import copy
+import logging
 import socket
 import sys
 import threading
 import time
+import traceback
 import webbrowser
 from contextlib import suppress
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 DEFAULT_PORT = 8720
 
@@ -98,6 +103,73 @@ def open_browser_later(url: str) -> None:
         webbrowser.open(url)  # 无图形环境时静默跳过
 
 
+# ── 窗口化平台配套：日志落盘 + 启动失败兜底（UPDATE_AND_DESKTOP.md §6）────
+
+def _log_file() -> Path | None:
+    """日志文件路径（数据目录 nmail.log）；数据目录不可得则放弃落盘。"""
+    with suppress(Exception):  # noqa: BLE001 — 任何取路径异常都折成「不落盘」
+        from app.config import get_data_dir
+
+        return get_data_dir() / "nmail.log"
+    return None
+
+
+def setup_file_logging() -> None:
+    """应用日志追加写数据目录：Windows 窗口化构建没有控制台可看，落盘是唯一
+    去处。控制台渠道输出不受影响（终端照常、文件兼有）。uvicorn 自有 logger
+    体系在 uvicorn.run 时经 dictConfig 整体重配，由 _log_config 注入同一文件。"""
+    log_path = _log_file()
+    if log_path is None:
+        return
+    handler = RotatingFileHandler(log_path, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s"))
+    logging.getLogger().addHandler(handler)
+
+
+def _log_config() -> dict:
+    """uvicorn 日志配置：默认配置基础上补文件 handler。必须改配置而非事后
+    挂载——uvicorn.run 的 dictConfig 会整体覆盖 uvicorn/uvicorn.access 的
+    handlers，事后挂的全被清掉。"""
+    from uvicorn.config import LOGGING_CONFIG
+
+    cfg = copy.deepcopy(LOGGING_CONFIG)
+    log_path = _log_file()
+    if log_path is None:
+        return cfg
+    cfg["formatters"]["plain"] = {"format": "%(asctime)s %(levelname)-8s %(name)s: %(message)s"}
+    cfg["handlers"]["file"] = {
+        "class": "logging.handlers.RotatingFileHandler",
+        "formatter": "plain",
+        "filename": str(log_path),
+        "maxBytes": 1_000_000,
+        "backupCount": 2,
+        "encoding": "utf-8",
+    }
+    for name in ("uvicorn", "uvicorn.access"):
+        cfg["loggers"][name]["handlers"].append("file")
+    return cfg
+
+
+def _report_crash() -> None:
+    """启动失败兜底：traceback 追加进日志文件（窗口化平台终端无处可看）；
+    Windows 冻结包再弹原生错误框，双击后绝不静默消失。"""
+    tb = traceback.format_exc()
+    log_path = _log_file()
+    if log_path is not None:
+        with suppress(OSError), log_path.open("a", encoding="utf-8") as fp:
+            fp.write(tb)
+    if sys.platform == "win32" and getattr(sys, "frozen", False):
+        with suppress(Exception):  # noqa: BLE001 — 弹框失败也无能为力，放弃即可
+            import ctypes
+
+            lines = tb.strip().splitlines()
+            tail = f"\n\n{lines[-1]}" if lines else ""
+            where = f"\n\n日志文件：{log_path}" if log_path else ""
+            ctypes.windll.user32.MessageBoxW(
+                0, f"Nmail 启动失败，请把日志文件发给开发者。{where}{tail}", "Nmail", 0x10
+            )
+
+
 def _shortcut_command(install: bool) -> None:
     """install-shortcut / uninstall-shortcut：桌面图标一键安装（设置页同名功能）。"""
     from app.core import desktop  # 延迟导入保持 --help 轻量
@@ -112,6 +184,18 @@ def _shortcut_command(install: bool) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """入口薄壳：未捕获异常先落日志再原样上抛（保留退出码）；
+    SystemExit（--help/--version/参数错）直通不弹框。"""
+    try:
+        _launch(argv)
+    except SystemExit:
+        raise
+    except Exception:  # noqa: BLE001 — 兜底报告后照常抛出
+        _report_crash()
+        raise
+
+
+def _launch(argv: list[str] | None = None) -> None:
     args_list = list(sys.argv[1:] if argv is None else argv)
     # 轻量子命令：argparse 前预扫，不影响既有参数面
     if args_list and args_list[0] in ("install-shortcut", "uninstall-shortcut"):
@@ -129,6 +213,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--version", action="version", version=f"Nmail {APP_VERSION}")
     args = parser.parse_args(args_list)
+
+    setup_file_logging()  # 尽早挂上：此后任何环节的异常都有处可查
 
     # 更新换身收尾：上次下载中途退出留下的半程更新在此完成或清理（binary 渠道，
     # UPDATE_AND_DESKTOP.md §3.1 第 5 步）——保证「下次打开一定是新版」
@@ -157,7 +243,7 @@ def main(argv: list[str] | None = None) -> None:
         threading.Thread(target=open_browser_later, args=(url,), daemon=True).start()
 
     # 直接传 app 对象而非导入字符串：PyInstaller 冻结环境里字符串导入不可靠
-    uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info")
+    uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info", log_config=_log_config())
 
 
 if __name__ == "__main__":  # 冻结单文件的入口即本文件，缺此保护则加载完即静默退出

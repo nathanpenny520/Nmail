@@ -28,8 +28,9 @@ Nmail 是本地优先的单机应用：任何安装方式都只在本机跑一�
 
 **macOS 更推荐 [Nmail.app 压缩包](https://github.com/nathanpenny520/Nmail/releases/latest/download/nmail-macos-arm64.app.zip)**（v0.4.2 起）：解压，把 Nmail.app 拖进「应用程序」即装——Dock 图标、⌘Q 退出。首次打开需右键 → 打开（未公证）。
 
-- **运行后会发生什么**：出现一个控制台窗口（程序本体，显示日志），几秒后浏览器自动打开 `http://127.0.0.1:8720`。端口被占用会自动顺延，以控制台打印的地址为准。
-- **退出**：关闭控制台窗口即可（终端运行时 Ctrl+C）。
+- **运行后会发生什么**：不弹任何命令行黑窗（Windows 双击即纯后台运行），几秒后浏览器自动打开 `http://127.0.0.1:8720`。端口被占用会自动顺延，以浏览器实际打开的地址为准。
+- **退出**：设置-关于 →「退出 Nmail」（macOS .app 可 ⌘Q；终端直跑二进制时 Ctrl+C）。关闭浏览器标签不退出——后台同步与每日摘要在服务常驻期间照常工作。
+- **日志**：程序日志写入数据目录 `nmail.log`（见下节），启动异常会弹窗提示日志位置。
 - **Windows 首次运行**：SmartScreen 弹「已保护你的电脑」（未签名）→ 点「更多信息 → 仍要运行」。首次启动慢几秒是单文件自解压，属正常。若任务栏图标没换成专属图标，是 Windows 图标缓存：重命名一次 exe 或 `ie4uinit -show`。
 - **macOS 首次运行**：先 `chmod +x nmail-macos-arm64`，然后**右键 → 打开**（不能直接双击，Gatekeeper 拦未公证签名）；或 `xattr -dr com.apple.quarantine nmail-macos-arm64` 后正常双击。
 - **Linux 首次运行**：`chmod +x nmail-linux-x64` 后终端运行。
@@ -93,6 +94,6 @@ pip install nmail-app                # 升级: pip install -U nmail-app；卸载
 | macOS | `~/Library/Application Support/Nmail` |
 | Linux | `~/.local/share/Nmail` |
 
-- 内容：`nmail.db`（邮件/索引/会话等全部业务数据）、`secrets.json`（邮箱授权码与 AI key，请妥善保管）、`accounts/<id>/attachments/`（附件）。
+- 内容：`nmail.db`（邮件/索引/会话等全部业务数据）、`secrets.json`（邮箱授权码与 AI key，请妥善保管）、`accounts/<id>/attachments/`（附件）、`nmail.log`（运行日志，排查问题先看这里）。
 - **备份**：整个数据目录拷走即可（可用环境变量 `NMAIL_DATA_DIR` 指到自选位置，如移动硬盘）。
 - **彻底卸载**：删除程序本体（winget/brew uninstall 或删 exe）+ 删除上表数据目录。

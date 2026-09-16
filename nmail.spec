@@ -65,7 +65,9 @@ exe = EXE(
     strip=False,
     upx=False,
     runtime_tmpdir=None,
-    console=True,  # 保留控制台便于查看启动日志
+    # Windows 用窗口子系统：双击不弹黑窗、无窗可误关（UPDATE_AND_DESKTOP.md §6）；
+    # 其余平台保留控制台，终端直跑仍可看日志
+    console=(sys.platform != "win32"),
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

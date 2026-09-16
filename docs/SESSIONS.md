@@ -16,6 +16,15 @@
 
 ## 进行中
 
+### S-0916-0020-Windows无窗口化 ✅
+- 目标: 用户反馈 Windows 双击 exe 弹命令行黑窗、误点 X 即杀后端——方案经三轮确认（无窗口化+日志落盘+崩溃兜底+退出入口；备选托盘/.vbs/pywebview 否决）后拍板实施
+- 范围: nmail.spec + backend(app/cli.py, api/system.py, core/desktop.py) + frontend(client.ts, SettingsPage, openapi 快照/schema) + docs(UPDATE_AND_DESKTOP §6, INSTALL, FAQ, ARCHITECTURE, CHANGELOG, SESSIONS)
+- 产出: `console=(sys.platform != "win32")`；nmail.log RotatingFileHandler + uvicorn log_config 注入；启动失败 traceback 落盘+Win MessageBoxW；`POST /api/quit` + 设置页「退出 Nmail」卡片（两段确认）；顺带清闪窗隐患（_git_commit 冻结短路、PowerShell spawn CREATE_NO_WINDOW、pip/uvx 图标改指 pythonw -m app.cli）
+- 验证: ruff 通过；pytest 249 全绿；npm build 通过；隔离实例（8931）实测 /api/quit 响应后进程退出、nmail.log 落盘正常
+- 遗留: Windows 真机三项（黑窗消失/退出按钮/崩溃弹窗）待用户双机实测；nmail-site 镜像随本轮 sync-docs
+- 备注: 开工登记滞后（开工三件事未在动手前完成，中途补登）；并行会话 S-0916-0007 的 WIP 在其提交（07edc29/cba4bca）后工作树即只剩本会话改动，暂存无冲突
+- 时间: 2026-09-16 00:20 开工
+
 ### S-0916-0007-更新提示悬挂 ✅
 - 目标: 用户反馈更新到 0.4.2 并重启后，设置-关于 仍显示「新版本 v0.4.2 已就绪，重启即更新」——排查 update_apply 就绪态生命周期并修复
 - 根因: 就绪态（phase=ready）设计上跨重启保留、靠前端版本对比隐藏浮条（UpdateReadyBar 有对比），但关于页 UpdateApplyRow 漏了对比，就绪态本身又永不清除（finish_pending_swap 只处理 downloading/verifying/staging）→ 永久悬挂

@@ -1,5 +1,7 @@
 import os
 import subprocess
+import sys
+import threading
 
 from fastapi import APIRouter
 
@@ -12,6 +14,8 @@ router = APIRouter(tags=["system"])
 
 def _git_commit() -> str:
     """启动时的 git 短哈希；打包/非 git 环境为空串。用于「改了没生效」的快速甄别。"""
+    if getattr(sys, "frozen", False):
+        return ""  # 冻结包必非 git 仓库；窗口化平台每次启动 spawn git 会闪控制台（§6）
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -94,3 +98,16 @@ def update_apply_restart(port: int = 0) -> dict:
     port 由前端按 window.location 传入（服务端不反推监听端口）；缺省 0 时
     退化为仅退出请求（新进程找不到端口会顺延），正常流程前端必传。"""
     return update_apply.restart_app(port or 8720)
+
+
+# ── 退出（UPDATE_AND_DESKTOP.md §6）─────────────────────────────────────
+
+@router.post("/api/quit")
+def quit_app() -> dict:
+    """退出 Nmail：响应送达后延迟强退，设置页「退出 Nmail」按钮调用。
+
+    窗口化平台（Windows 无黑窗、Linux 无托盘）没有天然的停服入口——关浏览器
+    标签后服务继续常驻（后台轮询/每日摘要），显式退出只能来这里。os._exit
+    跳过收尾：SQLite WAL 崩溃安全，调度器随进程终止；与 restart_app 同款节奏。"""
+    threading.Timer(0.8, os._exit, args=(0,)).start()
+    return {"ok": True}

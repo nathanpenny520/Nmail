@@ -74,3 +74,28 @@ release.yml macos 打包 job 追加一步：把冻结二进制包成标准 `Nmai
 1. 渠道识别 + 桌面图标（纯增量零风险）
 2. 手动「立即更新」（binary/pip 换身与重启）
 3. 自动更新开关 + 后台触发 + 就绪提示
+
+## 6. Windows 无窗口化（2026-09-16 用户拍板并当轮实施）
+
+用户反馈：Windows 双击 exe 弹出命令行黑窗，误点 X 即杀掉后端。macOS/Linux 的图标形态
+（.app 存根 / .desktop `Terminal=false`）本就无终端窗口，唯 Windows 因 `console=True`
+打包为控制台子系统。四项配套，三平台行为自此一致：**无窗口 · 常驻 · 有显式退出**。
+
+1. **去黑窗**：nmail.spec `console=(sys.platform != "win32")`——仅 Windows 改窗口子系统；
+   macOS/Linux/源码 `run.py` 控制台行为不变。重复双击仍走单实例探测直接开页面。
+2. **日志落盘**：无控制台即无处看日志——cli.py 启动早期给 root logger 挂 RotatingFileHandler
+   （`<DATA_DIR>/nmail.log`，1MB×3 滚动）；uvicorn/uvicorn.access 经 `log_config` 注入同一
+   文件（dictConfig 会整体覆盖其 handlers，必须改配置而非事后挂载）。终端渠道输出不变，文件兼有。
+3. **崩溃兜底**：main 薄壳捕获未捕获异常——traceback 追加进 nmail.log；Windows 冻结包再弹
+   原生 MessageBoxW（零依赖），启动失败绝不静默消失。SystemExit（--help 等）直通。
+4. **显式退出**：`POST /api/quit`（响应送达后延迟 0.8s `os._exit(0)`，与 restart_app 同款
+   节奏；SQLite WAL 崩溃安全）+ 设置-关于「退出 Nmail」卡片（两段确认，成功提示重开方式）。
+   关浏览器标签不退服——后台轮询/每日摘要要常驻，与 macOS Dock 常驻语义一致。
+
+顺带清理同类「闪控制台」隐患：system.py `_git_commit` 冻结包直接短路（git 探测会闪窗）；
+desktop.py 两处 PowerShell spawn、update_apply 重启 spawn 补齐 `CREATE_NO_WINDOW`；
+pip/uvx 渠道 Windows 图标改指 `pythonw -m app.cli`（console script 与 .cmd 都会闪黑框），
+pythonw 缺失时退回 .cmd 包装。
+
+已知边界：双击启动若失败，用户看到的是错误弹窗而非日志尾部（详见日志文件）；Windows
+真机验证（黑窗消失、退出按钮、崩溃弹窗）待用户下轮双机实测。
