@@ -1,7 +1,7 @@
 # CLAUDE.md — Nmail 工作规范
 
 AI 驱动的本地聚合邮箱客户端。Python FastAPI + SQLite(FTS5) 后端 · React+Vite+TS 前端 · 仅绑定 127.0.0.1 · MIT。
-产品定位与路线：[docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)；**v0.4 改版主线（2026-09-12 定稿，落地工作以此为准）**：[docs/REDESIGN_PLAN.md](docs/REDESIGN_PLAN.md)；架构细节：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；变更记录：[docs/CHANGELOG.md](docs/CHANGELOG.md)；多会话看板：[docs/SESSIONS.md](docs/SESSIONS.md)。
+产品定位与路线：[docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md)；**v0.4 改版主线（2026-09-12 定稿，落地工作以此为准）**：[docs/REDESIGN_PLAN.md](docs/REDESIGN_PLAN.md)；**收官阶段主线（2026-09-16 定稿）**：[docs/WIND_DOWN_PLAN.md](docs/WIND_DOWN_PLAN.md)；架构细节：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；变更记录：[docs/CHANGELOG.md](docs/CHANGELOG.md)；多会话看板：[docs/SESSIONS.md](docs/SESSIONS.md)。
 
 ## 常用命令
 

@@ -3,6 +3,11 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — docs: 收官阶段定稿（docs/WIND_DOWN_PLAN.md）
+- 用户拍板六项决策：①Homebrew 只做自家 tap cask（`brew install --cask nathanpenny520/nmail/nmail`），不提交官方 homebrew-cask ②macOS dmg 首选、`.app.zip` 保留，官网/Release 默认下载即 App ③Intel macOS 放弃（仅 Apple Silicon）④不迁 Tauri（无 Electron 前提：Python 后端 + 浏览器 GUI）⑤Linux 维持单文件不做 AppImage/deb ⑥Windows 不上代码签名（zip 仅打包体验，SmartScreen 警告依旧）
+- 任务清单 P1–P4：release.yml 补 dmg/zip/`generate_release_notes`/tap cask 同步；文档四处同步（INSTALL/README 双语/官网 download.astro/代码文案）；键盘收尾（`?` 帮助面板 + 使用指南表补 `↑↓` 与写信 `Ctrl/Cmd+S`/`Ctrl/Cmd+Enter`）；决策落档
+- CLAUDE.md 头部加收官主线指针；键盘现状盘点：MailBrowser 全局 9 键已在（j/k/↑↓、Enter/o、e、#、x、c、/、Esc），文档仅使用指南一张 8 键表且缺 ↑↓ 与写信快捷键
+
 ## 472dfb3 — feat: Windows 无窗口化（双击不再弹黑窗）+ 显式退出 + 日志落盘
 - 用户反馈：Windows 双击 exe 弹命令行黑窗，误点 X 即杀后端。nmail.spec `console=(sys.platform != "win32")`——仅 Windows 改窗口子系统，双击即纯后台运行，无窗可误关；macOS/Linux/源码 `run.py` 控制台行为不变，重复双击仍走单实例探测
 - 配套：①cli.py 日志落盘——root logger 挂 RotatingFileHandler（`<DATA_DIR>/nmail.log` 1MB×3 滚动），uvicorn 经 `log_config` 注入同一文件（dictConfig 会整体覆盖其 handlers，必须改配置而非事后挂）；②启动失败兜底——main 薄壳捕获未捕获异常，traceback 落盘 + Windows 冻结包弹原生 MessageBoxW，绝不静默消失；③`POST /api/quit`（延迟 0.8s `os._exit(0)`，与 restart_app 同款节奏）+ 设置-关于「退出 Nmail」卡片两段确认——关浏览器标签不退服（后台轮询/每日摘要常驻，与 macOS Dock 语义一致）

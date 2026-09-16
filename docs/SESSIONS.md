@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0916-1258-收尾计划 🔄
+- 目标: 收官阶段——按 docs/WIND_DOWN_PLAN.md（用户 2026-09-16 拍板：自家 tap cask、dmg 首选 .app.zip 保留、Intel 放弃、不迁 Tauri、Release Notes 自动化、键盘收尾）落地 P1–P4
+- 范围: .github/workflows/release.yml + 独立仓 homebrew-nmail（Casks/nmail.rb）+ backend(app/core/channel.py 视验证) + frontend(MailBrowser `?` 面板) + docs(INSTALL/README 双语/使用指南/WIND_DOWN_PLAN/CHANGELOG/SESSIONS) + 官网 download.astro
+- 时间: 2026-09-16 12:58 开工
+
 ### S-0916-0020-Windows无窗口化 ✅
 - 目标: 用户反馈 Windows 双击 exe 弹命令行黑窗、误点 X 即杀后端——方案经三轮确认（无窗口化+日志落盘+崩溃兜底+退出入口；备选托盘/.vbs/pywebview 否决）后拍板实施
 - 范围: nmail.spec + backend(app/cli.py, api/system.py, core/desktop.py) + frontend(client.ts, SettingsPage, openapi 快照/schema) + docs(UPDATE_AND_DESKTOP §6, INSTALL, FAQ, ARCHITECTURE, CHANGELOG, SESSIONS)
