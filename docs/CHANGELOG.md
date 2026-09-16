@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — feat: Windows 无窗口化（双击不再弹黑窗）+ 显式退出 + 日志落盘
+## 472dfb3 — feat: Windows 无窗口化（双击不再弹黑窗）+ 显式退出 + 日志落盘
 - 用户反馈：Windows 双击 exe 弹命令行黑窗，误点 X 即杀后端。nmail.spec `console=(sys.platform != "win32")`——仅 Windows 改窗口子系统，双击即纯后台运行，无窗可误关；macOS/Linux/源码 `run.py` 控制台行为不变，重复双击仍走单实例探测
 - 配套：①cli.py 日志落盘——root logger 挂 RotatingFileHandler（`<DATA_DIR>/nmail.log` 1MB×3 滚动），uvicorn 经 `log_config` 注入同一文件（dictConfig 会整体覆盖其 handlers，必须改配置而非事后挂）；②启动失败兜底——main 薄壳捕获未捕获异常，traceback 落盘 + Windows 冻结包弹原生 MessageBoxW，绝不静默消失；③`POST /api/quit`（延迟 0.8s `os._exit(0)`，与 restart_app 同款节奏）+ 设置-关于「退出 Nmail」卡片两段确认——关浏览器标签不退服（后台轮询/每日摘要常驻，与 macOS Dock 语义一致）
 - 顺带清同类闪窗隐患：`_git_commit` 冻结包短路；desktop.py 两处 PowerShell spawn 补 `CREATE_NO_WINDOW`；pip/uvx 渠道 Windows 图标改指 `pythonw -m app.cli`（console script/.cmd 都闪黑框），pythonw 缺失退回 .cmd
