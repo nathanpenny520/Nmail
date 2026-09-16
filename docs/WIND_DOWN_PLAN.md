@@ -22,7 +22,7 @@
 2. **Windows portable zip**：exe 打成 `nmail-windows-x64.zip`（附运行说明）；winget 仍指裸 exe 不动
 3. **Release Notes 自动化**：softprops 三处加 `generate_release_notes: true`（提交列表 + Full Changelog 链接）；发版收尾清单加 `gh release edit` 粘贴 CHANGELOG 本版条目
 4. **tap cask**：homebrew-nmail 仓加 `Casks/nmail.rb`（url 指 dmg、`app "Nmail.app"`、livecheck）；release.yml homebrew-tap job 同步 bump cask
-5. **验证点**：`.app`/dmg 形态下 channel 语义——binary 自更新是否兼容 bundle 内 `nmail-bin` 替换；不兼容则 dmg/cask 渠道按 brew 语义标不自更新（`brew upgrade` 升级），改 channel.py 即可
+5. **channel 语义**：bundle 形态（.app/dmg/cask）本轮标为不自更新，提示重下新版覆盖或 `brew upgrade --cask`。理由（2026-09-16 与用户讨论后修正）：macOS 应用自更新与安装方式无关是生态常态——Sparkle 式**整包原子替换**（下载完整新 bundle → 原子换掉整个 .app → 重启），cask 亦有 `auto_updates true` 共存机制；Nmail 不做并非"不能"，而是现有换身逻辑（update_apply.py）围绕单文件二进制实现，bundle 化 = 新增一套整包更新基础设施（下载/原子替换/open 重启/回滚），失败后果是应用打不开，收官期不做新基建，留待后续版本（存根 nmail_stub.m 为 ObjC，届时可挂 Sparkle）
 
 ### P2 文档四处同步（CLAUDE.md 规范 #11）
 
