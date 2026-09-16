@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — docs: 收官阶段定稿（docs/WIND_DOWN_PLAN.md）
+## daf08f6 — docs: 收官阶段定稿（docs/WIND_DOWN_PLAN.md）
 - 用户拍板六项决策：①Homebrew 只做自家 tap cask（`brew install --cask nathanpenny520/nmail/nmail`），不提交官方 homebrew-cask ②macOS dmg 首选、`.app.zip` 保留，官网/Release 默认下载即 App ③Intel macOS 放弃（仅 Apple Silicon）④不迁 Tauri（无 Electron 前提：Python 后端 + 浏览器 GUI）⑤Linux 维持单文件不做 AppImage/deb ⑥Windows 不上代码签名（zip 仅打包体验，SmartScreen 警告依旧）
 - 任务清单 P1–P4：release.yml 补 dmg/zip/`generate_release_notes`/tap cask 同步；文档四处同步（INSTALL/README 双语/官网 download.astro/代码文案）；键盘收尾（`?` 帮助面板 + 使用指南表补 `↑↓` 与写信 `Ctrl/Cmd+S`/`Ctrl/Cmd+Enter`）；决策落档
 - CLAUDE.md 头部加收官主线指针；键盘现状盘点：MailBrowser 全局 9 键已在（j/k/↑↓、Enter/o、e、#、x、c、/、Esc），文档仅使用指南一张 8 键表且缺 ↑↓ 与写信快捷键
