@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 快捷键失灵四连根因修复 + `?` 帮助面板（WIND_DOWN_PLAN P3）
+- 用户报障「上一封/下一封、删除、聚焦搜索用不了」，真机排查为四个叠加根因：①键盘游标（cursorId）在渲染层零引用——j/k 实际在动但毫无视觉反馈，等同失灵；②焦点陷阱——用过 `/` 或点过输入框后焦点困在输入框，守卫让全部快捷键静默失效且无任何提示（主因）；③中文输入法全角标点下 `＃`/`／` 与 `e.key` 不匹配，删除/搜索变死键；④阅读态 j/k 只动不可见游标、不切换邮件
+- 修复（MailBrowser.tsx）：①游标行灰底高亮（bg-gray-100，与选中态 indigo-50 区分）；②Esc 全局优先——焦点在 INPUT/TEXTAREA/SELECT 先 blur 脱困（isComposing 不劫持输入法取消），帮助浮层开着则先关浮层；③键位匹配改「e.code || e.key」双通道——e.code 物理键位免疫全角标点，e.key 兜底合成事件（实测 CDP 把 `/` 合成为 NumpadDivide，纯 code 匹配会漏）；④阅读态 j/k 直接切换上/下一封（Gmail 语义，经 selectEmail 带已读标记）
+- 新增 `?`（Shift+/）快捷键帮助浮层 + 工具栏键盘图标入口；10 键位清单为模块级 SHORTCUTS 常量，与使用指南表格同源
+- 使用指南快捷键表补全：↑/↓ 方向键、# 标注 Shift+3、`?` 与 Esc 语义、阅读态切换说明、写信 Ctrl/⌘+S 存草稿与 Ctrl/⌘+Enter 发送
+- 验证：npm build（含 tsc/字号门禁/vitest）通过；真机实例（Chrome DevTools MCP）回归——初始游标可见、搜索框内 j 被吞→Esc 脱困→j 恢复、帮助面板开关、阅读态 j/k 双向切换全过
+- 会话：S-0916-1258-收尾计划
+
 ## daf08f6 — docs: 收官阶段定稿（docs/WIND_DOWN_PLAN.md）
 - 用户拍板六项决策：①Homebrew 只做自家 tap cask（`brew install --cask nathanpenny520/nmail/nmail`），不提交官方 homebrew-cask ②macOS dmg 首选、`.app.zip` 保留，官网/Release 默认下载即 App ③Intel macOS 放弃（仅 Apple Silicon）④不迁 Tauri（无 Electron 前提：Python 后端 + 浏览器 GUI）⑤Linux 维持单文件不做 AppImage/deb ⑥Windows 不上代码签名（zip 仅打包体验，SmartScreen 警告依旧）
 - 任务清单 P1–P4：release.yml 补 dmg/zip/`generate_release_notes`/tap cask 同步；文档四处同步（INSTALL/README 双语/官网 download.astro/代码文案）；键盘收尾（`?` 帮助面板 + 使用指南表补 `↑↓` 与写信 `Ctrl/Cmd+S`/`Ctrl/Cmd+Enter`）；决策落档

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ChevronLeft, ChevronRight, Inbox, Loader2, Paperclip, Pencil, RefreshCw, Search, Sparkles, Star,
+  ChevronLeft, ChevronRight, Inbox, Keyboard, Loader2, Paperclip, Pencil, RefreshCw, Search, Sparkles, Star,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -24,6 +24,20 @@ const PAGE_SIZE = 50
 
 const batchBtn =
   'rounded-md border border-indigo-200 bg-white px-1.5 py-0.5 t-sm text-gray-600 transition-colors hover:text-indigo-700 disabled:opacity-50'
+
+// 快捷键清单（`?` 帮助面板数据源；与 docs/使用指南.md 的表格保持一致）
+const SHORTCUTS: [string, string][] = [
+  ['j / ↓', '下一封'],
+  ['k / ↑', '上一封'],
+  ['Enter / o', '打开'],
+  ['e', '归档'],
+  ['#', '删除（废纸篓）'],
+  ['x', '勾选/取消'],
+  ['c', '写新邮件'],
+  ['/', '聚焦搜索'],
+  ['?', '本帮助'],
+  ['Esc', '关闭/返回列表'],
+]
 
 /** 后台任务进度条（列表工具条内联显示；job 为 null 或已终态时不渲染）。 */
 function JobProgressBar({ job, label }: { job: JobInfo | null; label: string }) {
@@ -204,6 +218,7 @@ export default function MailBrowser({
 
   // ── 键盘导航（VSCode/Gmail 风，REDESIGN_PLAN §4.3）──
   const [cursorId, setCursorId] = useState<number | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   // 邮件行右键菜单（§4.3；系统右键已在应用层全局屏蔽）
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; item: EmailSummary } | null>(null)
@@ -225,6 +240,19 @@ export default function MailBrowser({
   }, [items, selectedId])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Esc 最先处理：焦点困在输入框会让全部快捷键静默失效——Esc 先退出输入框
+      if (e.key === 'Escape' && !e.isComposing) {
+        const t = e.target as HTMLElement | null
+        if (t && !t.isContentEditable
+          && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) {
+          t.blur()
+          return
+        }
+        if (helpOpen) {
+          setHelpOpen(false)
+          return
+        }
+      }
       if (items.length === 0) return
       const target = e.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
@@ -236,40 +264,46 @@ export default function MailBrowser({
         if (next) {
           setCursorId(next.id)
           document.querySelector(`[data-email-id="${next.id}"]`)?.scrollIntoView({ block: 'nearest' })
+          // 阅读态下 j/k 直接切换到上/下一封（Gmail 语义）
+          if (selectedId != null) selectEmail(next)
         }
       }
-      switch (e.key) {
-        case 'j': case 'ArrowDown': e.preventDefault(); move(1); break
-        case 'k': case 'ArrowUp': e.preventDefault(); move(-1); break
-        case 'x': {
-          e.preventDefault()
-          if (cursorId != null) toggleRow(cursorId)
-          break
-        }
-        case 'o': case 'Enter': {
-          e.preventDefault()
-          const mail = items.find((i) => i.id === cursorId)
-          if (mail) selectEmail(mail)
-          break
-        }
-        case 'e': {
-          e.preventDefault()
-          if (cursorId != null) actionMutation.mutate({ id: cursorId, action: 'archive' })
-          break
-        }
-        case '#': {
-          e.preventDefault()
-          if (cursorId != null) actionMutation.mutate({ id: cursorId, action: 'trash' })
-          break
-        }
-        case 'c': e.preventDefault(); compose.openNew(); break
-        case '/': e.preventDefault(); searchRef.current?.focus(); break
+      // 键位匹配用「e.code || e.key」双通道：e.code 是物理键位，免疫中文输入法全角标点（＃ ／）
+      // 与非常规布局；e.key 兜底覆盖合成事件（自动化/虚拟键盘，如 CDP 把 / 合成为 NumpadDivide）
+      const is = (code: string, key: string) => e.code === code || e.key === key
+      if (is('KeyJ', 'j') || e.key === 'ArrowDown') {
+        e.preventDefault()
+        move(1)
+      } else if (is('KeyK', 'k') || e.key === 'ArrowUp') {
+        e.preventDefault()
+        move(-1)
+      } else if (is('KeyX', 'x')) {
+        e.preventDefault()
+        if (cursorId != null) toggleRow(cursorId)
+      } else if (is('KeyO', 'o') || e.key === 'Enter') {
+        e.preventDefault()
+        const mail = items.find((i) => i.id === cursorId)
+        if (mail) selectEmail(mail)
+      } else if (is('KeyE', 'e')) {
+        e.preventDefault()
+        if (cursorId != null) actionMutation.mutate({ id: cursorId, action: 'archive' })
+      } else if (e.key === '#' || (e.code === 'Digit3' && e.shiftKey)) {
+        // Shift+3；裸 3 不作删除
+        e.preventDefault()
+        if (cursorId != null) actionMutation.mutate({ id: cursorId, action: 'trash' })
+      } else if (is('KeyC', 'c')) {
+        e.preventDefault()
+        compose.openNew()
+      } else if (is('Slash', '/')) {
+        e.preventDefault()
+        if (e.shiftKey || e.key === '?') setHelpOpen((v) => !v)
+        else searchRef.current?.focus()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, cursorId, selectedIds])
+  }, [items, cursorId, selectedIds, selectedId, helpOpen])
 
   const actionMutation = useMutation({
     mutationFn: ({ id, action, folder: dest }: { id: number; action: string; folder?: string }) =>
@@ -506,7 +540,51 @@ export default function MailBrowser({
           >
             <Pencil className="mr-1 h-3.5 w-3.5" /> 写信
           </button>
+          <button
+            className="inline-flex shrink-0 items-center rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            onClick={() => setHelpOpen(true)}
+            title="键盘快捷键（?）"
+          >
+            <Keyboard className="h-4 w-4" />
+          </button>
         </header>
+      )}
+      {helpOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          onClick={() => setHelpOpen(false)}
+        >
+          <div
+            className="max-h-[80vh] w-80 overflow-y-auto rounded-xl bg-white p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="t-md font-semibold text-gray-800">键盘快捷键</h3>
+              <button
+                className="rounded p-1 t-sm text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                onClick={() => setHelpOpen(false)}
+                title="关闭（Esc）"
+              >
+                ×
+              </button>
+            </div>
+            <table className="w-full t-sm text-gray-600">
+              <tbody>
+                {SHORTCUTS.map(([keys, desc]) => (
+                  <tr key={keys}>
+                    <td className="py-1 pr-3 align-top whitespace-nowrap">
+                      <kbd className="rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5 font-mono t-xs text-gray-700">
+                        {keys}
+                      </kbd>
+                    </td>
+                    <td className="py-1">{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-2 t-xs text-gray-400">阅读态按 j / k 直接切上下一封；焦点在输入框时按 Esc 退回列表。</p>
+          </div>
+        </div>
       )}
       <div className="flex min-h-0 flex-1">
       {/* 邮件列表（分屏左栏；全屏阅读时隐藏） */}
@@ -643,9 +721,11 @@ export default function MailBrowser({
               className={`block w-full cursor-pointer border-b border-l-2 border-gray-50 px-3 py-1 text-left transition-colors hover:bg-gray-50 ${
                 selectedId === item.id
                   ? 'border-l-indigo-500 bg-indigo-50'
-                  : item.is_read
-                    ? 'border-l-transparent'
-                    : 'border-l-indigo-400 bg-blue-50/40'
+                  : cursorId === item.id
+                    ? 'border-l-gray-300 bg-gray-100' // 键盘游标：可见，否则 j/k 看似失灵（§4.3）
+                    : item.is_read
+                      ? 'border-l-transparent'
+                      : 'border-l-indigo-400 bg-blue-50/40'
               }`}
             >
               <div className="flex items-center gap-1.5">
