@@ -16,6 +16,15 @@
 
 ## 进行中
 
+### S-0917-1255-快捷键设置页 ✅
+- 目标: 设置页新增「快捷键」分类（总开关 + 分组清单，截图参照某客户端设置页）；SHORTCUTS 抽共享数据源 shortcuts.ts 并补写信 ⌘S/⌘Enter 两键；后端 shortcuts_enabled 设置项
+- 范围: backend(api/settings.py) + frontend(shortcuts.ts 新建, MailBrowser.tsx, SettingsPage.tsx, openapi.json, schema.d.ts) + docs(使用指南, CHANGELOG, SESSIONS)
+- 协调: 与 S-0917-1252-体验优化 重叠（MailBrowser/SettingsPage）——登记时其尚未动工，全程 patch 暂存未扫入对方 WIP
+- 产出: 提交 83aafdb——设置页「快捷键」分类（总开关选择即保存 + 四组键位卡片）、frontend/src/shortcuts.ts 单一数据源（`?` 帮助面板同步分组渲染并补写信 Ctrl/⌘+S、Ctrl/⌘+Enter 两键展示）、后端 shortcuts_enabled 四处 + openapi/schema 再生、使用指南键盘条目补设置入口
+- 验证: ruff 通过；npm build（含 tsc）通过；隔离实例（8931）curl 往返——默认 True、PUT false 落库回读 False
+- 遗留: 后端改动需重启 python run.py 生效（盘上有并行会话后端 WIP，本会话不代重启）；新分类 UI 待用户真机过目
+- 时间: 2026-09-17 12:55 开工，13:04 完成
+
 ### S-0916-1258-收尾计划 🔄
 - 目标: 收官阶段——按 docs/WIND_DOWN_PLAN.md（用户 2026-09-16 拍板：自家 tap cask、dmg 首选 .app.zip 保留、Intel 放弃、不迁 Tauri、Release Notes 自动化、键盘收尾）落地 P1–P4
 - 范围: .github/workflows/release.yml + 独立仓 homebrew-nmail（Casks/nmail.rb）+ backend(app/core/channel.py 视验证) + frontend(MailBrowser `?` 面板) + docs(INSTALL/README 双语/使用指南/WIND_DOWN_PLAN/CHANGELOG/SESSIONS) + 官网 download.astro
