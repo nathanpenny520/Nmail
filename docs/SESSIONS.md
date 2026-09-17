@@ -24,11 +24,13 @@
 - 遗留: 无（对话界面临时切换功能保留未动）
 - 时间: 2026-09-17 14:53 开工，15:0x 完成
 
-### S-0917-1446-总管家空响应修复 🔄
+### S-0917-1446-总管家空响应修复 ✅
 - 目标: 会话 36 报 400「Invalid 'messages[50].tool_calls': empty array」（run 52 实测）——deepseek 思考 token 单独耗尽 agent 单步 max_tokens=2000 → 空响应（无文本无调用）被 `_append_assistant_calls` 落库成 `tool_calls:[]` → 下步请求被 OpenAI 兼容端点 400。修复：单步上限 8192 + 空响应回灌重试兜底 + 落库防御
-- 范围: backend(app/ai/agent.py, tests/test_agent_loop.py) + docs(CHANGELOG, SESSIONS)
-- 协调: 与 S-0917-1448（A2 完成断言，同文件）重叠——已通知对方，等其提交后我再基于新鲜磁盘动手，不覆盖其 WIP
-- 时间: 2026-09-17 14:46 开工
+- 范围: backend(app/ai/agent.py, tests/test_agent_loop.py, tests/test_agent.py) + docs(CHANGELOG, SESSIONS)
+- 产出: 提交 f5bd1d9——①常量 `AGENT_MAX_TOKENS=8192` 覆盖 agent 全部模型调用（主步/JSON 降级/触顶收尾，思考 token 同样计入额度）②`_loop` 空响应兜底：无文本无调用回灌提示重试（限 2 次），超限友好报错，绝不落空 tool_calls 消息 ③`_append_assistant_calls` 空 calls 不写 `tool_calls` 键；test_agent_loop.py 新增 2 例、test_agent.py 打桩签名适配
+- 验证: ruff 通过；pytest 271 全绿；8720 重启（PID 37913）/api/health 通过
+- 遗留: ①classify 任务偶发空响应（S-0917-1432 遗留①，tasks.py 另一条路径）本次未动 ②8931 隔离实例非本会话所有未重启，其下次重启自然生效 ③开工登记被并行 docs 提交（69faf68）扫入，收工状态以本条目为准
+- 时间: 2026-09-17 14:46 开工，15:1x 完成
 
 ### S-0917-1448-A2完成断言误报 ✅
 - 目标: 用户反馈总管家纯查询回答末尾出现多余「系统注记」+ 防御性啰嗦澄清——根因：Sent 文件夹中文名「已发送」与 A2 完成断言词撞车（列文件夹清单/查已发送邮件必触发），纠正回灌又引发模型防御性澄清，二次仍命中 → 注记。修法：比对前摘除名词性「已发送」（文件夹/里/中/的/括注），真断言照拦

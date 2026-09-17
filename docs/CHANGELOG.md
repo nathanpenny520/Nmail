@@ -14,7 +14,7 @@
 - 测试：新增 test_completion_mismatch_sent_folder_noun_not_flagged（四种名词句式不拦 + 两种真断言仍拦），全套 269 绿
 - 会话：S-0917-1448-A2完成断言误报
 
-## 待提交 — fix: 总管家空响应兜底 + agent 单步生成上限 2000→8192
+## f5bd1d9 — fix: 总管家空响应兜底 + agent 单步生成上限 2000→8192
 - 会话 36 实测 400「Invalid 'messages[50].tool_calls': empty array」（run 52）：deepseek 思考 token 单独耗尽 agent 单步 max_tokens=2000（ai_logs completion_tokens 恰为 2000），流结束时无文本无调用分片，`_append_assistant_calls` 照常落库 `{"role":"assistant","content":"","tool_calls":[]}`，下一步请求被 OpenAI 兼容端点校验（tool_calls minItems 1）拒绝，run 标记 failed
 - 修复三层：① `AGENT_MAX_TOKENS=8192` 覆盖 agent 全部模型调用（主步/JSON 降级/触顶收尾）——思考 token 同样计入额度，2000 对推理模型必触顶 ② `_loop` 空响应兜底：无文本无调用时回灌「（系统提示：上一次响应为空…请继续任务）」重试（限 2 次），仍空则友好报错终止，绝不落空 tool_calls 消息 ③ `_append_assistant_calls` native 分支 calls 为空时不写 `tool_calls` 键（防御）
 - 测试：test_agent_loop.py 新增 2 例（空响应重试→报错全链路、空 calls 不落键）；test_agent.py 打桩签名补 max_tokens 透传适配
