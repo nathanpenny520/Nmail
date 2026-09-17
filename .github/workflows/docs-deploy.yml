@@ -1,0 +1,31 @@
+# 主仓 docs 变更 → 自动触发官网（nmail-site）部署。
+# 官网 docs 页面是构建期从本仓 docs/ 白名单镜像的（其 sync-docs.mjs CI 走 GitHub raw main），
+# 但官网的 Deploy workflow 只挂在自己仓库——主仓 push 原本不会触发，最迟要等官网每日
+# 定时兜底（09:00 UTC+8）。本 workflow 补上即时性：docs 变更 1-2 分钟内同步上线。
+#
+# 需一次性配置（未配置时本 workflow 空转跳过，不报错）：
+#   1. GitHub fine-grained PAT：仅授权 nathanpenny520/nmail-site 仓库、Actions: Read and write
+#   2. 存为主仓 secret：gh secret set SITE_DEPLOY_PAT --repo nathanpenny520/Nmail
+name: Docs deploy (dispatch nmail-site)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+  workflow_dispatch: {} # 手动补触发
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger nmail-site deploy
+        env:
+          # gh CLI 凭据；需 nmail-site 的 actions:write 权限（workflow_dispatch API）
+          GH_TOKEN: ${{ secrets.SITE_DEPLOY_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "SITE_DEPLOY_PAT 未配置，跳过触发（官网将按每日定时兜底）"
+            exit 0
+          fi
+          gh workflow run deploy.yml --repo nathanpenny520/nmail-site --ref main
