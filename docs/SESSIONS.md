@@ -23,6 +23,12 @@
 - 遗留: 无。与 S-0917-1458 同文件不同区域（AgentActionsList vs 晨报改名），本会话已先行提交错峰
 - 时间: 2026-09-17 15:05 开工，15:1x 完成
 
+### S-0917-1458-晨报合一改名AI摘要 🔄
+- 目标: 用户拍板三合一——①砍掉 AI 综述（内容贫乏，信息量被统计卡覆盖）②「AI 晨报」更名「AI 摘要」并全量同步（界面/文档；CHANGELOG 历史条目与既有落地记录不改写）③生成三路径：定时（原样）+ 摘要页「重新生成」异步触发 + 总管家对话 `save_brief` 工具落库；`build_digest` 变纯统计零 LLM，保留作回退与开关关闭时的统计摘要
+- 范围: backend(ai/digest.py, ai/tasks.py, scheduler.py, api/digest.py, ai/tools.py, api/settings.py, tests/test_digest.py, tests/test_agent.py) + frontend(DigestPage.tsx, SettingsPage.tsx, client.ts, 类型重生成) + docs(使用指南/FAQ/ARCHITECTURE/REDESIGN_PLAN §18.6 增补/CHANGELOG/SESSIONS/SKILL.md/对外API使用指南)
+- 协调: **不动 agent.py / test_agent_loop.py**（S-0917-1446 WIP 中，其内晨报注释改名列遗留）；openapi.json/schema.d.ts 按路径随本会话提交
+- 时间: 2026-09-17 14:58 开工
+
 ### S-0917-1453-设置页文案瘦身 ✅
 - 目标: 用户反馈设置页部分地方文字过多，违背「界面简约、细节进文档」——AI 配置区说明压缩（「对话界面可临时切换」经核实功能存在（2+ 套配置才显示下拉），文字简化、细节挪文档）；AI 晨报/外部图片/网络代理/本机数据四处长句同步精简
 - 范围: frontend/src/pages/SettingsPage.tsx + docs(使用指南.md 新增「AI 配置档案」节、CHANGELOG、SESSIONS)
@@ -59,6 +65,7 @@
 - 产出: 提交 48bb3e2——SKILL.md「内置总管家通道」补人人对等工具面与高风险设置审批硬规则（外层 agent 绝不代批）、frontmatter description 补触发词；对外API使用指南 agent scope 行、使用指南「AI 能做什么」表补四行（模板签名/联系组/设置/立即收信，B6 用户侧文档遗漏）；已安装副本 ~/.claude/skills/nmail（→~/.agents/skills）同步为仓库版
 - 备注: CHANGELOG 条目被并行会话 ca2f657 卷入（共享 index 惯例：哈希=承载提交）；CLI ask/decide/resume 确认纯透传、服务端注入工具，无码可改
 - 追记（skill 全链路真机测试轮，用户指示）: 读命令 10 项/写命令 6 项/错误码 exit 2·6·8/watch NDJSON/agent 审批流（trigger_sync 出卡→decide→resume）与 auto 直执行全部按 SKILL.md 契约通过；**发现并修复真机 bug**：text/plain 派生把 nl2br 单换行叠成双换行（见 CHANGELOG 待提交条目）；二轮自发自收回环验证通过；测试邮件已入废纸篓（服务器新 id 1063/1064，rebuilt 语义吻合），Sent Items 留两封测试信（CLI 无 Sent 清理能力，界面可删）
+- 追记（账号残留审计轮，用户拍板：审计一并删/通讯录保留/存量孤儿清）: cleanup_orphans 启动 GC + delete_account 收尾统一调用 + reset_account_sequences_if_empty（删光账号后下次添加 id=1 起）；test_account_cleanup 4 例；ruff/相关测试过（全量套件中 test_agent/test_digest 红为并行会话 tools.py WIP 中态，非本会话改动）
 - 时间: 2026-09-17 14:20 开工，15:0x 完成
 
 ### S-0917-1401-通知时区 ✅

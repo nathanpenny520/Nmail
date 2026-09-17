@@ -101,6 +101,14 @@
 - 验证：pytest 265 全绿；ruff/npm build 通过
 - 会话：S-0917-1252-体验优化
 
+## 待提交 — fix: 账号删除残留清理补全 + 删光账号序列归零（用户残留审计拍板落地）
+- 用户问「删邮箱账号有什么残留 / 为什么 accountID 一直递增」——审计结论：FK 级联（邮件/附件/断点/文件夹/草稿）与密钥/磁盘账号目录已清干净，但无 FK 从属数据全留：ai_logs、ai_actions（动作审计）、jobs、rule_observations、chat_sessions、悬空 notifications（表无 account 字段，ref_id 指向已删账号/邮件）、compose_signatures KV 幽灵签名、磁盘孤儿草稿附件目录
+- 账号 id 递增 = SQLite AUTOINCREMENT 永不复用（保护性设计：通知 ref_id/审计/会话引用旧 id，复用会错位）；部分删除维持递增
+- 落地（用户三项拍板：审计一并删 / 通讯录保留 / 存量孤儿清）：①delete_account 收尾统一调 cleanup_orphans ②新增启动 GC cleanup_orphans（幂等）：无 FK 从属表按存活账号清理、agent_runs 账号范围全失效才删、notifications 悬空引用清理（ai_draft ref=来源邮件 id、ai_draft_summary ref=账号 id 的映射经代码核实）、KV 幽灵签名剔除、磁盘孤儿 drafts/<id> 目录清理 ③reset_account_sequences_if_empty：删光全部账号后账号域自增序列归零，下次添加从 id=1 起；对仍有行的表重置无害（AUTOINCREMENT 取 max(seq,rowid)+1）④contacts 按拍板保留（删邮箱≠删人脉）
+- 测试：新增 test_account_cleanup.py 4 例（全量残留清理+通讯录保留/双账号互不波及/删光归零后新账号 id=1/GC 幂等+磁盘目录清理）
+- 真机生效：随下次重启自动清掉存量孤儿（280 条 ai_logs、25 条 ai_actions 等）
+- 会话：S-0917-1420-CLI技能同步（追加残留审计轮）
+
 ## f561783 — fix: 纯文本派生吃掉 br 后字面换行——修复 text/plain 单换行叠成双换行（skill 真机测试发现）
 - nmail skill 全链路真机测试（自发自收回环）暴露：nl2br 产出 `<br />\n`，`html_to_plain_text` 把 br 换成 `\n` 后与标签后字面换行叠加 → 发出邮件的 text/plain alternative（及 AI 读信 body_text）单换行处全变空行；body_html 渲染不受影响
 - 修复：br 替换时吃掉紧跟的一个字面换行（bs4 NavigableString）；单换行语义在纯文本侧保住

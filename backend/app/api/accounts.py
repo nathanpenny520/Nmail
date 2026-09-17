@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.core import imap_client, oauth, sync as sync_engine
 from app.core.providers import MANUAL_NOTE, PRESETS, match_provider, probe_server
-from app.db.database import get_conn
+from app.db.database import cleanup_orphans, get_conn
 from app.security import get_secret, set_secret
 
 router = APIRouter(prefix="/api", tags=["accounts"])
@@ -329,6 +329,9 @@ def delete_account(account_id: int) -> dict:
     set_secret(f"account_pwd:{account_id}", None)
     oauth.delete_token(account_id)
     sync_engine.delete_account_files(account_id)
+    # 残留审计（2026-09-17）：无 FK 的从属数据（AI 用量/动作审计/任务/会话/悬空通知/
+    # KV 幽灵签名/磁盘草稿目录）+ 账号删光时的序列归零，统一走兜底 GC（幂等）
+    cleanup_orphans()
     return {"ok": True}
 
 

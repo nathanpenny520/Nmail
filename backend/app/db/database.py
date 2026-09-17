@@ -700,6 +700,111 @@ def cleanup_retention() -> None:
     )
 
 
+# 账号域自增序列（删光全部账号后归零，下次添加从 1 起；部分删除不复用——
+# 通知 ref_id/审计/agent 会话引用旧 id，复用会错位指向新账号）。
+# contacts 等全局表保留行，不在归零之列；AUTOINCREMENT 取 max(seq,rowid)+1，
+# 对仍有行的表重置亦无害。
+_ACCOUNT_SCOPED_SEQUENCES = (
+    "accounts", "emails", "attachments", "user_drafts", "user_draft_attachments",
+    "folders", "jobs", "ai_logs", "ai_actions", "chat_sessions", "chat_messages",
+    "notifications", "agent_runs", "rule_observations", "drafts",
+)
+# 无 FK 的账号从属表（残留审计 2026-09-17：账号删除需显式清理）
+_ACCOUNT_OWNED_TABLES = ("ai_logs", "ai_actions", "jobs", "rule_observations", "chat_sessions")
+
+
+def reset_account_sequences_if_empty() -> None:
+    """accounts 表已空时把账号域自增序列归零（用户可感知的「干净重开」）。幂等。"""
+    conn = get_conn()
+    if conn.execute("SELECT 1 FROM accounts LIMIT 1").fetchone():
+        return
+    ph = ",".join("?" * len(_ACCOUNT_SCOPED_SEQUENCES))
+    conn.execute(f"DELETE FROM sqlite_sequence WHERE name IN ({ph})", _ACCOUNT_SCOPED_SEQUENCES)
+    conn.commit()
+
+
+def cleanup_orphans() -> dict:
+    """孤儿数据清理（残留审计 2026-09-17）：账号删除后无 FK 从属数据的兜底 GC。
+
+    幂等，启动与删除账号后各跑一遍：
+    - 无 FK 从属表（ai_logs/ai_actions/jobs/rule_observations/chat_sessions）
+      中 account_id 不在任何现存账号 → 删；
+    - agent_runs 的账号范围全部失效 → 删（多账号 run 只要还有一个存活账号就保留）；
+    - notifications 悬空引用（账号异常→账号已删；新邮件/归档/草稿→邮件/草稿行已级联删）→ 删；
+    - compose_signatures KV 里指向已删账号的幽灵签名 → 剔除；
+    - 磁盘孤儿草稿附件目录（drafts/<id> 无对应行）→ 清；
+    - 全部账号已删光 → 账号域自增序列归零。
+    """
+    conn = get_conn()
+    stats: dict[str, int] = {}
+    live = {int(r["id"]) for r in conn.execute("SELECT id FROM accounts").fetchall()}
+    for table in _ACCOUNT_OWNED_TABLES:
+        if not live:
+            cur = conn.execute(f"DELETE FROM {table} WHERE account_id IS NOT NULL")
+        else:
+            ph = ",".join("?" * len(live))
+            cur = conn.execute(
+                f"DELETE FROM {table} WHERE account_id IS NOT NULL AND account_id NOT IN ({ph})",
+                tuple(live),
+            )
+        if cur.rowcount:
+            stats[table] = cur.rowcount
+    # agent_runs：JSON 账号范围与存活账号无交集 → 删
+    import json as _json
+
+    removed_runs = 0
+    for r in conn.execute("SELECT id, account_ids_json FROM agent_runs").fetchall():
+        try:
+            ids = [int(x) for x in _json.loads(r["account_ids_json"] or "[]")]
+        except (ValueError, TypeError):
+            ids = []
+        if ids and not any(i in live for i in ids):
+            conn.execute("DELETE FROM agent_runs WHERE id = ?", (int(r["id"]),))
+            removed_runs += 1
+    if removed_runs:
+        stats["agent_runs"] = removed_runs
+    # notifications 悬空引用：ref_id 均为数字串，指向的行不存在即清
+    # （ai_draft 的 ref 是来源邮件 id 而非草稿 id；ai_draft_summary 是账号 id）
+    live_emails = {int(r["id"]) for r in conn.execute("SELECT id FROM emails").fetchall()}
+    targets: dict[str, set[str]] = {
+        "account_error": {str(i) for i in live},
+        "new_mail": {str(i) for i in live_emails},
+        "ai_archive": {str(i) for i in live_emails},
+        "ai_draft": {str(i) for i in live_emails},
+        "ai_draft_summary": {str(i) for i in live},
+    }
+    removed_notes = 0
+    for n in conn.execute("SELECT id, type, ref_id FROM notifications").fetchall():
+        allowed = targets.get(n["type"])
+        if allowed is None or not n["ref_id"] or not str(n["ref_id"]).isdigit():
+            continue
+        if str(n["ref_id"]) not in allowed:
+            conn.execute("DELETE FROM notifications WHERE id = ?", (int(n["id"]),))
+            removed_notes += 1
+    if removed_notes:
+        stats["notifications"] = removed_notes
+    # KV 幽灵签名
+    sigs = get_setting("compose_signatures", []) or []
+    kept = [s for s in sigs if isinstance(s, dict) and s.get("account_id") in live]
+    if len(kept) != len(sigs):
+        set_setting("compose_signatures", kept)
+        stats["compose_signatures"] = len(sigs) - len(kept)
+    conn.commit()
+    # 磁盘孤儿草稿附件目录
+    import shutil
+    from app.config import get_data_dir
+
+    live_drafts = {int(r["id"]) for r in conn.execute("SELECT id FROM user_drafts").fetchall()}
+    drafts_base = get_data_dir() / "drafts"
+    if drafts_base.is_dir():
+        for d in drafts_base.iterdir():
+            if d.is_dir() and d.name.isdigit() and int(d.name) not in live_drafts:
+                shutil.rmtree(d, ignore_errors=True)
+                stats["draft_dirs"] = stats.get("draft_dirs", 0) + 1
+    reset_account_sequences_if_empty()
+    return stats
+
+
 def get_setting(key: str, default: Any = None) -> Any:
     row = get_conn().execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     if row is None or row["value"] is None:
