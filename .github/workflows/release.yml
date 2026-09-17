@@ -196,6 +196,9 @@ jobs:
     env:
       TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
+      # cask 步骤要渲染仓库内 scripts/cask_template.rb——本 job 原设计纯 API 无
+      # checkout，v0.4.3 发版实测文件不存在必挂（sed: No such file），故补 checkout
+      - uses: actions/checkout@v4
       - name: 更新 tap formula 版本与哈希
         if: env.TAP_TOKEN != ''
         run: |
