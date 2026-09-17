@@ -19,7 +19,7 @@
 ### S-0917-2230-uv安装命令补齐 ✅
 - 目标: 用户检查 uv 各平台一键安装命令是否已写入 README 与官网——查得官网下载页已有两条命令，README 双语与 docs/INSTALL.md 仅外链，补齐之
 - 范围: README.md / README.zh-CN.md / docs/INSTALL.md + docs(CHANGELOG, SESSIONS)；官网源码与代码零改动（download.astro 命令本就齐全）
-- 产出: 主仓提交（哈希见 CHANGELOG 回填）；官网 /docs/install 构建同步验证通过，触发 CI 部署后随构建上线
+- 产出: 主仓提交 1a02a35；官网 /docs/install 构建同步验证通过，触发 CI 部署后随构建上线
 - 时间: 2026-09-17 22:27 完成
 
 ### S-0917-2145-写信所见即所发 ✅

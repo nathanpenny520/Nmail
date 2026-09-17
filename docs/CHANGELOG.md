@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — docs: README 双语与 INSTALL.md 补 uv 官方一键安装命令
+## 1a02a35 — docs: README 双语与 INSTALL.md 补 uv 官方一键安装命令
 - 此前仅给 docs.astral.sh 安装文档外链，用户需自行跳转找命令；现补官方安装器命令——macOS/Linux `curl -LsSf https://astral.sh/uv/install.sh | sh`、Windows（PowerShell）`irm https://astral.sh/uv/install.ps1 | iex`，并注明装完重开终端生效
 - 四处口径核对：README 双语（「一分钟上手 / Up and running」节）+ docs/INSTALL.md 方式④ 补命令；官网下载页 download.astro 本就有两条命令未动；官网 /docs/install 构建时从主仓同步（本地构建已验证含命令），随下次官网部署上线
 - 会话：S-0917-2230-uv安装命令补齐
