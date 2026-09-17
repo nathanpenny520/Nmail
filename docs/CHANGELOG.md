@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — docs: 对外文档补齐——README 重写（uvx 唯一安装入口）+ docs 索引 + 演示截图入库
+- README 双语重写为「产品门面」（用户要求第一眼吸引）：居中 hero（logo + Release/PyPI/License/平台徽章 + 主截图）、六卖点清单、「眼见为实」双截图（总管家/每日摘要）、GIF 折叠演示块、文档索引表、隐私摘要、开发折叠块；安装章节只保留 uvx 一条命令 + uv 官方安装器，单文件/winget/Homebrew/pip/源码改为指向 docs/INSTALL.md——**命令与渠道说明本身零改动**（INSTALL.md / 官网下载页 / 代码内文案三处不动，四处口径一致）
+- docs/README.md 新增：docs/ 目录对外索引（上手/了解/进阶/开发者四组；自建 OAuth 教程等此前无入口的文档纳入）；内部工作文档（REDESIGN_PLAN/SESSIONS 等）文末注明不面向用户
+- assets/promo/ 入库三张脱敏演示截图（收件箱/总管家/每日摘要，取自 promo/pictures 素材池；设置页截图因含「AI 晨报」旧文案弃用）+ nmail-logo-160.png（icon-master 缩 160px，README 用）
+- 官网 nmail-site 同步（独立仓提交）：首页新增主截图与双截图区、功能页修「与自动化」残缺标题并补三图速览、全站「AI 晨报」→「AI 摘要」更名跟上（首页特性卡/功能页/projects 卡；历史动态帖按惯例不改写）、功能页文档入口改站内 /docs/
+- 会话：S-0917-1620-文档补齐与README重写
+
 ## d6311cc — feat: 晨报合一——「AI 摘要」更名 + 综述废除 + 生成三路径（用户拍板）
 - 用户指出 AI 晨报与每日摘要概念冗余，拍板三合一：①「AI 晨报」更名**「AI 摘要」**全量同步（界面/设置/文档/通知文案；KV 键与 `agent_brief` 存储键不动，零迁移；CHANGELOG 历史条目与各 PLAN 落地记录不改写，REDESIGN_PLAN §18.6 以带日期增补记录）②**AI 综述废除**——内容贫乏（只看统计数字写 3-5 句）且信息量被统计卡/列表覆盖：`build_digest` 变纯统计零 LLM、`tasks.digest_overview` 删除，每天省一次 LLM 调用；调查确认的两个覆盖 bug（综述/晨报互相抹掉）随综述废除+统计重建保留同日正文而根除
 - **生成三路径**（产出同一份 AI 摘要）：定时（原样，开关开启时 digest_time 触发）＋ 摘要页「生成 AI 摘要/重新生成」——`POST /api/digest/generate` 改异步触发（180s 预算不占 HTTP），GET /api/digest 增 `brief_running` 供前端轮询+按钮态，未配置 AI 400、运行中 409 ＋ 总管家对话新工具 `save_brief`（write/organize 级本地写，巡箱后正文落库、不发通知——对话场景用户在场）

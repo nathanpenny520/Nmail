@@ -16,6 +16,14 @@
 
 ## 进行中
 
+### S-0917-1620-文档补齐与README重写 ✅
+- 目标: 用户要求补齐对外文档并让官网与文档统一；README 重写为「第一眼吸引」形态——只保留 uvx 安装方式、其余渠道引导到 INSTALL.md，用 promo/pictures 演示截图排版；同步修正官网滞后文案（AI 晨报→AI 摘要 等）并给首页/功能页补界面截图
+- 范围: 主仓(README.md, README.zh-CN.md, docs/README.md 新增索引, docs/SESSIONS.md, docs/CHANGELOG.md, assets/promo/ 新增截图) + nmail-site(index.astro, features.astro, public/shots/ 新增截图, docs/CHANGELOG.md)；不改任何安装/升级命令本身，四处命令口径不动
+- 产出: 主仓提交（哈希见 CHANGELOG 回填）——README 双语重写（hero+徽章+截图+uvx 唯一安装入口+文档索引表+隐私摘要+开发折叠块；单文件/winget/Homebrew/pip/源码改指向 INSTALL.md，命令零改动）；docs/README.md 对外索引新增；assets/promo/ 三张脱敏截图 + nmail-logo-160.png 入库。官网提交——首页主截图+双截图区、功能页三图速览+修「与自动化」残缺标题、AI 晨报→AI 摘要 全站更名（首页/功能页/projects 卡；历史帖不改写）、功能页文档入口改站内 /docs/
+- 验证: npm run build 通过（含 sync-docs 链路）；preview 目检首页/功能页渲染正常；两份 README 经 pandoc gfm 渲染目检（居中 hero/表格/折叠块均正确）；站点 HTML 无「AI 晨报」残留
+- 遗留: 设置页演示截图因含「AI 晨报」旧文案未采用——下次截图脱敏时重截后可补进素材池
+- 时间: 2026-09-17 16:20 开工，16:5x 完成
+
 ### S-0917-1520-A2移除与失败回执 ✅
 - 目标: 用户拍板「相信模型智力，不需要正则猜语义」——整体移除 A2 完成断言门（9 组断言正则+纠正回灌+系统注记+名词白名单），改为确定性失败回执：写类工具真实执行失败时由代码在最终回答末尾附一行事实（零语义猜测零误伤）；权限/参数被拒与用户拒绝审批不算失败
 - 范围: backend(app/ai/agent.py, tests/test_agent_loop.py) + docs(ARCHITECTURE, REDESIGN_PLAN §20.2, CHANGELOG, SESSIONS)
