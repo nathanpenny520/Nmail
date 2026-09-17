@@ -1,6 +1,7 @@
 """每日摘要生成。
 
-统计部分零成本（本地 SQL + Python 分桶）；AI 只写一段综述，未配置 AI 时摘要依然可用。
+统计部分零成本（本地 SQL + Python 分桶，`build_digest` 不调 LLM）；AI 摘要正文
+由 agent 运行产出、经 `store_brief` 落同一天的 `agent_brief` 键（§18.6）。
 """
 from __future__ import annotations
 
@@ -9,7 +10,6 @@ import logging
 from collections import Counter
 from datetime import date, datetime, timedelta
 
-from app.ai import tasks
 from app.ai.categories import CATEGORY_ORDER as CATEGORIES
 from app.core.sync import add_notification
 from app.db.database import get_conn
@@ -130,43 +130,26 @@ def _has_draft(email_id: int) -> bool:
     return bool(row)
 
 
-def _ai_overview(stats: dict) -> str:
-    lines = [f"今日新邮件 {stats['overview']['new_today']} 封，未读 {stats['overview']['unread']} 封，"
-             f"自动归档营销 {stats['overview']['auto_archived']} 封。"]
-    if stats["by_category"]:
-        cats = "、".join(f"{k} {v} 封" for k, v in stats["by_category"].items() if v)
-        lines.append(f"分类分布：{cats}。")
-    if stats["need_reply"]:
-        lines.append("需要回复：" + "；".join(
-            f"{i['sender']}的「{i['subject'][:30]}」（{i['reason'][:20]}）" for i in stats["need_reply"][:5]))
-    if stats["important"]:
-        lines.append("重要邮件：" + "；".join(
-            f"「{i['subject'][:30]}」" for i in stats["important"][:5]))
-    user = "以下是今日邮箱统计数据，请写一段 3-5 句的中文每日综述，突出最需要用户注意的事（验证码、账单、截止日期、重要来信）。只输出综述本身。\n\n" + "\n".join(lines)
-    try:
-        return tasks.digest_overview(user)
-    except Exception as exc:  # noqa: BLE001 — 综述失败不影响结构化摘要
-        logger.warning("digest ai overview failed: %s", exc)
-        return ""
-
-
 def build_digest(force: bool = False) -> dict:
+    """统计摘要（纯本地零 LLM）：开关关闭时的每日内容，也是 AI 摘要失败/无产出时的回退。
+
+    同日重建保留用户手动清除的重要邮件记录（✕ 掉的不复活，跨天自然重置）与
+    已存的 AI 摘要正文——晚间手动重跑崩溃回退时不抹掉晨间正文。
+    """
     today = date.today().isoformat()
     conn = get_conn()
     existing = conn.execute(
         "SELECT content_json FROM digest_history WHERE date = ?", (today,)
     ).fetchone()
-    if not force and existing:
-        return json.loads(existing["content_json"])
-
     stats = _collect_stats()
-    # 同日重新生成时保留用户手动清除的重要邮件记录，不让 ✕ 掉的条目复活（跨天自然重置）
     if existing:
-        dismissed = set(json.loads(existing["content_json"]).get("dismissed_important") or [])
+        old = json.loads(existing["content_json"])
+        dismissed = set(old.get("dismissed_important") or [])
         if dismissed:
             stats["important"] = [i for i in stats["important"] if i["email_id"] not in dismissed]
             stats["dismissed_important"] = sorted(dismissed)
-    stats["ai_overview"] = _ai_overview(stats)
+        if old.get("agent_brief"):
+            stats["agent_brief"] = old["agent_brief"]
     conn.execute(
         "INSERT INTO digest_history (date, content_json) VALUES (?, ?)"
         " ON CONFLICT(date) DO UPDATE SET content_json = excluded.content_json,"
@@ -178,11 +161,12 @@ def build_digest(force: bool = False) -> dict:
     return stats
 
 
-def store_agent_brief(brief_text: str) -> dict:
-    """AI 晨报产出落摘要页（§18.6）：结构化统计照常收集，晨报正文存独立键
-    agent_brief——摘要页单独的「AI 晨报」区块呈现（不顶替 AI 综述；当日不再
-    单独调 LLM 生成综述）。agent 拟的草稿经 has_draft 自然出现在「需要回复」。
-    通知由调用方（scheduler）负责，此处不发。"""
+def store_brief(brief_text: str) -> dict:
+    """AI 摘要正文落摘要页（§18.6）：结构化统计照常收集，正文存独立键
+    agent_brief——摘要页单独的「AI 摘要」区块呈现（当天不再有其他 AI 文字段）。
+    agent 拟的草稿经 has_draft 自然出现在「需要回复」。
+    通知由调用方负责：scheduler/手动触发发；对话 save_brief 不发（用户在场）。
+    """
     today = date.today().isoformat()
     conn = get_conn()
     existing = conn.execute(

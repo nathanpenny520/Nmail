@@ -1792,7 +1792,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Generate */
+        /**
+         * Generate
+         * @description 手动触发一次 AI 摘要 agent 运行（异步：180s 预算不占 HTTP，完成后通知）。
+         *
+         *     运行中重复触发 409；未配置 AI 400（立即反馈，不空跑 agent）。
+         */
         post: operations["generate_api_digest_generate_post"];
         delete?: never;
         options?: never;
@@ -4269,7 +4274,9 @@ export interface operations {
     };
     download_attachment_api_attachments__attachment_id__download_get: {
         parameters: {
-            query?: never;
+            query?: {
+                inline?: number;
+            };
             header?: never;
             path: {
                 attachment_id: number;

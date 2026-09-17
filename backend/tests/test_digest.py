@@ -118,27 +118,40 @@ def test_dismiss_important_unknown_id_404():
     assert client.post("/api/digest/important/99999999/dismiss").status_code == 404
 
 
-def test_store_agent_brief():
-    """§18.6：晨报正文存独立键 agent_brief（不顶替 AI 综述），结构化统计照常。"""
+def test_store_brief():
+    """§18.6：AI 摘要正文存独立键 agent_brief（当天唯一 AI 文字段），结构化统计照常。"""
     aid = _aid()
-    _seed_email(aid, 1, "晨报测试邮件")
-    stats = digest.store_agent_brief("**晨报**：一切正常。")
-    assert stats["agent_brief"] == "**晨报**：一切正常。"
+    _seed_email(aid, 1, "摘要测试邮件")
+    stats = digest.store_brief("**AI 摘要**：一切正常。")
+    assert stats["agent_brief"] == "**AI 摘要**：一切正常。"
     row = database.get_conn().execute(
         "SELECT content_json FROM digest_history WHERE date = date('now', 'localtime')"
     ).fetchone()
     assert row is not None
     data = json.loads(row["content_json"])
-    assert data["agent_brief"] == "**晨报**：一切正常。" and "need_reply" in data
-    assert "ai_overview" not in data  # 晨报日不生成常规综述（省一次 LLM）
+    assert data["agent_brief"] == "**AI 摘要**：一切正常。" and "need_reply" in data
+    assert "ai_overview" not in data  # 综述已废除（v0.4.x 晨报合一），AI 文字段只有 agent_brief
 
 
-def test_agent_brief_hidden_when_switch_off():
-    """开关关闭 → GET /api/digest 不返回晨报区块（开启时返回，历史晨报同样隐藏）。"""
+def test_brief_hidden_when_switch_off():
+    """开关关闭 → GET /api/digest 不返回 AI 摘要区块（开启时返回，历史正文同样隐藏）。"""
     aid = _aid()
     _seed_email(aid, 2, "开关测试")
-    digest.store_agent_brief("**晨报**：开关验证。")
+    digest.store_brief("**AI 摘要**：开关验证。")
     database.set_setting("agent_brief_enabled", True)
     assert "agent_brief" in client.get("/api/digest").json()["digest"]
     database.set_setting("agent_brief_enabled", False)
     assert "agent_brief" not in client.get("/api/digest").json()["digest"]
+
+
+def test_build_digest_preserves_existing_brief():
+    """统计重建不抹掉同日已存的 AI 摘要正文（晚间重跑崩溃回退场景）。"""
+    aid = _aid()
+    _seed_email(aid, 3, "保留测试")
+    digest.store_brief("**AI 摘要**：晨间正文。")
+    database.set_setting("agent_brief_enabled", True)  # 关闭时 GET 会过滤 agent_brief
+    digest.build_digest(force=True)
+    data = client.get("/api/digest").json()["digest"]
+    assert data["agent_brief"] == "**AI 摘要**：晨间正文。"
+    assert "overview" in data  # 统计部分照常刷新
+    database.set_setting("agent_brief_enabled", False)

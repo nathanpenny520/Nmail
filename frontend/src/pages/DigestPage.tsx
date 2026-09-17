@@ -46,6 +46,8 @@ export default function DigestPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['digest'],
     queryFn: api.getDigest,
+    // AI 摘要 agent 后台运行中：轮询等完成（完成后 digest 内容更新、brief_running 翻 false）
+    refetchInterval: (query) => (query.state.data?.brief_running ? 4000 : false),
   })
 
   const generateMutation = useMutation({
@@ -59,6 +61,7 @@ export default function DigestPage() {
   })
 
   const digest = data?.digest ?? null
+  const briefRunning = data?.brief_running ?? false
 
   const trendOption = useMemo<echarts.EChartsCoreOption>(() => {
     if (!digest) return {}
@@ -127,8 +130,7 @@ export default function DigestPage() {
     const lines = [
       `# Nmail 每日摘要 · ${d.date}`,
       '',
-      d.ai_overview && `> ${d.ai_overview}`,
-      ...(d.agent_brief ? ['', '## AI 晨报', '', d.agent_brief] : []),
+      ...(d.agent_brief ? ['## AI 摘要', '', d.agent_brief] : []),
       '',
       `**概览**：新邮件 ${d.overview.new_today} · 未读 ${d.overview.unread} · 需回复 ${d.overview.need_reply} · AI 已归档营销 ${d.overview.auto_archived}`,
       '',
@@ -178,12 +180,13 @@ export default function DigestPage() {
             <button
               className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 t-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               onClick={() => generateMutation.mutate()}
-              disabled={generateMutation.isPending}
+              disabled={briefRunning || generateMutation.isPending}
+              title="由 AI 总管家巡箱生成（约 1-3 分钟），完成后通知"
             >
-              {generateMutation.isPending
+              {briefRunning || generateMutation.isPending
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <RefreshCw className="h-3.5 w-3.5" />}
-              {digest ? '重新生成' : '生成今日摘要'}
+              {briefRunning ? '生成中…' : digest?.agent_brief ? '重新生成' : '生成 AI 摘要'}
             </button>
           )}
         </div>
@@ -195,9 +198,15 @@ export default function DigestPage() {
         </div>
       )}
 
-      {generateMutation.isError && (
+      {generateMutation.isError && !briefRunning && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 t-md text-red-700">
           生成失败：{(generateMutation.error as Error).message}
+        </div>
+      )}
+
+      {briefRunning && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 t-md text-indigo-700">
+          AI 摘要后台生成中（总管家巡箱约 1-3 分钟），完成后通知提醒。
         </div>
       )}
 
@@ -210,18 +219,6 @@ export default function DigestPage() {
         </div>
       ) : (
         <>
-          {/* AI 综述 */}
-          {digest.ai_overview && (
-            <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-5">
-              <div className="flex items-center gap-2 t-sm font-semibold text-violet-700">
-                <Sparkles className="h-3.5 w-3.5" /> AI 综述
-              </div>
-              <div className="mt-1 t-md leading-relaxed text-gray-800">
-                <Markdown text={digest.ai_overview} />
-              </div>
-            </div>
-          )}
-
           {/* 概览数字 */}
           <div className="grid grid-cols-4 gap-3">
             {[
@@ -355,11 +352,11 @@ export default function DigestPage() {
             </div>
           )}
 
-          {/* AI 晨报（REDESIGN_PLAN §18.6：scheduler 定时运行产出；置于摘要底部，开关关闭即隐藏） */}
+          {/* AI 摘要（§18.6：agent 运行产出——定时/摘要页重跑/对话 save_brief 三路径；置于摘要底部，开关关闭即隐藏） */}
           {digest.agent_brief && (
             <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5">
               <div className="flex items-center gap-2 t-sm font-semibold text-indigo-700">
-                <Sunrise className="h-3.5 w-3.5" /> AI 晨报
+                <Sunrise className="h-3.5 w-3.5" /> AI 摘要
               </div>
               <div className="mt-1 t-md leading-relaxed text-gray-800">
                 <Markdown text={digest.agent_brief} />

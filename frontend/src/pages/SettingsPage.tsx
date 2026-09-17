@@ -392,15 +392,15 @@ export default function SettingsPage() {
             <div className="mt-4 grid grid-cols-2 gap-4">
               <label className="block">
                 <span className="mb-1 block t-md text-gray-600">
-                  AI 晨报<span className="ml-1 t-sm text-gray-400">到点自动总结未读并拟好回复草稿，绝不自动发送</span>
+                  AI 摘要<span className="ml-1 t-sm text-gray-400">到点由总管家巡箱总结并拟稿，随时可在摘要页或对话里重新生成；关闭则仅统计摘要，绝不自动发送</span>
                 </span>
                 <select
                   className={inputClass}
                   value={agentBrief ? '1' : '0'}
                   onChange={(e) => changeBrief(e.target.value === '1')}
                 >
-                  <option value="0">关（每日摘要）</option>
-                  <option value="1">开（AI 晨报）</option>
+                  <option value="0">关（仅统计摘要）</option>
+                  <option value="1">开（AI 摘要）</option>
                 </select>
               </label>
             </div>

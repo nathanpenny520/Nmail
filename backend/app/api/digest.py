@@ -1,4 +1,4 @@
-"""每日摘要 API：查看、手动生成/刷新。"""
+"""每日摘要 API：查看、手动触发 AI 摘要（异步）、重要邮件清除。"""
 from __future__ import annotations
 
 import json
@@ -6,8 +6,8 @@ import json
 from fastapi import APIRouter, HTTPException
 
 from app.ai import tasks
-from app.ai.digest import build_digest
 from app.db.database import get_conn, get_setting
+from app.scheduler import brief_running, start_daily_brief
 
 router = APIRouter(prefix="/api/digest", tags=["digest"])
 
@@ -24,12 +24,13 @@ def get_digest() -> dict:
     digest = json.loads(latest["content_json"]) if latest else None
     if digest:
         digest = _filter_dismissed(digest)
-        # AI 晨报开关关闭 → 区块不展示（历史晨报同样隐藏；含导出，前端同源）
+        # AI 摘要开关关闭 → 区块不展示（历史正文同样隐藏；含导出，前端同源）
         if not bool(get_setting("agent_brief_enabled", False)):
             digest.pop("agent_brief", None)
     return {
         "dates": [r["date"] for r in rows],
         "digest": digest,
+        "brief_running": brief_running(),
     }
 
 
@@ -66,7 +67,14 @@ def dismiss_important(email_id: int) -> dict:
 
 @router.post("/generate")
 def generate() -> dict:
+    """手动触发一次 AI 摘要 agent 运行（异步：180s 预算不占 HTTP，完成后通知）。
+
+    运行中重复触发 409；未配置 AI 400（立即反馈，不空跑 agent）。
+    """
     try:
-        return build_digest(force=True)
+        tasks._ai_config(None)
     except tasks.AINotConfigured as exc:
         raise HTTPException(400, str(exc)) from None
+    if not start_daily_brief("manual"):
+        raise HTTPException(409, "AI 摘要正在生成中，请稍候")
+    return {"started": True}

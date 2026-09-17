@@ -795,6 +795,12 @@ digest_history——晨报正文存独立键 agent_brief，摘要页渲染为单
 区分，不顶替 AI 综述；晨报日不重复生成综述省一次 LLM；agent 拟的草稿经 has_draft 自然出现在
 「需要回复」列表）；失败/无产出自动回退旧版 build_digest，当天摘要不缺席。验收：pytest 211 全绿（+3：提议全流程/白名单拒绝且
 不落审计/allowed_json 持久化）；真实实例 e2e 见 CHANGELOG。
+**2026-09-17 修订（晨报合一，用户拍板）**：①AI 综述废除（内容贫乏，信息量被统计卡覆盖）——`build_digest` 变纯统计零 LLM，
+`tasks.digest_overview` 删除；②「AI 晨报」更名「**AI 摘要**」并全量同步（界面/文档；KV 键与 `agent_brief` 存储键不动，零迁移）；
+③生成三路径：定时（原样）+ 摘要页「生成 AI 摘要/重新生成」（`POST /api/digest/generate` 改异步触发，GET 增 `brief_running` 供前端
+轮询/禁用）+ 总管家对话新工具 `save_brief`（write/organize 级，巡箱后正文落库，通知不发——用户在场）；④定时/手动共用
+`scheduler.start_daily_brief` 入口（进程内互斥锁，运行标志重启自清；触发即盖 agent_brief_last_run，手动跑过当天定时不重跑）；
+⑤统计重建保留同日已存正文（晚间重跑崩溃回退不抹晨间正文）。
 
 ### 18.7 P7-E 语义检索 / P7-F 安全增强
 

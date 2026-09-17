@@ -40,7 +40,7 @@ export interface Settings {
   notify_types: Partial<Record<NotifyTypeKey, boolean>>
   /** 写信/回复自动带该账号签名（设置页「写信」管理签名内容） */
   auto_insert_signature: boolean
-  /** AI 晨报（§18.6）：到摘要时间自动总结未读并拟好回复草稿，替代每日摘要 */
+  /** AI 摘要（§18.6）：到摘要时间总管家巡箱总结并拟稿，替代纯统计摘要 */
   agent_brief_enabled: boolean
 }
 
@@ -627,14 +627,15 @@ export interface DigestData {
   by_account: { email: string; color: string; count: number; unread: number }[]
   need_reply: DigestNeedReply[]
   important: DigestImportant[]
-  ai_overview: string
-  /** AI 晨报正文（§18.6：scheduler 定时运行产出，独立区块呈现；无则不存在该键） */
+  /** AI 摘要正文（§18.6：agent 运行产出，当天唯一 AI 文字段；无则不存在该键） */
   agent_brief?: string
 }
 
 export interface DigestResp {
   dates: string[]
   digest: DigestData | null
+  /** AI 摘要 agent 正在后台运行（前端据此轮询+禁用按钮） */
+  brief_running: boolean
 }
 
 // ── P4 AI 会话持久化 ─────────────────────────────────────────

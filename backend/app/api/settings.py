@@ -29,8 +29,8 @@ DEFAULT_SETTINGS: dict[str, object] = {
     # 桌面通知按类型细分（读侧与默认合并，缺省键视为开）；其余系统通知（更新/黑名单归档）不受控
     "notify_types": {"new_mail": True, "ai_draft": True, "digest": True, "account_error": True},
     "auto_insert_signature": False,  # 写信/回复自动带该账号签名（设置页「写信」管理签名内容）
-    # AI 晨报（§18.6）：digest_time 到点由调度触发 agent 运行（总结未读+拟稿进待审），
-    # 开启时替代每日摘要；工具白名单硬边界（SCHEDULER_ALLOWED）
+    # AI 摘要（§18.6）：digest_time 到点由调度触发 agent 运行（总结未读+拟稿进待审），
+    # 开启时替代纯统计摘要；工具白名单硬边界（SCHEDULER_ALLOWED）
     "agent_brief_enabled": False,
 }
 

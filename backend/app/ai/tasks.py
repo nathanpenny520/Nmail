@@ -286,20 +286,6 @@ def write_assist(text: str, op: str, instruction: str | None = None,
     return result.strip()
 
 
-def digest_overview(user: str, account_id: int | None = None,
-                    profile_id: str | None = None) -> str:
-    """每日摘要的 AI 综述段落。"""
-    base_url, model, api_key = _ai_config(profile_id)
-    with _logged("digest", "digest", model, account_id) as ok:
-        text, usage = llm.chat(
-            base_url, model, api_key,
-            "你是邮件秘书，用中文写简洁的每日综述，只输出综述本身。",
-            user,
-        )
-        ok(usage)
-    return text.strip()
-
-
 def usage_stats() -> dict:
     conn = get_conn()
     totals = conn.execute(

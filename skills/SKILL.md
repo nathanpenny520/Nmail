@@ -185,7 +185,7 @@ nmail-cli agent ask "把收件箱里的营销邮件都归档，漏回的邮件�
 - `approvals` 非空：把每个动作（工具/参数/影响）展示给用户，**用户明确许可后**执行
   `nmail-cli agent decide <action_id> --approve`（或 `--reject`，总管家会改道），
   再 `nmail-cli agent resume <run_id>` 续跑；
-  **高风险设置项（晨报开关/晨报时间、放行远程图片、放开读信截断）一律返回审批卡**——
+  **高风险设置项（AI 摘要开关/摘要时间、放行远程图片、放开读信截断）一律返回审批卡**——
   这是服务端硬规则，auto 模式也不例外；照常转达用户，绝不代批；
 - `paused.reason` 为 `max_steps`/`budget`：问用户是否继续，继续则 `nmail-cli agent resume <run_id>`；
 - `paused.reason` 为 `ask_user`：总管家在向你提问，展示问题（及选项），把用户的回答带上

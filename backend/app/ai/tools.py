@@ -395,6 +395,14 @@ def _t_delete_folder(args: dict, primary: int, scope: list[int]) -> dict:
     return {"deleted": name, "emails_removed": n, "note": "文件夹及其邮件已从服务器删除，不可撤销"}
 
 
+def _t_save_brief(args: dict, primary: int, scope: list[int]) -> dict:
+    """AI 摘要正文落「每日摘要」页（§18.6；本地写，不发通知——对话场景用户在场）。"""
+    from app.ai.digest import store_brief
+
+    stats = store_brief(str(args.get("text") or ""))
+    return {"ok": True, "date": stats["date"], "note": "已存入今日 AI 摘要，「每日摘要」页可查看"}
+
+
 def _t_set_category(args: dict, primary: int, scope: list[int]) -> dict:
     """批量设置分类/重要性/需回复（§17.3；本地标记，带 undo）。"""
     ids = [int(i) for i in (args.get("ids") or [])]
@@ -864,8 +872,8 @@ SETTING_KEYS_AUTO: tuple[str, ...] = (
     "notify_types",                   # dict 按类型通知开关（子键覆盖）
 )
 SETTING_KEYS_APPROVAL: tuple[str, ...] = (
-    "agent_brief_enabled",      # bool AI 晨报开关（触发无人值守运行）
-    "digest_time",              # str HH:MM 晨报时间
+    "agent_brief_enabled",      # bool AI 摘要开关（触发无人值守运行）
+    "digest_time",              # str HH:MM 摘要时间
     "allow_remote_images",      # bool 放行远程图片（隐私）
     "read_email_max_chars",     # int 500..20000 读信截断
 )
@@ -963,6 +971,12 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
     ToolSpec("digest_stats", "read", "read",
              "邮箱概况统计（收件箱/未读/待回复/待审草稿/分类分布）——面对笼统问题先调它",
              "{}", _OBJ.copy(), _t_digest_stats),
+    ToolSpec("save_brief", "write", "organize",
+             "把为用户写好的当日 AI 摘要正文（Markdown）存入「每日摘要」页——"
+             "仅在用户要求生成/更新 AI 摘要时调用；存完正文也要作为回复完整输出",
+             '{"text": "AI 摘要正文（Markdown）"}',
+             _obj({"text": _str("AI 摘要正文（Markdown）")}, ["text"]),
+             _t_save_brief),
     ToolSpec("mark_emails", "write", "organize",
              "批量标记已读/未读", '{"ids": [邮件id], "read": true|false}',
              _obj({"ids": _ids("邮件 id 列表"), "read": _bool("true=已读，false=未读")}, ["ids"]),
@@ -1109,7 +1123,7 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
              _t_manage_contact_group),
     ToolSpec("set_settings", "write", "organize",
              "修改白名单内的设置（桌面通知/自动签名/通讯录采集/轮询间隔/通知类型；"
-             "晨报开关/晨报时间/远程图片/读信截断等高风险项会强制人工审批）",
+             "摘要开关/摘要时间/远程图片/读信截断等高风险项会强制人工审批）",
              '{"key": "设置键", "value": "新值"}',
              _obj({"key": _str("设置键（见系统提示词的白名单说明）"),
                    "value": {"description": "新值（bool/int/str/object 视键而定）"}}, ["key", "value"]),
@@ -1140,6 +1154,7 @@ _PARAM_TYPES: dict[str, dict[str, str]] = {
     "rename_folder": {"old": "str", "new": "str"},
     "delete_folder": {"name": "str"},
     "set_category": {"ids": "ints", "category": "str", "importance": "str", "needs_reply": "bool"},
+    "save_brief": {"text": "str"},
     "create_draft": {"email_id": "int", "to": "str", "subject": "str", "body": "str"},
     "update_draft": {"draft_id": "int", "to": "str", "subject": "str", "body": "str"},
     "schedule_draft": {"draft_id": "int", "send_at": "str"},
@@ -1170,6 +1185,7 @@ _REQUIRED_ARGS: dict[str, tuple[str, ...]] = {
     "rename_folder": ("old", "new"),
     "delete_folder": ("name",),
     "set_category": ("ids",),
+    "save_brief": ("text",),
     "create_draft": ("to", "body"),
     "update_draft": ("draft_id",),
     "schedule_draft": ("draft_id", "send_at"),

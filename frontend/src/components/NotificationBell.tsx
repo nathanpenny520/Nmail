@@ -207,7 +207,7 @@ export default function NotificationBell() {
                     <div className="min-w-0">
                       <div className="truncate t-sm font-medium text-gray-800">{n.title}</div>
                       {n.body && expandedId === n.id && n.type === 'digest' ? (
-                        // 晨报正文是 markdown：展开时富文本渲染（系统通知仍为纯文本——平台限制）
+                        // AI 摘要正文是 markdown：展开时富文本渲染（系统通知仍为纯文本——平台限制）
                         <div className="mt-0.5">
                           <Markdown text={n.body} />
                         </div>

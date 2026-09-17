@@ -502,8 +502,9 @@ export const api = {
 
   // ── 每日摘要 ──
   getDigest: () => request<DigestResp>('/api/digest'),
+  /** 异步触发一次 AI 摘要 agent 运行（完成后通知；运行中 409） */
   generateDigest: () =>
-    request<DigestResp['digest']>('/api/digest/generate', { method: 'POST' }),
+    request<{ started: boolean }>('/api/digest/generate', { method: 'POST' }),
   /** 从重要邮件列表清除一条（✕ 按钮；重新生成不复活，跨天随新摘要重置） */
   dismissDigestImportant: (emailId: number) =>
     request<{ ok: boolean }>(`/api/digest/important/${emailId}/dismiss`, { method: 'POST' }),

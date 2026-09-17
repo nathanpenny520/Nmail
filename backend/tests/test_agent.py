@@ -444,7 +444,7 @@ def test_memory_api():
     assert resp.json().get("error") == "记忆不存在"
 
 
-# ── 规则提议与调度晨报（REDESIGN_PLAN §18.5/§18.6）────────────────
+# ── 规则提议与调度 AI 摘要（REDESIGN_PLAN §18.5/§18.6）────────────────
 
 def test_rule_proposals_flow():
     """观察→阈值提议→采纳入黑名单 / 忽略后不再提。"""
