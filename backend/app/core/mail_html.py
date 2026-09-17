@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 
 import nh3
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 MAX_INLINE_IMAGE_BYTES = 2 * 1024 * 1024  # cid 内联图超过 2MB 不内联
 
@@ -228,7 +228,12 @@ def html_to_plain_text(html: str) -> str:
     """HTML → 纯文本，作为发出邮件的 text/plain alternative。"""
     soup = BeautifulSoup(html or "", "html.parser")
     for br in soup.find_all("br"):
+        nxt = br.next_sibling
         br.replace_with("\n")
+        # nl2br 的输出是 "<br />\n"：br 换成的 \n 会与标签后的字面换行叠加成双换行
+        # （B2 真机测试发现）——吃掉紧跟的一个换行，保住「单换行→单换行」语义
+        if isinstance(nxt, NavigableString) and nxt.startswith("\n"):
+            nxt.replace_with(nxt[1:])
     for block in soup.find_all(
         ["p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"]
     ):

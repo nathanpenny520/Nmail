@@ -28,7 +28,8 @@
 - 目标: B6 总管家新能力（模板/签名/联系组/受限设置/触发收信）同步进 skills/SKILL.md 与对外 API 指南；CLI 本身纯透传无需改码，同步已安装 skill 副本
 - 产出: 提交 48bb3e2——SKILL.md「内置总管家通道」补人人对等工具面与高风险设置审批硬规则（外层 agent 绝不代批）、frontmatter description 补触发词；对外API使用指南 agent scope 行、使用指南「AI 能做什么」表补四行（模板签名/联系组/设置/立即收信，B6 用户侧文档遗漏）；已安装副本 ~/.claude/skills/nmail（→~/.agents/skills）同步为仓库版
 - 备注: CHANGELOG 条目被并行会话 ca2f657 卷入（共享 index 惯例：哈希=承载提交）；CLI ask/decide/resume 确认纯透传、服务端注入工具，无码可改
-- 时间: 2026-09-17 14:20 开工，14:3x 完成
+- 追记（skill 全链路真机测试轮，用户指示）: 读命令 10 项/写命令 6 项/错误码 exit 2·6·8/watch NDJSON/agent 审批流（trigger_sync 出卡→decide→resume）与 auto 直执行全部按 SKILL.md 契约通过；**发现并修复真机 bug**：text/plain 派生把 nl2br 单换行叠成双换行（见 CHANGELOG 待提交条目）；二轮自发自收回环验证通过；测试邮件已入废纸篓（服务器新 id 1063/1064，rebuilt 语义吻合），Sent Items 留两封测试信（CLI 无 Sent 清理能力，界面可删）
+- 时间: 2026-09-17 14:20 开工，15:0x 完成
 
 ### S-0917-1401-通知时区 ✅
 - 目标: 通知中心时间与系统时间一致——存 UTC 不动，`/api/notifications` 出口转系统时区 ISO，前端改共用 `formatDate` 渲染；为未来自定义时区留单点接缝（`_to_local_iso`）

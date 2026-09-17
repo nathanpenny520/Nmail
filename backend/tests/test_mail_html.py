@@ -113,6 +113,12 @@ def test_markdown_nl2br_single_newline_kept():
     assert "张三<br />" in body
 
 
+def test_plain_text_single_newline_after_br():
+    """nl2br 产出 "<br />\\n"：br→\\n 后不得与字面换行叠成双换行（B2 真机测试发现）。"""
+    plain = html_to_plain_text(markdown_to_email_html("第一行\n第二行\n\n第三行"))
+    assert plain == "第一行\n第二行\n\n第三行"
+
+
 def test_style_tag_preserved_with_selectors():
     html = "<style>a > b { color: #1366ec } .x{width:50%}</style><p>hi</p>"
     out = _clean(html)

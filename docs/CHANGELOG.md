@@ -78,6 +78,13 @@
 - 验证：pytest 265 全绿；ruff/npm build 通过
 - 会话：S-0917-1252-体验优化
 
+## 待提交 — fix: 纯文本派生吃掉 br 后字面换行——修复 text/plain 单换行叠成双换行（skill 真机测试发现）
+- nmail skill 全链路真机测试（自发自收回环）暴露：nl2br 产出 `<br />\n`，`html_to_plain_text` 把 br 换成 `\n` 后与标签后字面换行叠加 → 发出邮件的 text/plain alternative（及 AI 读信 body_text）单换行处全变空行；body_html 渲染不受影响
+- 修复：br 替换时吃掉紧跟的一个字面换行（bs4 NavigableString）；单换行语义在纯文本侧保住
+- 测试：test_mail_html 补回归（md→html→plain 全链恒等校验）；28/28 过
+- 真机验证：重装重启后二次自发自收，收到的 text/plain 单换行/分段与原文一致（CRLF 为 SMTP 标准行尾）
+- 会话：S-0917-1420-CLI技能同步（skill 全链路测试轮）
+
 ## ca2f657 — docs: B6 能力同步进 skill 与指南——总管家通道工具面描述更新
 - skills/SKILL.md：「内置总管家通道」补 2026-09 人人对等工具面（邮件/写信含模板签名/通讯录含联系组/受限设置白名单/触发收信），高风险设置项（晨报开关/时间、远程图片、读信截断）**一律返回审批卡、绝不代批**的硬规则写进 agent 决策流程；frontmatter description 补模板/签名/联系组/受限设置触发词
 - docs/对外API使用指南.md：agent scope 行同步工具面与高风险键审批约束
