@@ -805,7 +805,7 @@
 - 产出: tag v0.4.3（提交 f3eca4f）+ db4ee8b（release.yml homebrew-tap 补 checkout）；winget PR microsoft/winget-pkgs#436602（手工补做，脚本死在盯 CI 没走到）；cask 手工兜底创建（0.4.3 + dmg SHA256）；官网重建 run 35244836698 已触发
 - ⚠️ 本版 Windows 全渠道启动即崩（4c282b8 已修、待 0.4.4 补丁版）——winget PR 建议留待 0.4.4 对分支追加提交或重开，勿在 0.4.4 前催合并
 - 验证: PyPI 双包 0.4.3 ✅、Release 六资产 ✅、tap Formula+Cask 0.4.3 ✅；CI 波折两起（附加 Release 撞 GitHub 瞬时 HTML 错误页→rerun --failed 即绿；cask 步骤无 checkout 必挂）均已记 RELEASE.md 故障处理
-- 遗留: ①winget 校验盯梢进行中（10-60 分钟，head sha cfcfcca）②0.4.4 补丁版发布待用户拍板 ③uv tool install 渠道应用内更新疑缺 pip（上轮发现，未修）
+- 遗留: ①winget 校验 10/10 绿（00:50），等社区审核员批准——**0.4.4 发出前勿催合并**，0.4.4 时对分支 nmail-0.4.3 追加提交即可自动重跑校验 ②0.4.4 补丁版发布待用户拍板 ③uv tool install 渠道应用内更新疑缺 pip（上轮发现，未修）
 - 时间: 2026-09-17 23:52 开工，09-18 00:25 完成
 
 ### S-0917-2314-dock-reopen ✅
