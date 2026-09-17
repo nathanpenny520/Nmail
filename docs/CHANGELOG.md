@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — docs: 对外文档补齐——README 重写（uvx 唯一安装入口）+ docs 索引 + 演示截图入库
+## 644a694 — docs: 对外文档补齐——README 重写（uvx 唯一安装入口）+ docs 索引 + 演示截图入库
 - README 双语重写为「产品门面」（用户要求第一眼吸引）：居中 hero（logo + Release/PyPI/License/平台徽章 + 主截图）、六卖点清单、「眼见为实」双截图（总管家/每日摘要）、GIF 折叠演示块、文档索引表、隐私摘要、开发折叠块；安装章节只保留 uvx 一条命令 + uv 官方安装器，单文件/winget/Homebrew/pip/源码改为指向 docs/INSTALL.md——**命令与渠道说明本身零改动**（INSTALL.md / 官网下载页 / 代码内文案三处不动，四处口径一致）
 - docs/README.md 新增：docs/ 目录对外索引（上手/了解/进阶/开发者四组；自建 OAuth 教程等此前无入口的文档纳入）；内部工作文档（REDESIGN_PLAN/SESSIONS 等）文末注明不面向用户
 - assets/promo/ 入库三张脱敏演示截图（收件箱/总管家/每日摘要，取自 promo/pictures 素材池；设置页截图因含「AI 晨报」旧文案弃用）+ nmail-logo-160.png（icon-master 缩 160px，README 用）
