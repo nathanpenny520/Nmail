@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0917-1420-CLI技能同步 🔄
+- 目标: B6 总管家新能力（模板/签名/联系组/受限设置/触发收信）同步进 skills/SKILL.md 与对外 API 指南；CLI 本身纯透传无需改码，同步已安装 skill 副本
+- 范围: skills/SKILL.md + docs/对外API使用指南.md + docs/CHANGELOG/SESSIONS + ~/.claude/skills/nmail（安装副本）
+- 时间: 2026-09-17 14:20 开工
+
 ### S-0917-1401-通知时区 ✅
 - 目标: 通知中心时间与系统时间一致——存 UTC 不动，`/api/notifications` 出口转系统时区 ISO，前端改共用 `formatDate` 渲染；为未来自定义时区留单点接缝（`_to_local_iso`）
 - 范围: backend(api/notifications.py) + frontend(NotificationBell.tsx) + docs(CHANGELOG/SESSIONS)
