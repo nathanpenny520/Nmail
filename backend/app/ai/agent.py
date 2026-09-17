@@ -651,6 +651,15 @@ _COMPLETION_PATTERNS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
 )
 _JSON_TOOL_RE = re.compile(r'"tool"\s*:\s*"([^"]+)"')
 
+# 名词性「已发送」不是完成断言：Sent 文件夹中文名即「已发送」，列文件夹清单
+# （「Sent Items（已发送）」）或查已发送邮件（「你已发送文件夹里…」）必误触发，
+# 纠正回灌还会引出模型防御性澄清（2026-09-17 用户实测）。比对前摘除名词性用法；
+# 真断言（「邮件已发送」「已发送给…」「已发送邮件给…」）不受影响。
+_NOUN_SENT_RE = re.compile(
+    r"已发送(?=文件夹|箱|夹|里|中|列表|记录|的)"   # 「已发送文件夹里」「已发送的邮件」等名词性短语
+    r"|[（(「『“”\"]已发送[）)」』“”\"]"          # 「Sent Items（已发送）」括注
+)
+
 
 def _attempted_tools(state: RunState) -> set[str]:
     """本 run 内出现过的工具调用名（assistant.tool_calls + JSON 降级协议回显）。"""
@@ -673,6 +682,7 @@ def _attempted_tools(state: RunState) -> set[str]:
 def _completion_mismatch(state: RunState, text: str) -> str:
     """最终回答完成断言 ↔ 已尝试工具比对；不一致返回纠正提示，否则空串。"""
     attempted = _attempted_tools(state)
+    text = _NOUN_SENT_RE.sub("SENT_PLACEHOLDER", text)  # 占位串不含断言词，仅用于比对
     for pattern, tools in _COMPLETION_PATTERNS:
         if pattern.search(text) and not (attempted & set(tools)):
             return ("（系统提示：你刚才的回答声称已完成某些操作，但本次运行中没有对应的工具执行记录。"

@@ -16,6 +16,17 @@
 
 ## 进行中
 
+### S-0917-1446-总管家空响应修复 🔄
+- 目标: 会话 36 报 400「Invalid 'messages[50].tool_calls': empty array」（run 52 实测）——deepseek 思考 token 单独耗尽 agent 单步 max_tokens=2000 → 空响应（无文本无调用）被 `_append_assistant_calls` 落库成 `tool_calls:[]` → 下步请求被 OpenAI 兼容端点 400。修复：单步上限 8192 + 空响应回灌重试兜底 + 落库防御
+- 范围: backend(app/ai/agent.py, tests/test_agent_loop.py) + docs(CHANGELOG, SESSIONS)
+- 协调: 与 S-0917-1448（A2 完成断言，同文件）重叠——已通知对方，等其提交后我再基于新鲜磁盘动手，不覆盖其 WIP
+- 时间: 2026-09-17 14:46 开工
+
+### S-0917-1448-A2完成断言误报
+- 目标: 用户反馈总管家纯查询回答末尾出现多余「系统注记」+ 防御性啰嗦澄清——根因：Sent 文件夹中文名「已发送」与 A2 完成断言词撞车（列文件夹清单/查已发送邮件必触发），纠正回灌又引发模型防御性澄清，二次仍命中 → 注记。修法：比对前摘除名词性「已发送」（文件夹/里/中/的/括注），真断言照拦
+- 范围: backend(app/ai/agent.py, tests/test_agent_loop.py) + docs(CHANGELOG, SESSIONS)
+- 时间: 2026-09-17 14:48 开工
+
 ### S-0917-1432-进度与日期显示修复 ✅
 - 目标: 用户两反馈——①「AI 整理」进度全程 0%（根因：organize_job 仅在整账号跑完后报一次进度，单账号场景全程 0%；顺带修僵尸 running 行：进程重启后 dedupe 会静默复用导致永挂）②跨年邮件日期显示「2025年 (日: 22日)」（根因：shortDate 跨年分支漏传 month，zh-CN 对年+日无月字段组合走 CLDR 特殊格式）
 - 范围: backend(core/pipeline.py, core/jobs.py, main.py) + frontend(utils/format.ts, components/MailBrowser.tsx) + docs(CHANGELOG, SESSIONS)

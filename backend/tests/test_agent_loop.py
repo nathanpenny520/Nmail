@@ -305,6 +305,22 @@ def test_completion_mismatch_matrix():
     assert agent._completion_mismatch(state, "已归档 5 封") != ""
 
 
+def test_completion_mismatch_sent_folder_noun_not_flagged():
+    """A2 误报回归（2026-09-17 用户实测）：Sent 文件夹中文名「已发送」是名词不是
+    完成断言——列文件夹清单/查已发送邮件零工具调用也不拦，真断言仍拦。"""
+    aid = _aid()
+    state = agent.RunState(session_id=None, account_ids=[aid], mode="auto",
+                           profile_id=None, origin="ui")
+    # 名词性用法（纯查询回合常见句式）→ 不触发纠正
+    assert agent._completion_mismatch(state, "Sent Items（已发送）") == ""
+    assert agent._completion_mismatch(state, "你已发送文件夹里最近的邮件如下：") == ""
+    assert agent._completion_mismatch(state, "已发送的邮件共 20 封") == ""
+    assert agent._completion_mismatch(state, "在已发送中找到 3 封") == ""
+    # 真完成断言（谓词用法）→ 仍拦
+    assert agent._completion_mismatch(state, "邮件已发送。") != ""
+    assert agent._completion_mismatch(state, "已发送给 a@b.com") != ""
+
+
 def test_feedback_truncation_keeps_head_and_tail():
     """A3 保头尾截断：超预算时开头与最新（尾部）内容都在，中间标注省略。"""
     lines = [{"id": i, "subject": f"标题{'长' * 40}{i}", "from": "x@y.com",
