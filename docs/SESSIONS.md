@@ -36,8 +36,9 @@
 
 ### S-0917-1252-体验优化 🔄
 - 目标: 用户六项体验反馈落地——docs/EXPERIENCE_PLAN.md（B1 全量同步/B2 换行 nl2br/B3 附件预览/B4 Tab keep-alive/B5 通知修复/B6 AI 工具扩充），批次 B2→B3→B1→B5→B4→B6
-- 范围: backend(sync.py, imap_client.py, mail_html.py, emails.py, folders.py, scheduler.py, database.py 迁移, pipeline.py, ai/tools.py, ai/agent.py, outbox.py, prompts.py) + frontend(Layout.tsx, MailBrowser.tsx, EmailReader.tsx, Markdown.tsx, NotificationBell.tsx, InsertDialogs 相关不动, ManagerPage.tsx, SettingsPage.tsx) + docs(EXPERIENCE_PLAN/CHANGELOG/SESSIONS/ARCHITECTURE)
-- 与 S-0916-1258-收尾计划 无文件冲突（其剩余为发版轮打包与渠道文档）
+- 产出: 六批全部完成并推送——B2=1e37818（nl2br 单换行保住）、B3=f120525（附件图片/PDF/文本预览）、B1=79d1988（全量同步：30 天窗口移除+后台回补全部文件夹全部历史+断点续传）、B5=086fb29（通知只报 INBOX/点击直达/晨报纯文本+站内富文本/归档带清单）、B4=d23ba30（五页签 keep-alive+usePageActive 门控轮询键盘）、B6=237b677（AI 新增 8 工具+高风险设置强制审批+AI 信补签名）；CHANGELOG/ARCHITECTURE/FAQ 同步
+- 验证: ruff+pytest 265 全绿（新增 test_backfill 6 例、test_ai_tools_b6 9 例）；npm build 过；隔离实例 Chrome 实测 keep-alive 滚动保留与 ?focus= 深链；markdown 端点实测往返
+- 遗留: 真机全量回补观察（8720 实例升级后随首轮轮询自动开始）；并行会话 ff64458 卷入本会话 SettingsPage WIP（usePageActive 门控，内容无损已入库）
 - 时间: 2026-09-17 12:52 开工
 
 ### S-0916-1258-收尾计划 🔄
