@@ -24,6 +24,7 @@
 - 验证: ruff 通过；npm build（含 tsc）通过；隔离实例（8931）curl 往返——默认 True、PUT false 落库回读 False
 - 遗留: 后端改动需重启 python run.py 生效（盘上有并行会话后端 WIP，本会话不代重启）；新分类 UI 待用户真机过目
 - 时间: 2026-09-17 12:55 开工，13:04 完成
+- 追记（第二轮，用户反馈：总开关不应留例外）: 提交 73b8fa8——总开关改全量（写信 ⌘S/⌘Enter、`?`、Esc 读信返回全部受控；RichEditor 经 ref 跟随、ComposeForm 容器守卫），分组加生效范围标注（仅「邮件」页签/写信时），`?`/`#` 补物理键位备注（Shift+//Shift+3），帮助面板与使用指南同步；npm build 通过，13:45 完成
 
 ### S-0917-1252-体验优化 🔄
 - 目标: 用户六项体验反馈落地——docs/EXPERIENCE_PLAN.md（B1 全量同步/B2 换行 nl2br/B3 附件预览/B4 Tab keep-alive/B5 通知修复/B6 AI 工具扩充），批次 B2→B3→B1→B5→B4→B6
