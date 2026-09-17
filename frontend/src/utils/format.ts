@@ -1,7 +1,8 @@
 /** 全局日期/大小格式化（IMPROVEMENT_PLAN 3.7b 归拢：原散布于
  *  MailBrowser/EmailReader/ComposeForm/ManagerPage 四处，行为原样迁入）。 */
 
-/** 列表短日期：当天只显时间，同年省略年份。 */
+/** 列表短日期：当天只显时间，同年省略年份（跨年为 2025/9/22 形态）。
+ *  注意 month 必传：zh-CN 对「年+日无月」组合会渲染成「2025年 (日: 22日)」。 */
 export function shortDate(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
@@ -10,7 +11,7 @@ export function shortDate(iso: string | null): string {
   if (sameDay) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
   const sameYear = d.getFullYear() === now.getFullYear()
   return d.toLocaleDateString('zh-CN', {
-    month: sameYear ? 'numeric' : undefined,
+    month: 'numeric',
     day: 'numeric',
     year: sameYear ? undefined : 'numeric',
   })

@@ -28,19 +28,21 @@ const PAGE_SIZE = 50
 const batchBtn =
   'rounded-md border border-indigo-200 bg-white px-1.5 py-0.5 t-sm text-gray-600 transition-colors hover:text-indigo-700 disabled:opacity-50'
 
-/** 后台任务进度条（列表工具条内联显示；job 为 null 或已终态时不渲染）。 */
+/** 后台任务进度条（列表工具条内联显示；job 为 null 或已终态时不渲染）。
+ *  进度尚为 0 时文本显示「…」而非「0%」（首帧/批次间隙不误导）。 */
 function JobProgressBar({ job, label }: { job: JobInfo | null; label: string }) {
   if (!job || job.status !== 'running') return null
+  const pct = Math.round(job.progress * 100)
   return (
     <span className="flex items-center gap-1.5">
       <span className="h-1.5 w-28 overflow-hidden rounded-full bg-indigo-100">
         <span
           className="block h-full rounded-full bg-indigo-500 transition-all duration-500"
-          style={{ width: `${Math.max(5, Math.round(job.progress * 100))}%` }}
+          style={{ width: `${Math.max(5, pct)}%` }}
         />
       </span>
       <span className="t-xs text-indigo-500">
-        {label} {Math.round(job.progress * 100)}%{job.detail ? ` · ${job.detail}` : ''}
+        {pct === 0 ? `${label}…` : `${label} ${pct}%`}{job.detail ? ` · ${job.detail}` : ''}
       </span>
     </span>
   )

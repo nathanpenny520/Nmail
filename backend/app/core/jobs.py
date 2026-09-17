@@ -95,6 +95,20 @@ def list_active() -> list[dict]:
     return [get_job(int(r["id"])) or {} for r in rows]
 
 
+def reap_orphans() -> int:
+    """启动清理：任务线程只活在本进程内，重启后遗留的 running 行必为孤儿。
+
+    不清理的后果：dedupe（如「AI 整理」）会静默复用僵尸行——点了没反应、
+    进度永挂 0%。在 lifespan 中 run_migrations() 之后、scheduler 启动前调用。
+    """
+    with tx() as conn:
+        cur = conn.execute(
+            "UPDATE jobs SET status = 'failed', detail = '进程重启，任务中断',"
+            " updated_at = datetime('now') WHERE status = 'running'"
+        )
+        return int(cur.rowcount or 0)
+
+
 def _run(kind: str, job_id: int, payload: dict) -> None:
     fn = _runners.get(kind)
     if fn is None:

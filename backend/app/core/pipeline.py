@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from datetime import datetime, UTC
 
 from bs4 import BeautifulSoup
@@ -277,8 +278,13 @@ def _generate_drafts(account: dict, items: list[dict]) -> None:
         )
 
 
-def classify_missing(account_id: int, folder: str = "INBOX", limit: int = 200) -> dict:
-    """手动触发：为未分类的历史邮件补跑分类（「AI 整理」按钮）。"""
+def classify_missing(account_id: int, folder: str = "INBOX", limit: int = 200,
+                     on_progress: Callable[[float, str], None] | None = None) -> dict:
+    """手动触发：为未分类的历史邮件补跑分类（「AI 整理」按钮）。
+
+    on_progress(批进度0..1, 明细)：每个 LLM 批次与归档阶段各回调一次，
+    供任务体上报中间进度（缺省 None 时零开销，同步路径不传即可）。
+    """
     conn = get_conn()
     rows = conn.execute(
         "SELECT id, subject, sender_name, sender_email, body_text, body_html"
@@ -310,6 +316,8 @@ def classify_missing(account_id: int, folder: str = "INBOX", limit: int = 200) -
 
     classified = 0
     archived = 0
+    total_batches = max(1, (len(to_classify) + CLASSIFY_BATCH_SIZE - 1) // CLASSIFY_BATCH_SIZE)
+    done_batches = 0
     for start in range(0, len(to_classify), CLASSIFY_BATCH_SIZE):
         batch = to_classify[start : start + CLASSIFY_BATCH_SIZE]
         try:
@@ -320,7 +328,12 @@ def classify_missing(account_id: int, folder: str = "INBOX", limit: int = 200) -
         arch, _, _items = _apply_classification(results)
         classified += len(results)
         archived += arch
+        done_batches += 1
+        if on_progress:
+            on_progress(done_batches / total_batches, f"分类 {classified}/{len(to_classify)}")
     # v0.4：补跑出的营销归档同样走服务器移动
+    if on_progress:
+        on_progress(1.0, "归档移动中")
     archived += _sweep_server_archive(account_id)
     return {"classified": classified, "archived": archived, "drafts": 0, "skipped_no_ai": False}
 
@@ -338,11 +351,17 @@ def organize_job(job_id: int, account_id: int | None = None, folder: str = "INBO
         ids = [int(r["id"]) for r in get_conn().execute("SELECT id FROM accounts").fetchall()]
     total = {"classified": 0, "archived": 0, "drafts": 0, "skipped_no_ai": False}
     for index, aid in enumerate(ids):
-        result = classify_missing(aid, folder, limit)
+        # 默认参数绑定快照循环变量（B023）；0.99 封顶避免归档/落库尾段假 100%
+        def _report(frac: float, detail: str, *, _i: int = index, _t: int = max(1, len(ids))) -> None:
+            jobs.report(job_id, stage="classifying",
+                        progress=min(0.99, (_i + frac) / _t),
+                        detail=(f"账号 {_i + 1}/{_t} · {detail}" if _t > 1 else detail))
+
+        result = classify_missing(aid, folder, limit, on_progress=_report)
         total["classified"] += result["classified"]
         total["archived"] += result["archived"]
         total["drafts"] += result["drafts"]
         total["skipped_no_ai"] = total["skipped_no_ai"] or result["skipped_no_ai"]
         jobs.report(job_id, stage="classifying", progress=(index + 1) / max(1, len(ids)),
-                    detail=f"账号 {index + 1}/{len(ids)}")
+                    detail=f"账号 {index + 1}/{len(ids)} · 已分类 {total['classified']}")
     return total

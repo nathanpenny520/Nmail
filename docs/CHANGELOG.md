@@ -3,6 +3,13 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 「AI 整理」中间进度上报 + 僵尸任务启动清理 + 跨年日期显示修复
+- 用户两反馈：①「AI 整理」进度全程显示 0%（单账号场景 `organize_job` 只在整账号跑完后报一次进度，LLM 批次与归档移动期间恒 0）②跨年邮件日期渲染成「2025年 (日: 22日)」
+- 进度：`classify_missing` 加 `on_progress` 回调（每个 LLM 批次报「分类 n/N」、归档阶段报「归档移动中」），`organize_job` 折算总进度 =（已完成账号 + 当前账号批次占比）/账号数，运行中 0.99 封顶防假 100%；多账号明细带「账号 i/n · 」前缀
+- 僵尸任务：jobs 线程只活在本进程内，重启后遗留 running 行必为孤儿——启动时 `jobs.reap_orphans()` 统一标记 failed（「进程重启，任务中断」）；不清理则 dedupe 会静默复用僵尸行，「AI 整理」点了没反应、进度永挂
+- 前端：`JobProgressBar` 进度为 0 时文本显示「AI 整理…」而非「AI 整理 0%」；`shortDate` 跨年分支恒传 month（zh-CN 对「年+日无月」字段组合走 CLDR 特殊格式「y年 (日: d日)」），跨年显示为「2025/9/22」
+- 会话：S-0917-1432-进度与日期显示修复
+
 ## 6c11f17 — fix: 通知中心时间改按系统时区显示（原为裸 UTC 串）
 - 用户反馈通知时间比系统慢 8 小时；根因：`notifications.created_at` 由 SQLite `datetime('now')` 默认值落库（恒为 UTC），API 原样透传、前端原样渲染字符串，全程无时区转换（邮件列表走了 formatDate 所以一直正确，仅通知中心漏了这层）
 - 架构保持「存 UTC、显示本地」：`/api/notifications` 出口 `_to_local_iso()` 把 UTC 裸串转系统时区带偏移 ISO（存量行同样覆盖，无需迁移）；前端 NotificationBell 改用共用 `formatDate` 渲染；依赖 UTC 存储做边界比较的 scheduler 定时逻辑不动

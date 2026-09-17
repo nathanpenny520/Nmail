@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0917-1432-进度与日期显示修复
+- 目标: 用户两反馈——①「AI 整理」进度全程 0%（根因：organize_job 仅在整账号跑完后报一次进度，单账号场景全程 0%；顺带修僵尸 running 行：进程重启后 dedupe 会静默复用导致永挂）②跨年邮件日期显示「2025年 (日: 22日)」（根因：shortDate 跨年分支漏传 month，zh-CN 对年+日无月字段组合走 CLDR 特殊格式）
+- 范围: backend(core/pipeline.py, core/jobs.py, main.py) + frontend(utils/format.ts, components/MailBrowser.tsx) + docs(CHANGELOG, SESSIONS)
+- 时间: 2026-09-17 14:32 开工
+
 ### S-0917-1420-CLI技能同步 ✅
 - 目标: B6 总管家新能力（模板/签名/联系组/受限设置/触发收信）同步进 skills/SKILL.md 与对外 API 指南；CLI 本身纯透传无需改码，同步已安装 skill 副本
 - 产出: 提交 48bb3e2——SKILL.md「内置总管家通道」补人人对等工具面与高风险设置审批硬规则（外层 agent 绝不代批）、frontmatter description 补触发词；对外API使用指南 agent scope 行、使用指南「AI 能做什么」表补四行（模板签名/联系组/设置/立即收信，B6 用户侧文档遗漏）；已安装副本 ~/.claude/skills/nmail（→~/.agents/skills）同步为仓库版

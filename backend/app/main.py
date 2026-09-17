@@ -18,7 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api import api_router
 from app.api.ext import log_ext_call as _log_ext_call
 from app.config import APP_NAME, APP_VERSION, DIST_DIR
-from app.core import batch_ops, pipeline, update_apply  # noqa: F401 — pipeline 导入即注册 jobs runner
+from app.core import batch_ops, jobs, pipeline, update_apply  # noqa: F401 — pipeline 导入即注册 jobs runner
 from app.db.database import cleanup_retention, run_migrations
 from app.scheduler import MailScheduler
 
@@ -51,6 +51,7 @@ async def lifespan(_: FastAPI):
     from app.core.outbox import migrate_legacy_ai_drafts
 
     migrate_legacy_ai_drafts()
+    jobs.reap_orphans()  # 重启后 running 行必为孤儿，防 dedupe 复用僵尸任务
     cleanup_retention()  # R7：通知/用量日志保留策略，防本地库无界增长
     scheduler.start()
     # 应用内自动更新（UPDATE_AND_DESKTOP.md §3.3）：启动后延迟静默检查一次
