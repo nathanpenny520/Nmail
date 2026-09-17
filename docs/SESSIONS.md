@@ -23,11 +23,6 @@
 - 遗留: PyPI/冻结资产恢复需发补丁版（0.4.4）；Windows 机应急可 `uvx --from nmail-app==0.4.2 nmail`
 - 时间: 2026-09-18 00:07 开工，00:15 完成
 
-### S-0917-2352-发版0.4.3
-- 目标: 用户拍板发 v0.4.3（全平台更新收尾）——release.sh 全流程：版本号 0.4.2→0.4.3、提交打 tag 推送、盯 CI（PyPI nmail-app+nmail-cli / 三平台资产 / Homebrew tap）、winget PR、官网联动重建
-- 范围: scripts/release.sh 托管（pyproject.toml, nmail-cli/**, skills/SKILL.md 版本四文件）+ docs(CHANGELOG, SESSIONS) 收尾
-- 时间: 2026-09-17 23:52 开工
-
 ### S-0917-2210-fd泄漏排查 ✅（续篇：换行语义统一）
 - 目标: 用户问「模板信中的 Enter 为什么在实际信件中是 Shift+Enter」——解释 Enter/<br> 语义差异后拍板全局统一：单换行=分段，行尾两空格=紧贴；模板/签名/AI 一致
 - 范围: backend(app/core/mail_html.py, tests/test_mail_html.py) + frontend(InsertDialogs 占位文案) + docs(CHANGELOG, SESSIONS)
@@ -803,6 +798,15 @@
 - 时间: 2026-09-11 13:35 完成
 
 ## 已完成
+
+### S-0917-2352-发版0.4.3 ✅
+- 目标: 用户拍板发 v0.4.3（全平台更新收尾）——release.sh 全流程：版本号 0.4.2→0.4.3、提交打 tag 推送、盯 CI（PyPI nmail-app+nmail-cli / 三平台资产 / Homebrew tap）、winget PR、官网联动重建
+- 范围: scripts/release.sh 托管（pyproject.toml, nmail-cli/**, skills/SKILL.md 版本四文件）+ docs(CHANGELOG, SESSIONS) 收尾
+- 产出: tag v0.4.3（提交 f3eca4f）+ db4ee8b（release.yml homebrew-tap 补 checkout）；winget PR microsoft/winget-pkgs#436602（手工补做，脚本死在盯 CI 没走到）；cask 手工兜底创建（0.4.3 + dmg SHA256）；官网重建 run 35244836698 已触发
+- ⚠️ 本版 Windows 全渠道启动即崩（4c282b8 已修、待 0.4.4 补丁版）——winget PR 建议留待 0.4.4 对分支追加提交或重开，勿在 0.4.4 前催合并
+- 验证: PyPI 双包 0.4.3 ✅、Release 六资产 ✅、tap Formula+Cask 0.4.3 ✅；CI 波折两起（附加 Release 撞 GitHub 瞬时 HTML 错误页→rerun --failed 即绿；cask 步骤无 checkout 必挂）均已记 RELEASE.md 故障处理
+- 遗留: ①winget 校验盯梢进行中（10-60 分钟，head sha cfcfcca）②0.4.4 补丁版发布待用户拍板 ③uv tool install 渠道应用内更新疑缺 pip（上轮发现，未修）
+- 时间: 2026-09-17 23:52 开工，09-18 00:25 完成
 
 ### S-0917-2314-dock-reopen ✅
 - 目标: 用户反馈 macOS 关浏览器标签后再点 Dock 图标无法重开页面（亮白点但点击无响应）——根因存根缺 `applicationShouldHandleReopen`；补 reopen 处理（cli 写实际绑定地址、存根读取后 open）；顺带核对各渠道自动更新口径文档（结论：INSTALL.md「更新」节口径完整清晰），官网单文件卡更新措辞对齐

@@ -50,6 +50,9 @@ bash scripts/release.sh 0.2.0 --dry-run      # 演练：只验证预检与版本
 | PyPI 403 Forbidden | token 过期/换 scope → pypi.org 重建 user-scoped token → `printf '%s' 'token' | gh secret set PYPI_API_TOKEN --repo nathanpenny520/Nmail` → Actions 页 Re-run failed jobs |
 | PyPI "file already exists" | **版本号已被永久占用**（上传成功过哪怕部分失败）→ 只能 bump 新版本号，不能复用 |
 | tag 推错了想重来 | 仅当该版本**从未成功上传 PyPI** 时可重指：`git push origin :refs/tags/vX && git tag -d vX` → 改完重新打 tag 推送 |
+| 「附加到 GitHub Release」步骤报 `##[error]<!DOCTYPE html>`（softprops 收到 HTML 错误页） | GitHub 瞬时故障，产物构建本身已成功：`gh run rerun <run_id> --failed` 重跑失败腿即可，勿整跑重发 |
+| homebrew-tap 的 cask 步骤 `sed: can't read scripts/cask_template.rb` | 该 job 原设计无 checkout（v0.4.3 实测必挂，db4ee8b 已补 checkout 但**旧 tag 的重跑仍用旧 workflow**）；兜底=本地渲染模板经 `gh api -X PUT repos/nathanpenny520/homebrew-nmail/contents/Casks/nmail.rb` 创建（模板在 scripts/cask_template.rb，dmg SHA256 用 `curl -fsSL <dmg-url> \| sha256sum`） |
+| fork merge-upstream 422（workflow scope） | 上游 winget-pkgs 改了 workflow 文件、gh token 缺 `workflow` scope，与 v0.4.2 同：容忍跳过（PR 基点沿用 fork master 旧提交），fork 对象库不含上游未同步提交、勿试图直接以上游 sha 建分支（404） |
 | CI 某平台失败 | `gh run view <run_id> --repo nathanpenny520/Nmail --log-failed`；homebrew-tap job 失败先查 `HOMEBREW_TAP_TOKEN` 是否过期 |
 | homebrew-tap 404 | 历史坑：曾因①只等 python-package 就开跑（macOS 资产还没挂上，下载 404）②curl 误用 gh 的 `--jq` 参数——均已修复（needs 含 binaries；指纹解析改 python3）。tap 更新失败时可用 gh 手动改 formula 兜底（见 RELEASE.md 作者会话记录） |
 

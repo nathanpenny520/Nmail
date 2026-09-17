@@ -9,6 +9,13 @@
 - v0.4.2 及更早无此代码不受影响；应急口径 `uvx --from nmail-app==0.4.2 nmail`。PyPI/资产恢复待下一补丁版发布
 - 会话：S-0918-0007-Windows-resource
 
+## f3eca4f — release: v0.4.3 + tag
+- 收录：后端 fd 水位治理（43e959f）、macOS .app Dock reopen（099f355）、Windows uv 命令补齐（302bf07）与官网口径对齐
+- ⚠️ **本版 Windows 全渠道启动即崩**（43e959f 的 `import resource` POSIX 专属，见 4c282b8）——用户真机实测撞上，修复已入库、待 0.4.4 补丁版发布；macOS/Linux 不受影响。winget PR #436602 暂不可用，0.4.4 发出后对 PR 分支追加提交或重开
+- release.sh 盯 CI 中断，后续步骤手工补做。CI 两处波折：①「附加到 GitHub Release」macOS/Windows 两腿撞 GitHub 瞬时 HTML 错误页（softprops 收到非 JSON 响应）→ `gh run rerun --failed` 重跑即绿；②homebrew-tap 新增的 cask 步骤引用仓库模板 `scripts/cask_template.rb`，但该 job 设计上无 checkout → 必挂 `sed: No such file`（根因修复 db4ee8b 补 checkout），本轮手工经 GitHub API 渲染创建 `Casks/nmail.rb`（0.4.3 + dmg SHA256）兜底
+- 验证：PyPI `nmail-app`/`nmail-cli` 0.4.3 ✅；Release 六资产齐（exe/Windows zip/dmg/app.zip/macos/linux）✅；tap Formula 0.4.3 ✅ + Cask 0.4.3 ✅；winget PR microsoft/winget-pkgs#436602（fork master 同步 422=gh token 缺 workflow scope，上游新增 workflow 文件所致，与 v0.4.2 同、按脚本口径容忍）；官网联动重建已触发
+- 会话：S-0917-2352-发版0.4.3
+
 ## 099f355 — fix: macOS .app 运行中再点 Dock 图标重开页面（补 reopen 处理）
 - 用户反馈：关掉浏览器标签后（服务按设计驻留后台），再点 Dock 图标亮白点却无响应——根因是 macOS 对已运行应用不二次启动进程、只发 reopen 事件，而存根（scripts/nmail_stub.m）只实现了退出，未实现 `applicationShouldHandleReopen`，点击落空
 - 修复：存根补 reopen 处理，用默认浏览器重开页面；实际绑定地址由 cli 写入——bundle server 脚本经 `NMAIL_URL_FILE` 环境变量告知约定文件（`Contents/MacOS/url`），cli 起服时写入（8720 被占顺延也正确），存根读取后 `/usr/bin/open <url>`，文件缺失兜底 8720。Win/Linux 图标再点即起新进程走既有单实例探测，无需改动
