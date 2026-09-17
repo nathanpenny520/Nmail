@@ -44,7 +44,16 @@
 
 ## 🚀 一分钟上手
 
-安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)（一次即可），然后：
+安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)（一次即可，装完重开终端生效）：
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows（PowerShell）
+irm https://astral.sh/uv/install.ps1 | iex
+```
+
+然后启动：
 
 ```bash
 uvx --from nmail-app nmail

@@ -44,7 +44,16 @@ You read, you edit, you decide — and **not a byte of your data ever leaves you
 
 ## 🚀 Up and running in a minute
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (once), then:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (once — reopen your terminal afterwards):
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows (PowerShell)
+irm https://astral.sh/uv/install.ps1 | iex
+```
+
+Then launch:
 
 ```bash
 uvx --from nmail-app nmail

@@ -3,6 +3,11 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — docs: README 双语与 INSTALL.md 补 uv 官方一键安装命令
+- 此前仅给 docs.astral.sh 安装文档外链，用户需自行跳转找命令；现补官方安装器命令——macOS/Linux `curl -LsSf https://astral.sh/uv/install.sh | sh`、Windows（PowerShell）`irm https://astral.sh/uv/install.ps1 | iex`，并注明装完重开终端生效
+- 四处口径核对：README 双语（「一分钟上手 / Up and running」节）+ docs/INSTALL.md 方式④ 补命令；官网下载页 download.astro 本就有两条命令未动；官网 /docs/install 构建时从主仓同步（本地构建已验证含命令），随下次官网部署上线
+- 会话：S-0917-2230-uv安装命令补齐
+
 ## 7f40bac — fix: 写信所见即所发——Markdown 转换产物空白规范化（删 br 后字面换行 + 缩进转 nbsp）
 - 用户反馈两个症状实机复现并根因定位：①模板/签名/AI 内容插入编辑器后「单换行变空行」②发送后「换行和空格被吞」。总根因是**两套空白口径不一致**：编辑器（ProseMirror）以 `break-spaces` 渲染（字面 `\n` 显示为换行、空格全保留），收件端 HTML 恒为 `normal`（`\n` 与连续空格折叠）；而 python-markdown 的 nl2br 输出 `<br />\n` 携带字面换行进编辑器文档——同一段内容编辑器显示空行+缩进、收件人看到紧凑无缩进（B2 修复前则是无 br 时字面 `\n` 被编辑器显示、收件端折叠成「换行被吞」）
 - 修复（单一收口）：`mail_html._normalize_md_html` 在 `markdown_body_html`/`markdown_to_email_html` 两路统一规范化——①删 `<br>` 后字面 `\n`（收件端永远折叠，编辑器不该显示）②`<br>`/`<p>` 后行首空格串转 U+00A0（任何客户端不折叠，中文书信缩进收发两端一致显示）；`<pre>` 代码块内换行缩进是语义，不受影响；`html_to_plain_text` 把 U+00A0 还原为普通空格（text/plain 同步保真，原 f561783 的 br-换行吞除逻辑保留作防御）

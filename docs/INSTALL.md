@@ -58,7 +58,9 @@ Linux 用户请用方式 ④（tap 不分发 Linux 二进制）。
 ### ④ uvx / pip（全平台，推荐命令行用户）
 
 ```bash
-# 装 uv（一次即可，见 https://docs.astral.sh/uv/getting-started/installation/）
+# 装 uv（一次即可，官方文档 https://docs.astral.sh/uv/getting-started/installation/；装完重开终端生效）
+curl -LsSf https://astral.sh/uv/install.sh | sh   # macOS / Linux
+irm https://astral.sh/uv/install.ps1 | iex        # Windows（PowerShell）
 uvx --from nmail-app nmail           # 无需安装，直接运行；uv 自动管理 Python
 # 或常驻安装
 uv tool install nmail-app && nmail   # 升级: uv tool upgrade nmail-app
