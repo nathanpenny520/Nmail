@@ -78,7 +78,7 @@
 - 验证：pytest 265 全绿；ruff/npm build 通过
 - 会话：S-0917-1252-体验优化
 
-## 待提交 — fix: 纯文本派生吃掉 br 后字面换行——修复 text/plain 单换行叠成双换行（skill 真机测试发现）
+## f561783 — fix: 纯文本派生吃掉 br 后字面换行——修复 text/plain 单换行叠成双换行（skill 真机测试发现）
 - nmail skill 全链路真机测试（自发自收回环）暴露：nl2br 产出 `<br />\n`，`html_to_plain_text` 把 br 换成 `\n` 后与标签后字面换行叠加 → 发出邮件的 text/plain alternative（及 AI 读信 body_text）单换行处全变空行；body_html 渲染不受影响
 - 修复：br 替换时吃掉紧跟的一个字面换行（bs4 NavigableString）；单换行语义在纯文本侧保住
 - 测试：test_mail_html 补回归（md→html→plain 全链恒等校验）；28/28 过
