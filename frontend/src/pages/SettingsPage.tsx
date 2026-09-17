@@ -538,13 +538,16 @@ export default function SettingsPage() {
               启用键盘快捷键
             </label>
             <p className="mt-1.5 t-sm leading-relaxed text-gray-400">
-              关闭后列表导航与操作键停用（选择即生效）；Esc 与 ? 帮助始终可用，
-              写信的 Ctrl/⌘+S、Ctrl/⌘+Enter 不受影响。
+              关闭后以上全部键位停用（选择即生效），含写信 Ctrl/⌘+S、Ctrl/⌘+Enter 与 Esc/?。
+              键位仅在下方标注的范围内响应，焦点在输入框时暂不触发；界面按钮不受影响。
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               {SHORTCUT_GROUPS.map((group) => (
                 <div key={group.title} className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
-                  <div className="t-md font-medium text-gray-700">{group.title}</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="t-md font-medium text-gray-700">{group.title}</span>
+                    <span className="t-xs text-gray-400">{group.scope}</span>
+                  </div>
                   <table className="mt-1.5 w-full t-sm text-gray-600">
                     <tbody>
                       {group.items.map((it) => (
@@ -554,7 +557,10 @@ export default function SettingsPage() {
                               {it.keys}
                             </kbd>
                           </td>
-                          <td className="py-1">{it.desc}</td>
+                          <td className="py-1">
+                            {it.desc}
+                            {it.sub && <span className="ml-1 t-xs text-gray-400">（{it.sub}）</span>}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

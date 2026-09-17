@@ -5,6 +5,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import { useAIEnabled } from '../../api/useAI'
+import { useShortcutsEnabled } from '../../api/useSettings'
 import { fmtSize } from '../../utils/format'
 import type { Account, DraftAttachment, UserDraft } from '../../types'
 import { useCompose } from './ComposeContext'
@@ -59,6 +60,9 @@ export default function ComposeForm({
   const [schedAt, setSchedAt] = useState(toLocalInput(new Date(Date.now() + 30 * 60 * 1000)))
   const [savedAt, setSavedAt] = useState('')
   const [saveError, setSaveError] = useState(false)
+
+  // 快捷键总开关（设置页「快捷键」）：关闭时 ⌘S 存草稿停用
+  const shortcutsEnabled = useShortcutsEnabled()
 
   // ── 草稿 id：ephemeral 标签为负数临时 id，首次保存后换绑真实 id ──
   const persistedIdRef = useRef(draft.id > 0 ? draft.id : 0)
@@ -237,6 +241,7 @@ export default function ComposeForm({
     <div
       className="flex h-full flex-col bg-white"
       onKeyDown={(e) => {
+        if (!shortcutsEnabled) return
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
           e.preventDefault()
           void doSaveRef.current()

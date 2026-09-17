@@ -18,6 +18,7 @@ import { useRef, useState } from 'react'
 import ContextMenu, { type ContextMenuItem } from '../ContextMenu'
 import { Modal } from './ui'
 import { api } from '../../api/client'
+import { useShortcutsEnabled } from '../../api/useSettings'
 
 /** 编辑器内嵌图上限（base64 直发，超过提示改用附件） */
 const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024
@@ -93,6 +94,9 @@ function looksLikeMarkdown(text: string): boolean {
 export function useMailEditor(initialHtml: string, onChange: (html: string) => void, onCtrlEnter: () => void) {
   const cbRef = useRef({ onChange, onCtrlEnter })
   cbRef.current = { onChange, onCtrlEnter }
+  // 快捷键总开关（设置页「快捷键」）：关闭时 ⌘Enter 发送停用（经 ref 跟随，编辑器实例只建一次）
+  const shortcutsRef = useRef(true)
+  shortcutsRef.current = useShortcutsEnabled()
   const editorRef = useRef<Editor | null>(null)
   const editor = useEditor({
     extensions: [
@@ -117,7 +121,7 @@ export function useMailEditor(initialHtml: string, onChange: (html: string) => v
     editorProps: {
       attributes: { class: 'mail-editor-content' },
       handleKeyDown: (_view, event) => {
-        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        if (shortcutsRef.current && (event.ctrlKey || event.metaKey) && event.key === 'Enter') {
           cbRef.current.onCtrlEnter()
           return true
         }

@@ -194,21 +194,22 @@ export default function MailBrowser({
     setSelectedIds([])
   }, [accountId, folder, q, starredOnly, category, page])
 
-  // 全文模式下 Esc 返回列表
+  // 快捷键总开关（设置页「快捷键」；Esc 与 ? 一样受控——关闭即全部停用）
+  const shortcutsEnabled = useShortcutsEnabled()
+
+  // 全文模式下 Esc 返回列表（受快捷键总开关约束）
   useEffect(() => {
-    if (selectedId == null) return
+    if (selectedId == null || !shortcutsEnabled) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setSelectedId(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedId])
+  }, [selectedId, shortcutsEnabled])
 
   // ── 键盘导航（VSCode/Gmail 风，REDESIGN_PLAN §4.3）──
   const [cursorId, setCursorId] = useState<number | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
-  // 快捷键总开关（设置页「快捷键」；Esc 与 ? 不受控）
-  const shortcutsEnabled = useShortcutsEnabled()
   const searchRef = useRef<HTMLInputElement>(null)
   // 邮件行右键菜单（§4.3；系统右键已在应用层全局屏蔽）
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; item: EmailSummary } | null>(null)
@@ -230,6 +231,8 @@ export default function MailBrowser({
   }, [items, selectedId])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 总开关（设置页「快捷键」）：关闭=清单内全部键位停用（含 Esc/?/写信键），界面按钮不受影响
+      if (!shortcutsEnabled) return
       // Esc 最先处理：焦点困在输入框会让全部快捷键静默失效——Esc 先退出输入框
       if (e.key === 'Escape' && !e.isComposing) {
         const t = e.target as HTMLElement | null
@@ -243,11 +246,6 @@ export default function MailBrowser({
           return
         }
       }
-      // 总开关（设置页「快捷键」）：关闭时仅屏蔽动作键——Esc（上方已处理）与 ? 帮助入口保留，
-      // 关了也能按 ? 找到这里；isHelpKey 匹配与下方 Slash 分支同一逻辑（code||key 双通道）
-      const isHelpKey = (e.code === 'Slash' || e.key === '/' || e.key === '?')
-        && (e.shiftKey || e.key === '?')
-      if (!shortcutsEnabled && !isHelpKey) return
       if (items.length === 0) return
       const target = e.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
@@ -566,7 +564,7 @@ export default function MailBrowser({
             <div className="space-y-3">
               {SHORTCUT_GROUPS.map((group) => (
                 <div key={group.title}>
-                  <div className="mb-1 t-xs font-medium text-gray-400">{group.title}</div>
+                  <div className="mb-1 t-xs font-medium text-gray-400">{group.title} · {group.scope}</div>
                   <table className="w-full t-sm text-gray-600">
                     <tbody>
                       {group.items.map((it) => (
@@ -576,7 +574,10 @@ export default function MailBrowser({
                               {it.keys}
                             </kbd>
                           </td>
-                          <td className="py-1">{it.desc}</td>
+                          <td className="py-1">
+                            {it.desc}
+                            {it.sub && <span className="ml-1 t-xs text-gray-400">（{it.sub}）</span>}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -584,7 +585,9 @@ export default function MailBrowser({
                 </div>
               ))}
             </div>
-            <p className="mt-2 t-xs text-gray-400">阅读态按 j / k 直接切上下一封；焦点在输入框时按 Esc 退回列表。</p>
+            <p className="mt-2 t-xs text-gray-400">
+              键位仅在标注范围、焦点不在输入框时响应；阅读态按 j / k 直接切上下一封。
+            </p>
           </div>
         </div>
       )}
