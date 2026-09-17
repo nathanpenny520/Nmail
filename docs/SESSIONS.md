@@ -16,10 +16,13 @@
 
 ## 进行中
 
-### S-0917-1432-进度与日期显示修复
+### S-0917-1432-进度与日期显示修复 ✅
 - 目标: 用户两反馈——①「AI 整理」进度全程 0%（根因：organize_job 仅在整账号跑完后报一次进度，单账号场景全程 0%；顺带修僵尸 running 行：进程重启后 dedupe 会静默复用导致永挂）②跨年邮件日期显示「2025年 (日: 22日)」（根因：shortDate 跨年分支漏传 month，zh-CN 对年+日无月字段组合走 CLDR 特殊格式）
 - 范围: backend(core/pipeline.py, core/jobs.py, main.py) + frontend(utils/format.ts, components/MailBrowser.tsx) + docs(CHANGELOG, SESSIONS)
-- 时间: 2026-09-17 14:32 开工
+- 产出: 提交 54fe4ec——classify_missing 加 on_progress 回调（逐 LLM 批次「分类 n/N」+「归档移动中」），organize_job 折算总进度 0.99 封顶；jobs.reap_orphans() 挂 lifespan（重启后 running 行标 failed，防 dedupe 复用僵尸）；JobProgressBar 0% 时显「AI 整理…」；shortDate 跨年恒传 month →「2025/9/15」形态
+- 验证: ruff 通过；pytest 267 全绿；npm build（tsc）通过；8720 重启后真实触发 organize（job 17）：0.50「分类 20/36」→ 0.99「归档移动中」→ done，中间进度可见；旧邮件日期实测 2025/9/15、同年 9/15 不变
+- 遗留: ①np25 INBOX 尚有 16 封未分类——AI 层既有容错路径（LLM 偶发返回空内容，classify parse failed raw=，14:26/14:28 用户自跑同样出现），与本修复无关，重跑「AI 整理」可补 ②工作树另有并行会话 mail_html.py/test_mail_html.py WIP 未动
+- 时间: 2026-09-17 14:32 开工，14:5x 完成
 
 ### S-0917-1420-CLI技能同步 ✅
 - 目标: B6 总管家新能力（模板/签名/联系组/受限设置/触发收信）同步进 skills/SKILL.md 与对外 API 指南；CLI 本身纯透传无需改码，同步已安装 skill 副本
