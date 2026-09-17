@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0917-2314-dock-reopen
+- 目标: 用户反馈 macOS 关浏览器标签后再点 Dock 图标无法重开页面（亮白点但点击无响应）——根因存根缺 `applicationShouldHandleReopen`；补 reopen 处理（cli 写实际绑定地址、存根读取后 open）；顺带核对各渠道自动更新口径文档，官网单文件卡更新措辞对齐
+- 范围: scripts/nmail_stub.m, backend/app/core/desktop.py, backend/app/cli.py, backend/app/assets/nmail-stub（重编译产物）+ docs(UPDATE_AND_DESKTOP, INSTALL, CHANGELOG, SESSIONS)；官网 download.astro 措辞（独立仓）
+- 时间: 2026-09-17 23:14 开工
+
 ### S-0917-2210-fd泄漏排查 ✅
 - 目标: 接 S-0917-2145 遗留——后端 fd 泄漏致 21:30 整机瘫痪（Errno 24）根因定位与修复
 - 范围: backend(app/cli.py, app/db/database.py, app/scheduler.py, tests/test_database.py) + docs(CHANGELOG, SESSIONS)
