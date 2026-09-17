@@ -592,7 +592,28 @@ def get_conn() -> sqlite3.Connection:
         conn.execute("PRAGMA foreign_keys=ON")
         conn.execute("PRAGMA busy_timeout=5000")  # 跨进程写冲突（如另开 CLI）兜底等待
         _local.conn = conn
+        _conn_registry[threading.get_ident()] = conn
     return conn
+
+
+def reap_dead_thread_conns() -> int:
+    """关闭并清退已死线程遗留的连接，返回回收数。
+
+    anyio 工作线程按负载起停（闲置 10s 退役），线程本地连接随线程死亡遗留，
+    GC 兜底回收有滞后——请求爆发期 fd 水位堆高（GUI 会话软上限仅 256，可触顶
+    瘫痪）。调度 tick 定期调本函数显式回收。check_same_thread=False 允许跨线程
+    close；线程 ident 复用时新连接覆盖旧条目，旧连接交 GC 兜底。
+    """
+    alive = {t.ident for t in threading.enumerate()}
+    reaped = 0
+    for ident in list(_conn_registry):
+        if ident in alive:
+            continue
+        conn = _conn_registry.pop(ident)
+        with suppress(sqlite3.Error):
+            conn.close()
+        reaped += 1
+    return reaped
 
 
 def close_thread_conn() -> None:
@@ -600,10 +621,12 @@ def close_thread_conn() -> None:
     conn = getattr(_local, "conn", None)
     if conn is not None:
         _local.conn = None
+        _conn_registry.pop(threading.get_ident(), None)
         with suppress(sqlite3.Error):
             conn.close()
 
 
+_conn_registry: dict[int, sqlite3.Connection] = {}
 _write_lock = threading.Lock()
 
 

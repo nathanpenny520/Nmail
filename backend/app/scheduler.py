@@ -224,6 +224,13 @@ def expire_stale_actions() -> int:
 
 
 def poll_due_accounts() -> None:
+    from app.db.database import reap_dead_thread_conns
+
+    try:
+        reap_dead_thread_conns()
+    except Exception:  # noqa: BLE001 — 回收失败不影响本轮轮询
+        logger.exception("dead-thread conn reaper crashed")
+
     interval_minutes = int(get_setting("poll_interval_minutes", 5) or 5)
     now = datetime.now(UTC)
     rows = get_conn().execute("SELECT * FROM accounts ORDER BY id").fetchall()

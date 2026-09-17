@@ -12,6 +12,13 @@
 - 四处口径核对：README 双语（「一分钟上手 / Up and running」节）+ docs/INSTALL.md 方式④ 补命令；官网下载页 download.astro 本就有两条命令未动；官网 /docs/install 构建时从主仓同步（本地构建已验证含命令），随下次官网部署上线
 - 会话：S-0917-2230-uv安装命令补齐
 
+## 待提交 — fix: 后端 fd 水位治理——启动抬 fd 软上限 + 调度 tick 回收死线程连接
+- 排查（playwright 驱动+隔离实例+真库副本压测+get_conn 创建点追踪）：泄漏实例 20:44→21:30 fd 打满 **256**（launchd GUI 会话 maxfiles soft=256）→ accept Errno 24 + sqlite 打不开，整机瘫痪只能重启。机制＝anyio 工作线程按负载起停（闲置 10s 退役），每个碰库工作线程持有 sqlite 连接（db+wal 句柄各 1），请求爆发期（写信台压测 16 分钟+前端 30s/60s 轮询+同步/总管家高频操作）连接水位堆高、GC 兜底回收滞后数分钟；连接最终会自愈（live 实测 40→6 回落），非单调泄漏，但 256 低上限下水位触顶即瘫痪
+- 修复三件：①`cli.raise_nofile_limit()` 启动即把软上限抬到 min(hard, 10240)（hard unlimited），启动日志回显便于核验 ②`database.reap_dead_thread_conns()` 连接登记表+调度 tick（60s）显式关闭已死线程遗留连接，把 fd 水位钉在活跃线程数 ③原 `close_thread_conn` 语义不变；IMAP/SMTP/LLM 客户端生命周期逐一核对均为 with/finally，无泄漏
+- 测试：test_database +3（死线程回收/活线程保留/软上限抬升），全套 281 绿；ruff 通过；.app 重装重启后日志回显 `fd soft limit: 10240 (hard …)`，前端 / 正常服务（重装前须先 `cp -r frontend/dist backend/app/static`——wheel 前端来源，缺了即「前端未构建」，本会话踩坑一次）
+- 排查工具留档 /tmp/nmail-fdleak（workload 分组压测、dbgserver get_conn 追踪、monitor.sh fd 监控）；e2e playwright 直连后端+Origin 头改写可绕 vite 代理 ECONNRESET（见记忆 nmail-macos-env）
+- 会话：S-0917-2210-fd泄漏排查
+
 ## 7f40bac — fix: 写信所见即所发——Markdown 转换产物空白规范化（删 br 后字面换行 + 缩进转 nbsp）
 - 用户反馈两个症状实机复现并根因定位：①模板/签名/AI 内容插入编辑器后「单换行变空行」②发送后「换行和空格被吞」。总根因是**两套空白口径不一致**：编辑器（ProseMirror）以 `break-spaces` 渲染（字面 `\n` 显示为换行、空格全保留），收件端 HTML 恒为 `normal`（`\n` 与连续空格折叠）；而 python-markdown 的 nl2br 输出 `<br />\n` 携带字面换行进编辑器文档——同一段内容编辑器显示空行+缩进、收件人看到紧凑无缩进（B2 修复前则是无 br 时字面 `\n` 被编辑器显示、收件端折叠成「换行被吞」）
 - 修复（单一收口）：`mail_html._normalize_md_html` 在 `markdown_body_html`/`markdown_to_email_html` 两路统一规范化——①删 `<br>` 后字面 `\n`（收件端永远折叠，编辑器不该显示）②`<br>`/`<p>` 后行首空格串转 U+00A0（任何客户端不折叠，中文书信缩进收发两端一致显示）；`<pre>` 代码块内换行缩进是语义，不受影响；`html_to_plain_text` 把 U+00A0 还原为普通空格（text/plain 同步保真，原 f561783 的 br-换行吞除逻辑保留作防御）

@@ -21,6 +21,25 @@ from pathlib import Path
 DEFAULT_PORT = 8720
 
 
+def raise_nofile_limit(cap: int = 10240) -> tuple[int, int]:
+    """抬高 fd 软上限（硬上限内）。
+
+    GUI/launchd 会话默认软上限仅 256：anyio 工作线程按负载起停，每个碰库的
+    工作线程都持有 sqlite 连接（db+wal 句柄），请求爆发期连接水位堆高即可
+    触顶——accept 报 Errno 24、sqlite 打不开，服务整体瘫痪（2026-09-17 实测）。
+    硬上限 unlimited 时直接给到 cap。失败静默：原上限下仍可用，只是余量小。
+    """
+    import resource
+
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    target = cap if hard == resource.RLIM_INFINITY else min(cap, hard)
+    if soft < target:
+        with suppress(Exception):
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+            soft = target
+    return soft, hard
+
+
 def _bind_test(port: int, reuse: bool) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         if reuse:
@@ -215,6 +234,8 @@ def _launch(argv: list[str] | None = None) -> None:
     args = parser.parse_args(args_list)
 
     setup_file_logging()  # 尽早挂上：此后任何环节的异常都有处可查
+    _soft, _hard = raise_nofile_limit()
+    print(f"fd soft limit: {_soft} (hard {_hard})")
 
     # 更新换身收尾：上次下载中途退出留下的半程更新在此完成或清理（binary 渠道，
     # UPDATE_AND_DESKTOP.md §3.1 第 5 步）——保证「下次打开一定是新版」

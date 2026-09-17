@@ -16,6 +16,15 @@
 
 ## 进行中
 
+### S-0917-2210-fd泄漏排查 ✅
+- 目标: 接 S-0917-2145 遗留——后端 fd 泄漏致 21:30 整机瘫痪（Errno 24）根因定位与修复
+- 范围: backend(app/cli.py, app/db/database.py, app/scheduler.py, tests/test_database.py) + docs(CHANGELOG, SESSIONS)
+- 结论: 非单调泄漏——fd 水位=anyio 工作线程churn×每线程 sqlite 连接(db+wal)×回收滞后，在 launchd GUI 软上限 256 下被请求爆发期顶穿；连接会自愈回落（live 实测 40→6）。逐一排除：LLM 客户端（每次 build_client 不关但 GC 及时，50 次实测零增长）、IMAP 生命周期（30 轮真机连接+异常路径零增长）、agent 流式+客户端中途断开（60 次零增长）、真同步×10、update/回补
+- 产出: 提交（哈希见 CHANGELOG 回填）——启动抬软上限至 10240（日志回显）+ 调度 tick 死线程连接回收 + 测试 +3（281 绿）
+- 遗留: ①重装 wheel 前必须先同步 frontend/dist→backend/app/static（缺了「前端未构建」，本会话踩坑已补进记忆与 CHANGELOG）②monitor.log 显示 fd 水位自愈正常，无需进一步观察；工具留 /tmp/nmail-fdleak
+- 时间: 2026-09-17 22:10 开工，23:05 完成
+
+
 ### S-0917-2257-Windows uv 命令补前缀 ✅
 - 目标: 用户指出各文档 Windows uv 安装命令有缺陷——裸 `irm … | iex` 仅 PowerShell 会话内可用，须补 `powershell -ExecutionPolicy ByPass -c` 前缀
 - 范围: README.md / README.zh-CN.md / docs/INSTALL.md + docs(CHANGELOG, SESSIONS)；官网 download.astro（复制按钮 data-copy 一并改）

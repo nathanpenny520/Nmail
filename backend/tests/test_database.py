@@ -133,3 +133,52 @@ def test_cleanup_retention_audit_and_runs():
             "SELECT COUNT(*) n FROM agent_runs WHERE status = ?", (status,)
         ).fetchone()["n"]
         assert n == want, f"agent_runs {status} 期望 {want} 实际 {n}"
+
+
+def test_reap_dead_thread_conns():
+    """死线程遗留的连接被回收：登记→线程退出→reap 关闭并清空条目（fd 泄漏修复）。"""
+    import threading
+    import sqlite3
+
+    def work():
+        database.get_conn()
+
+    t = threading.Thread(target=work)
+    t.start()
+    t.join()
+    # 套件内其他测试可能留有各自线程的登记，这里只关心新连接可被定位与回收
+    assert len(database._conn_registry) >= 1
+    conn = next(iter(database._conn_registry.values()))
+
+    reaped = database.reap_dead_thread_conns()
+    assert reaped >= 1
+    assert id(conn) not in {id(c) for c in database._conn_registry.values()}
+    with pytest.raises(sqlite3.ProgrammingError):
+        conn.execute("SELECT 1")  # 已被跨线程关闭
+
+
+def test_reap_keeps_live_thread_conns():
+    """活线程（含当前线程）的连接不被回收。"""
+    import threading
+
+    box: list = []
+
+    def work():
+        database.get_conn()
+        box.append(threading.get_ident())
+        # 线程仍活着时 reap：不应回收
+        assert database.reap_dead_thread_conns() == 0
+
+    t = threading.Thread(target=work)
+    t.start()
+    t.join()
+    database.reap_dead_thread_conns()  # 死后再收（与上一测试互不影响）
+    assert database.get_conn() is database.get_conn()  # 当前线程连接稳定复用
+
+
+def test_raise_nofile_limit_soft_raised():
+    """启动抬 fd 软上限：软上限至少抬到 min(cap, hard)（GUI 会话默认 256 的教训）。"""
+    from app.cli import raise_nofile_limit
+
+    soft, hard = raise_nofile_limit()
+    assert soft >= min(10240, hard if hard != -1 else 10240)
