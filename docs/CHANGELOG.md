@@ -91,6 +91,12 @@
 - 验证：npm build（含 tsc）通过
 - 会话：S-0917-1255-快捷键设置页（第三轮，用户反馈）
 
+## 7f8dec7 — ci: 主仓 docs 变更自动 dispatch 官网部署
+- 原状：官网 Deploy workflow 只挂在官网仓，主仓 docs push 触发不到——最长延迟 24h 等官网每日 cron 兜底，发版靠手动 `gh workflow run`
+- 新增主仓 `.github/workflows/docs-deploy.yml`：push main 且 `docs/**` 变更 → 自动 `gh workflow run` 官网 deploy.yml（workflow_dispatch 既有入口，官网侧零改动）；未配 secret 时空转跳过不报错
+- 一次性配置：fine-grained PAT（仅 nmail-site 仓、Actions RW）→ 主仓 secret `SITE_DEPLOY_PAT`；dispatch 链路已实测——主仓 run（9s）→ 官网 deploy 被踢动（38s success）→ 线上 200
+- 会话：S-0917-1255-快捷键设置页（追加）
+
 ## 73b8fa8 — fix: 快捷键总开关改全量开关 + 生效范围/物理键位标注（用户反馈）
 - 总开关语义改全量：关闭=清单内全部键位停用，不再保留例外——写信 Ctrl/⌘+S（ComposeForm 容器守卫）、Ctrl/⌘+Enter（RichEditor 经 ref 跟随，编辑器实例只建一次）、邮件页 `?` 帮助与 `Esc`（含读信返回）同样受控；界面按钮不受影响
 - 生效范围显式化：shortcuts.ts 分组加 scope（仅「邮件」页签 ×3 / 写信时），设置卡片与 `?` 帮助面板组标题同步标注；说明行注明焦点在输入框时暂不触发
