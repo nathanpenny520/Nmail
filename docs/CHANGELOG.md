@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## a3ece50 — release: v0.4.4 + tag
+- 收录：Windows 启动崩溃修复（4c282b8，`raise_nofile_limit` 平台保护）——**本版恢复 Windows 全渠道可用**（0.4.3 带病、0.4.2 及更早正常）
+- CI 波折同 0.4.3：macOS 资产「附加到 GitHub Release」撞 GitHub 瞬时 Unicorn HTML 错误页 → `gh run rerun --failed` 重跑即绿；脚本中断的 winget/官网两步手工补做
+- 验证：PyPI `nmail-app`/`nmail-cli` 0.4.4 ✅；Release 六资产齐 ✅；tap Formula/Cask 0.4.4 ✅；winget PR microsoft/winget-pkgs#436770（fork master 同步照旧 422=gh token 缺 workflow scope，容忍）；带病的 0.4.3 PR #436602 已关闭并留评指向 #436770；官网联动重建已触发
+- 会话：S-0918-0007-Windows-resource（续）
+
 ## 4c282b8 — fix: Windows 启动即崩——raise_nofile_limit 平台保护（resource 模块 POSIX 专属）
 - 用户 Windows 机 `uvx --from nmail-app nmail` 装包成功但启动即 `ModuleNotFoundError: No module named 'resource'`——43e959f 的 fd 抬限修复在 cli.py 无条件 `import resource`，该模块 POSIX 专属，Windows 全渠道（uvx/pip/冻结 exe）启动即崩，v0.4.3 带病发布
 - 修复：`raise_nofile_limit` 开头 `sys.platform == "win32"` 直接返回 None（Windows 无 fd 软上限概念、无 Errno 24 风险，抬限本就不适用），调用处按 None 跳过 fd 日志回显；macOS/Linux 行为不变

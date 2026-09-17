@@ -19,9 +19,9 @@
 ### S-0918-0007-Windows-resource ✅
 - 目标: 用户 Windows 机 uvx 装 v0.4.3 启动即崩（No module named 'resource'）——cli.py `raise_nofile_limit` 补平台保护
 - 范围: backend(app/cli.py) + docs(CHANGELOG, SESSIONS)
-- 产出: 4c282b8——win32 返回 None 跳过抬限与 fd 回显，macOS/Linux 行为不变（源码双平台模拟验证 + 8799 启动冒烟 + ruff 通过）
-- 遗留: PyPI/冻结资产恢复需发补丁版（0.4.4）；Windows 机应急可 `uvx --from nmail-app==0.4.2 nmail`
-- 时间: 2026-09-18 00:07 开工，00:15 完成
+- 产出: 4c282b8——win32 返回 None 跳过抬限与 fd 回显，macOS/Linux 行为不变（源码双平台模拟验证 + 8799 启动冒烟 + ruff 通过）；续：v0.4.4 补丁版已发（a3ece50，CI 撞 GitHub 瞬时错误页重跑即绿，winget #436770 补提、带病 #436602 已关，官网联动触发）
+- 遗留: Windows 机可重装 `uvx --from nmail-app nmail`（或任意渠道）即修复版；winget PR 等社区审核
+- 时间: 2026-09-18 00:07 开工，00:15 完成（续：07:55 发版完成）
 
 ### S-0917-2210-fd泄漏排查 ✅（续篇：换行语义统一）
 - 目标: 用户问「模板信中的 Enter 为什么在实际信件中是 Shift+Enter」——解释 Enter/<br> 语义差异后拍板全局统一：单换行=分段，行尾两空格=紧贴；模板/签名/AI 一致
@@ -806,6 +806,7 @@
 - ⚠️ 本版 Windows 全渠道启动即崩（4c282b8 已修、待 0.4.4 补丁版）——winget PR 建议留待 0.4.4 对分支追加提交或重开，勿在 0.4.4 前催合并
 - 验证: PyPI 双包 0.4.3 ✅、Release 六资产 ✅、tap Formula+Cask 0.4.3 ✅；CI 波折两起（附加 Release 撞 GitHub 瞬时 HTML 错误页→rerun --failed 即绿；cask 步骤无 checkout 必挂）均已记 RELEASE.md 故障处理
 - 遗留: ①winget 校验 10/10 绿（00:50），等社区审核员批准——**0.4.4 发出前勿催合并**，0.4.4 时对分支 nmail-0.4.3 追加提交即可自动重跑校验 ②0.4.4 补丁版发布待用户拍板 ③uv tool install 渠道应用内更新疑缺 pip（上轮发现，未修）
+- 追记（09-18 07:55）: 0.4.4 已发（用户拍板，见 S-0918-0007 续）——遗留①变更为：#436602 已关闭（0.4.3 Windows 构建带病，无合并价值），由独立分支 PR #436770（0.4.4）接替；遗留②完成
 - 时间: 2026-09-17 23:52 开工，09-18 00:25 完成
 
 ### S-0917-2314-dock-reopen ✅
