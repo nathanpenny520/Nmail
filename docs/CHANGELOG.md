@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — docs: Windows uv 安装命令补 powershell 前缀
+## 302bf07 — docs: Windows uv 安装命令补 powershell 前缀
 - 各文档 Windows 口径原为裸 `irm https://astral.sh/uv/install.ps1 | iex`，仅在已打开的 PowerShell 会话内可运行（cmd / Win+R 直接执行会报错，且可能被 ExecutionPolicy 拦截）；补齐官方完整写法 `powershell -ExecutionPolicy ByPass -c "irm … | iex"`。四处同步：README 双语、docs/INSTALL.md 方式④、官网 download.astro（正文与复制按钮 data-copy 一并改，引号转 `&quot;`）；/docs/install 走构建期同步
 - 会话：S-0917-2257-Windows uv 命令补前缀
 
