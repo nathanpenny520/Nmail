@@ -30,6 +30,21 @@ def draft_dir(draft_id: int) -> Path:
     return get_data_dir() / "drafts" / str(draft_id)
 
 
+def _append_signature_if_configured(account_id: int, body_html: str) -> str:
+    """AI 草稿发送前补该账号默认签名（EXPERIENCE_PLAN B6）。幂等：正文已含同款签名则跳过。"""
+    from app.core.mail_html import markdown_body_html
+
+    sigs = get_setting("compose_signatures", []) or []
+    content = next((str(s.get("content") or "") for s in sigs
+                    if isinstance(s, dict) and int(s.get("account_id") or 0) == account_id), None)
+    if not content:
+        return body_html
+    sig_html = sanitize_outgoing_html(markdown_body_html(content)).strip()
+    if not sig_html or sig_html in body_html:
+        return body_html
+    return body_html + sig_html
+
+
 def migrate_legacy_ai_drafts() -> int:
     """一次性：旧 drafts 表（AI 待审草稿）数据并入 user_drafts（v0.4 P3，REDESIGN_PLAN §5.1）。
 
@@ -118,7 +133,15 @@ def send_user_draft(draft_id: int) -> None:
 
     handle = mailbox.load_account(int(row["account_id"]))
 
-    html = wrap_email_body_html(decorate_outgoing_html(sanitize_outgoing_html(row["body_html"])))
+    # AI 起草的信补默认签名（EXPERIENCE_PLAN B6）：前端编辑器是人工写信时插签名的
+    # 唯一入口，AI 起草的邮件原本永远没有签名（prompts 声称"系统会自动处理"但实现
+    # 缺失）。用户开启 auto_insert_signature 时在发送前补上；幂等（已含同款签名跳过）。
+    if row["origin"] == "ai":
+        html = _append_signature_if_configured(int(row["account_id"]), row["body_html"] or "")
+    else:
+        html = row["body_html"] or ""
+
+    html = wrap_email_body_html(decorate_outgoing_html(sanitize_outgoing_html(html)))
     text = html_to_plain_text(html)
 
     # 回复信件带上 In-Reply-To，让对方客户端正确串线

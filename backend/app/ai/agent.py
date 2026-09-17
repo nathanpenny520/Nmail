@@ -326,6 +326,25 @@ def _summarize_result(tool: str, result: dict) -> str:
         return f"共 {result.get('count', 0)} 条长期偏好"
     if tool == "delete_memory":
         return f"已删除长期偏好 #{result.get('deleted')}"
+    if tool == "list_templates":
+        return f"共 {len(result.get('templates', []))} 个写信模板"
+    if tool == "list_signatures":
+        return f"共 {len(result.get('signatures', []))} 条签名档"
+    if tool == "apply_template":
+        return f"模板草稿 #{result.get('draft_id')} 已进入待审" if "draft_id" in result else "模板套用完成"
+    if tool == "apply_signature":
+        return f"签名已追加到草稿 #{result.get('draft_id')}" if result.get("ok") else "签名未变更"
+    if tool == "list_contact_groups":
+        return f"共 {len(result.get('groups', []))} 个联系组"
+    if tool == "manage_contact_group":
+        verbs = {"create": "已新建联系组", "rename": "已重命名联系组", "delete": "已删除联系组",
+                 "add_members": "已添加组成员", "remove_members": "已移除组成员"}
+        base = verbs.get(result.get("action"), "联系组已更新")
+        return f"{base}（变动 {result.get('changed', 0)} 人）" if "changed" in result else base
+    if tool == "set_settings":
+        return f"设置 {result.get('key')} 已更新"
+    if tool == "trigger_sync":
+        return "已开始收信同步" if result.get("ok") else f"同步未开始（{result.get('reason')}）"
     return "完成"
 
 
@@ -626,6 +645,9 @@ _COMPLETION_PATTERNS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
     (re.compile(r"已移动|已移到|已移至"), ("move_emails", "archive_emails")),
     (re.compile(r"已标为已读|已标记为已读|已标成已读|已标为未读|已加星标|已取消星标|已标星"),
      ("mark_emails", "star_emails")),
+    (re.compile(r"已套用模板|已用模板|已按模板"), ("apply_template", "create_draft")),
+    (re.compile(r"已修改设置|已更新设置|已调整设置|已关闭通知|已开启通知"), ("set_settings",)),
+    (re.compile(r"已新建联系组|已删除联系组|已添加组成员|已移除组成员"), ("manage_contact_group",)),
 )
 _JSON_TOOL_RE = re.compile(r'"tool"\s*:\s*"([^"]+)"')
 
@@ -713,6 +735,9 @@ def _approval_reason(state: RunState, tool_name: str, args: dict) -> str:
         return ""
     if state.mode != "auto":
         return "审批模式：写操作需人工批准"
+    # 高风险设置（晨报开关/时间、远程图片、读信截断）：自动模式也强制降审批（EXPERIENCE_PLAN B6）
+    if tool_name == "set_settings" and str((args or {}).get("key") or "") in T.SETTING_KEYS_APPROVAL:
+        return "该设置项影响面较大（无人值守行为/隐私/成本），需人工批准"
     if tool_name == "send_draft":
         draft_id = int((args or {}).get("draft_id") or 0)
         drow = get_conn().execute(

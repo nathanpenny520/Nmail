@@ -182,8 +182,11 @@ def _t_read_email(args: dict, primary: int, scope: list[int]) -> dict:
     text = (row["body_text"] or "").strip()
     if not text and row["body_html"]:
         text = html_to_plain_text(row["body_html"])
+    from app.db.database import get_setting
+
+    max_chars = int(get_setting("read_email_max_chars", 3000) or 3000)
     return {"subject": row["subject"], "from": row["sender_name"] or row["sender_email"],
-            "date": row["date"], "body": text[:3000]}
+            "date": row["date"], "body": text[:max_chars]}
 
 
 def _t_list_folders(args: dict, primary: int, scope: list[int]) -> dict:
@@ -729,6 +732,212 @@ def _t_read_skill(args: dict, primary: int, scope: list[int]) -> dict:
     return {"name": name, "title": title, "content": content}
 
 
+# ── 人人对等扩充（EXPERIENCE_PLAN B6）：模板/签名/联系组/受限设置/立即收信 ──
+
+def _t_list_templates(args: dict, primary: int, scope: list[int]) -> dict:
+    from app.db.database import get_setting
+
+    templates = get_setting("compose_templates", []) or []
+    return {"templates": [{"id": t.get("id"), "name": t.get("name"), "content": t.get("content", "")}
+                          for t in templates if isinstance(t, dict)]}
+
+
+def _t_list_signatures(args: dict, primary: int, scope: list[int]) -> dict:
+    from app.db.database import get_setting
+
+    sigs = get_setting("compose_signatures", []) or []
+    emails = {int(r["id"]): r["email"] for r in
+              get_conn().execute("SELECT id, email FROM accounts").fetchall()}
+    out = []
+    for s in sigs:
+        if not isinstance(s, dict):
+            continue
+        aid = s.get("account_id")
+        out.append({"account_id": aid, "account": emails.get(aid, f"账号{aid}"),
+                    "content": s.get("content", "")})
+    return {"signatures": out,
+            "hint": "发送管线对 AI 起草的邮件会在用户开启自动签名时自动补默认签名；"
+                    "指定用某条签名时用 apply_signature"}
+
+
+def _t_apply_template(args: dict, primary: int, scope: list[int]) -> dict:
+    """apply_template：取模板内容 + 可选补充段，走 create_draft 同一条落地路径。"""
+    from app.db.database import get_setting
+
+    templates = get_setting("compose_templates", []) or []
+    tid = str(args.get("template_id") or "")
+    template = next((t for t in templates if isinstance(t, dict) and str(t.get("id")) == tid), None)
+    if template is None:
+        names = "、".join(f'{t.get("name")}({t.get("id")})' for t in templates if isinstance(t, dict))
+        return {"error": f"模板不存在，可用：{names or '（无模板）'}"}
+    body = str(template.get("content") or "")
+    extra = str(args.get("extra") or "").strip()
+    if extra:
+        body = f"{body}\n\n{extra}"
+    return _t_create_draft({"to": args.get("to"), "subject": args.get("subject"),
+                            "body": body, "email_id": args.get("email_id")},
+                           primary, scope)
+
+
+def _signature_content_for(account_id: int) -> str | None:
+    """该账号的默认签名（compose_signatures 里第一条匹配该账号的）。"""
+    from app.db.database import get_setting
+
+    sigs = get_setting("compose_signatures", []) or []
+    for s in sigs:
+        if isinstance(s, dict) and int(s.get("account_id") or 0) == account_id:
+            return str(s.get("content") or "")
+    return None
+
+
+def _t_apply_signature(args: dict, primary: int, scope: list[int]) -> dict:
+    """apply_signature：把指定账号的默认签名追加到草稿正文（幂等，已含则跳过）。"""
+    draft_id = int(args.get("draft_id") or 0)
+    row = _own_draft(draft_id, scope)
+    if row is None:
+        return {"error": "草稿不存在"}
+    if row["status"] not in ("pending_review", "editing", "scheduled"):
+        return {"error": f"草稿状态为 {row['status']}，不可修改"}
+    account_id = int(args.get("account_id") or row["account_id"])
+    content = _signature_content_for(account_id)
+    if content is None:
+        return {"error": "该账号没有设置签名档"}
+    from app.core.mail_html import markdown_body_html, sanitize_outgoing_html
+
+    sig_html = sanitize_outgoing_html(markdown_body_html(content))
+    body_html = row["body_html"] or ""
+    if sig_html.strip() and sig_html.strip() in body_html:
+        return {"ok": True, "hint": "草稿已包含该签名，跳过"}
+    get_conn().execute(
+        "UPDATE user_drafts SET body_html = ? WHERE id = ?",
+        (body_html + sig_html, draft_id),
+    )
+    get_conn().commit()
+    return {"ok": True, "draft_id": draft_id, "hint": "签名已追加到草稿正文末尾"}
+
+
+def _t_list_contact_groups(args: dict, primary: int, scope: list[int]) -> dict:
+    return {"groups": contacts_core.list_groups()}
+
+
+_GROUP_ACTIONS = ("create", "rename", "delete", "add_members", "remove_members")
+
+
+def _t_manage_contact_group(args: dict, primary: int, scope: list[int]) -> dict:
+    """manage_contact_group：联系组增删改与成员调整（对齐 REST /api/contacts/groups 能力）。"""
+    action = str(args.get("action") or "")
+    if action not in _GROUP_ACTIONS:
+        return {"error": f"action 必须是 {'/'.join(_GROUP_ACTIONS)}"}
+    emails = [e.strip() for e in (args.get("emails") or []) if str(e).strip()]
+    if action == "create":
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return {"error": "name 不能为空"}
+        gid = contacts_core.create_group(name)
+        return {"ok": True, "action": action, "group_id": gid}
+    group_id = int(args.get("group_id") or 0)
+    row = get_conn().execute("SELECT id FROM contact_groups WHERE id = ?", (group_id,)).fetchone()
+    if row is None:
+        return {"error": "联系组不存在"}
+    if action == "rename":
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return {"error": "name 不能为空"}
+        contacts_core.rename_group(group_id, name)
+    elif action == "delete":
+        contacts_core.delete_group(group_id)
+    elif action in ("add_members", "remove_members"):
+        if not emails:
+            return {"error": "emails 不能为空"}
+        changed = contacts_core.set_members(group_id, emails, add=action == "add_members")
+        return {"ok": True, "changed": changed}
+    return {"ok": True}
+
+
+# 可由 AI 修改的设置键（EXPERIENCE_PLAN B6 人人对等）：AUTO=自动模式可直接执行；
+# APPROVAL=风险较高，审批模式下出卡、自动模式也强制降审批（agent._approval_reason）。
+SETTING_KEYS_AUTO: tuple[str, ...] = (
+    "desktop_notifications_enabled",  # bool 桌面通知总开关
+    "auto_insert_signature",          # bool 自动插签名（含 AI 草稿发送时补签名）
+    "contacts_auto_collect",          # bool 发件人自动入通讯录
+    "poll_interval_minutes",          # int 1..120 轮询间隔
+    "notify_types",                   # dict 按类型通知开关（子键覆盖）
+)
+SETTING_KEYS_APPROVAL: tuple[str, ...] = (
+    "agent_brief_enabled",      # bool AI 晨报开关（触发无人值守运行）
+    "digest_time",              # str HH:MM 晨报时间
+    "allow_remote_images",      # bool 放行远程图片（隐私）
+    "read_email_max_chars",     # int 500..20000 读信截断
+)
+_SETTING_INT_RANGE = {
+    "poll_interval_minutes": (1, 120),
+    "read_email_max_chars": (500, 20000),
+}
+_SETTING_BOOL_KEYS = ("desktop_notifications_enabled", "auto_insert_signature",
+                      "contacts_auto_collect", "agent_brief_enabled", "allow_remote_images")
+
+
+def _t_set_settings(args: dict, primary: int, scope: list[int]) -> dict:
+    """set_settings：受限白名单设置修改。未列出的键一律拒绝（§17.3 豁免不动摇）。"""
+    from app.db.database import get_setting, set_setting
+
+    key = str(args.get("key") or "")
+    if key not in SETTING_KEYS_AUTO and key not in SETTING_KEYS_APPROVAL:
+        return {"error": "该设置项不允许 AI 修改（白名单外）"}
+    value = args.get("value")
+    if key in _SETTING_BOOL_KEYS:
+        value = bool(value)
+    elif key in _SETTING_INT_RANGE:
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return {"error": "value 必须是整数"}
+        lo, hi = _SETTING_INT_RANGE[key]
+        if not lo <= value <= hi:
+            return {"error": f"value 需在 {lo}..{hi} 之间"}
+    elif key == "digest_time":
+        import re as _re
+
+        value = str(value or "").strip()
+        if not _re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value):
+            return {"error": "value 需为 HH:MM（24 小时制）"}
+    elif key == "notify_types":
+        if not isinstance(value, dict):
+            return {"error": "value 需为对象，如 {\"new_mail\": false}"}
+        allowed = ("new_mail", "ai_draft", "digest", "account_error")
+        bad = [k for k in value if k not in allowed]
+        if bad:
+            return {"error": f"未知通知类型 {'、'.join(bad)}，可用：{'、'.join(allowed)}"}
+        merged = {**(get_setting("notify_types", {}) or {}), **value}
+        value = merged
+    old = get_setting(key)
+    set_setting(key, value)
+    return {"ok": True, "key": key, "value": value, "old": old}
+
+
+def _t_trigger_sync(args: dict, primary: int, scope: list[int]) -> dict:
+    """trigger_sync：手动触发某账号（缺省=会话主账号）的增量同步（后台线程）。"""
+    from app.core import sync as sync_core
+
+    account_id = int(args.get("account_id") or primary)
+    if account_id not in scope:
+        raise PermissionError("账号不在当前会话范围内")
+    row = get_conn().execute(
+        "SELECT id, email, imap_server, imap_port FROM accounts WHERE id = ?", (account_id,)
+    ).fetchone()
+    if row is None:
+        return {"error": "账号不存在"}
+    archive = folders_core.archive_folder_name(account_id)
+    known = get_conn().execute(
+        "SELECT 1 FROM folders WHERE account_id = ? AND name = ?", (account_id, archive)
+    ).fetchone()
+    folders_tuple = ("INBOX", archive) if known else ("INBOX",)
+    result = sync_core.start_sync(dict(row), folders=folders_tuple)
+    if result.get("started"):
+        return {"ok": True, "hint": "已在后台开始同步，新邮件到齐后自动通知"}
+    return {"ok": False, "reason": result.get("reason", "unknown")}
+
+
 TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
     ToolSpec("search_emails", "read", "read",
              "按关键词与条件搜索邮件（默认全部文件夹含归档；支持分类/发件人/未读/日期过滤）",
@@ -869,6 +1078,46 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
              '{"name": "技能名"}',
              _obj({"name": _str("技能名（见系统提示词的技能索引）")}, ["name"]),
              _t_read_skill),
+    ToolSpec("list_templates", "read", "read",
+             "列出用户的写信模板（名称+内容）；用户让你用模板写信时先列出来选",
+             "{}", _OBJ.copy(), _t_list_templates),
+    ToolSpec("list_signatures", "read", "read",
+             "列出各账号的签名档内容", "{}", _OBJ.copy(), _t_list_signatures),
+    ToolSpec("apply_template", "write", "draft",
+             "用指定模板起草邮件（模板内容+可选补充段 → 进入待审列表）",
+             '{"template_id": "模板id", "to": "收件人", "subject?": "主题", "extra?": "模板之外的补充正文",'
+             ' "email_id?": "若是回复则传回复的邮件id"}',
+             _obj({"template_id": _str("模板 id"), "to": _str("收件人"), "subject": _str("主题"),
+                   "extra": _str("补充正文（Markdown）"), "email_id": _int("回复的邮件 id")},
+                  ["template_id", "to"]),
+             _t_apply_template),
+    ToolSpec("apply_signature", "write", "organize",
+             "把账号的默认签名追加到草稿正文末尾（幂等；一般不用调——发送时会自动补）",
+             '{"draft_id": "草稿id", "account_id?": "账号id（缺省=草稿所属账号）"}',
+             _obj({"draft_id": _int("草稿 id"), "account_id": _int("账号 id")}, ["draft_id"]),
+             _t_apply_signature),
+    ToolSpec("list_contact_groups", "read", "read",
+             "列出通讯录联系组（含成员）", "{}", _OBJ.copy(), _t_list_contact_groups),
+    ToolSpec("manage_contact_group", "write", "organize",
+             "联系组管理：新建/改名/删除/加成员/移成员",
+             '{"action": "create|rename|delete|add_members|remove_members", "group_id?": "组id",'
+             ' "name?": "组名（create/rename 用）", "emails?": ["邮箱"]}',
+             _obj({"action": _str("/".join(_GROUP_ACTIONS)), "group_id": _int("组 id"),
+                   "name": _str("组名"),
+                   "emails": {"type": "array", "items": {"type": "string"},
+                              "description": "成员邮箱列表（add/remove 用）"}}, ["action"]),
+             _t_manage_contact_group),
+    ToolSpec("set_settings", "write", "organize",
+             "修改白名单内的设置（桌面通知/自动签名/通讯录采集/轮询间隔/通知类型；"
+             "晨报开关/晨报时间/远程图片/读信截断等高风险项会强制人工审批）",
+             '{"key": "设置键", "value": "新值"}',
+             _obj({"key": _str("设置键（见系统提示词的白名单说明）"),
+                   "value": {"description": "新值（bool/int/str/object 视键而定）"}}, ["key", "value"]),
+             _t_set_settings),
+    ToolSpec("trigger_sync", "write", "organize",
+             "立即触发某账号的收信同步（后台执行，缺省=当前主账号）",
+             '{"account_id?": "账号id"}',
+             _obj({"account_id": _int("账号 id")}), _t_trigger_sync),
 ]}
 
 
@@ -904,6 +1153,15 @@ _PARAM_TYPES: dict[str, dict[str, str]] = {
     "delete_memory": {"memory_id": "int"},
     "ask_user": {"question": "str", "options": "strs"},
     "read_skill": {"name": "str"},
+    "list_templates": {},
+    "list_signatures": {},
+    "apply_template": {"template_id": "str", "to": "str", "subject": "str",
+                       "extra": "str", "email_id": "int"},
+    "apply_signature": {"draft_id": "int", "account_id": "int"},
+    "list_contact_groups": {},
+    "manage_contact_group": {"action": "str", "group_id": "int", "name": "str", "emails": "strs"},
+    "set_settings": {"key": "str"},
+    "trigger_sync": {"account_id": "int"},
 }
 _REQUIRED_ARGS: dict[str, tuple[str, ...]] = {
     "read_email": ("email_id",),
@@ -923,6 +1181,10 @@ _REQUIRED_ARGS: dict[str, tuple[str, ...]] = {
     "save_memory": ("content", "evidence"),
     "delete_memory": ("memory_id",),
     "read_skill": ("name",),
+    "apply_template": ("template_id", "to"),
+    "apply_signature": ("draft_id",),
+    "manage_contact_group": ("action",),
+    "set_settings": ("key", "value"),
 }
 
 

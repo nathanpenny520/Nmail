@@ -30,6 +30,12 @@ const TOOL_LABELS: Record<string, string> = {
   discard_draft: '丢弃草稿', send_draft: '发送邮件', start_organize: 'AI 整理',
   upsert_contact: '保存联系人', delete_contact: '删除联系人',
   add_sender_list: '加入名单', remove_sender_list: '移出名单',
+  list_memory: '查看偏好', save_memory: '记住偏好', delete_memory: '删除偏好',
+  ask_user: '向你提问', read_skill: '读取技能',
+  list_templates: '查看模板', list_signatures: '查看签名',
+  apply_template: '套用模板', apply_signature: '补签名',
+  list_contact_groups: '查看联系组', manage_contact_group: '管理联系组',
+  set_settings: '修改设置', trigger_sync: '立即收信',
 }
 
 const QUICK_PROMPTS = [
