@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: Windows 启动即崩——raise_nofile_limit 平台保护（resource 模块 POSIX 专属）
+## 4c282b8 — fix: Windows 启动即崩——raise_nofile_limit 平台保护（resource 模块 POSIX 专属）
 - 用户 Windows 机 `uvx --from nmail-app nmail` 装包成功但启动即 `ModuleNotFoundError: No module named 'resource'`——43e959f 的 fd 抬限修复在 cli.py 无条件 `import resource`，该模块 POSIX 专属，Windows 全渠道（uvx/pip/冻结 exe）启动即崩，v0.4.3 带病发布
 - 修复：`raise_nofile_limit` 开头 `sys.platform == "win32"` 直接返回 None（Windows 无 fd 软上限概念、无 Errno 24 风险，抬限本就不适用），调用处按 None 跳过 fd 日志回显；macOS/Linux 行为不变
 - v0.4.2 及更早无此代码不受影响；应急口径 `uvx --from nmail-app==0.4.2 nmail`。PyPI/资产恢复待下一补丁版发布

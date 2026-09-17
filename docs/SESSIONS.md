@@ -16,10 +16,12 @@
 
 ## 进行中
 
-### S-0918-0007-Windows-resource
+### S-0918-0007-Windows-resource ✅
 - 目标: 用户 Windows 机 uvx 装 v0.4.3 启动即崩（No module named 'resource'）——cli.py `raise_nofile_limit` 补平台保护
 - 范围: backend(app/cli.py) + docs(CHANGELOG, SESSIONS)
-- 时间: 2026-09-18 00:07 开工
+- 产出: 4c282b8——win32 返回 None 跳过抬限与 fd 回显，macOS/Linux 行为不变（源码双平台模拟验证 + 8799 启动冒烟 + ruff 通过）
+- 遗留: PyPI/冻结资产恢复需发补丁版（0.4.4）；Windows 机应急可 `uvx --from nmail-app==0.4.2 nmail`
+- 时间: 2026-09-18 00:07 开工，00:15 完成
 
 ### S-0917-2352-发版0.4.3
 - 目标: 用户拍板发 v0.4.3（全平台更新收尾）——release.sh 全流程：版本号 0.4.2→0.4.3、提交打 tag 推送、盯 CI（PyPI nmail-app+nmail-cli / 三平台资产 / Homebrew tap）、winget PR、官网联动重建
