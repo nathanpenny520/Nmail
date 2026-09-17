@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — docs: README 中英主次对调——中文成为主 README，顶部补语言切换行
+## ec5a85d — docs: README 中英主次对调——中文成为主 README，顶部补语言切换行
 - 用户指出重写时漏了语言切换行、且文档以中文为主：README.md ↔ README.zh-CN.md 内容对调——**中文版成为主 README**（GitHub/PyPI 默认展示中文），英文版移至 README.zh-CN.md；两份顶部补「中文 ｜ English」互链
 - docs/INSTALL.md（方式⑤、源码开发两处）与 docs/README.md 索引的 `../README.zh-CN.md` 引用跟改为 `../README.md`；官网 sync-docs 的 EXTRA_LINKS 本就同时映射两文件名，构建自动跟上
 - 注意：PyPI 项目页自下次发布起长描述展示中文 README（pyproject `readme = "README.md"`），无需改打包
