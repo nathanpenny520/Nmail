@@ -1,12 +1,13 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 
 /** 聊天气泡内的紧凑 Markdown 渲染（AI 回复/综述用）。wrap-anywhere：长 URL 等不可断词允许任意断行（可继承），且收缩 min-content 防气泡撑破 max-w。 */
 export default function Markdown({ text }: { text: string }) {
   return (
     <div className="wrap-anywhere">
       <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkBreaks]}
       components={{
         p: ({ children }) => <p className="my-1.5 first:mt-0 last:mb-0">{children}</p>,
         ul: ({ children }) => <ul className="my-1.5 list-disc space-y-0.5 pl-4 first:mt-0 last:mb-0">{children}</ul>,

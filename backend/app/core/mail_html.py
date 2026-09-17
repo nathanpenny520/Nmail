@@ -253,15 +253,15 @@ def wrap_email_body_html(inner_html: str) -> str:
 
 
 def markdown_to_email_html(markdown_text: str) -> str:
-    """写信正文的 Markdown → 带基础样式的 HTML。"""
+    """写信正文的 Markdown → 带基础样式的 HTML。nl2br：单换行保留为 <br>（用户按一次回车就要有一次换行）。"""
     import markdown as md_lib
 
-    body = md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables"])
+    body = md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables", "nl2br"])
     return wrap_email_body_html(body)
 
 
 def markdown_body_html(markdown_text: str) -> str:
-    """Markdown → 裸 HTML（无外层样式），供编辑器内插入/模板/签名转换用。"""
+    """Markdown → 裸 HTML（无外层样式），供编辑器内插入/模板/签名转换用。nl2br：单换行保留为 <br>。"""
     import markdown as md_lib
 
-    return md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables"])
+    return md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables", "nl2br"])

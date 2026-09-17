@@ -5,6 +5,7 @@ from app.core.mail_html import (
     count_remote_images,
     decorate_outgoing_html,
     html_to_plain_text,
+    markdown_body_html,
     markdown_to_email_html,
     sanitize_email_html,
     sanitize_outgoing_html,
@@ -101,6 +102,15 @@ def test_markdown_to_email_html_wrapped():
     out = markdown_to_email_html("# 标题\n\n**加粗**")
     assert "wrap" not in out  # wrap 只是容器，不出现字面
     assert "<h1>" in out and "<strong>" in out
+
+
+def test_markdown_nl2br_single_newline_kept():
+    """nl2br：单个换行转 <br>（模板/签名/AI 起草的用户预期），空行分段不变。"""
+    out = markdown_to_email_html("第一行\n第二行\n\n第三行")
+    assert "<p>第一行<br />" in out  # 单换行→<br>，同段内
+    assert "<p>第三行</p>" in out  # 空行仍分段
+    body = markdown_body_html("张三\n产品部")
+    assert "张三<br />" in body
 
 
 def test_style_tag_preserved_with_selectors():

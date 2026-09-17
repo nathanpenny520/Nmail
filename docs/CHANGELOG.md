@@ -3,6 +3,32 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — B1: 全量同步——首翻最新一页立即可用 + 后台回补全部文件夹全部历史（EXPERIENCE_PLAN）
+- 用户反馈清华邮箱只见最近 30 天；根因为 `FIRST_SYNC_DAYS=30` 首同步窗口且全项目无历史回补（客户端设计限制，非服务器限制）
+- 去掉 30 天窗口：首同步只拉最新一页（25 封）立即可用；新迁移 v26 给 `sync_state` 加 `backfill_uid`（回补断点）+ `backfill_done` 列
+- 新增独立回补线程（`maybe_start_backfill` → `_backfill_worker` → `_backfill_folder_pass`）：LIST 枚举全部服务器文件夹（排除 Gmail All Mail）+ 为每个文件夹确保 sync_state 行，从新到旧分页（25 封/页 × 80 页/趟，趟间重连换气）补齐全部历史；断点逐页落库，中断/重启/断连自动续传；INBOX 优先
+- 回补邮件**不进 AI 流水线、不发通知、不采通讯录**（防上万封跑 AI 与通知轰炸）；存量账号迁移后下次轮询自动开始回补
+- `iter_new_mail` 收敛为纯增量（`UID last_uid+1:*`）；抽出 `fetch_uids_parsed` 共用稠密区间/稀疏逐 UID 拉取逻辑；`folders.upsert_listing` 从 refresh_cache 抽出共用
+- 修复隐患：首同步分支补 `mb.folder.set(folder)`（原逻辑藏在 iter_new_mail 内，拆分时显式化）
+- 测试：新增 test_backfill.py 6 例（首翻页/小文件夹即齐/一趟补完/断点续传两趟/INBOX 优先/增量不受影响）；v26 迁移幂等断言更新
+- 验证：ruff 通过；pytest 256 全绿；临时数据目录启动冒烟 /api/health 通过；真机全量回补待用户实例升级后观察
+- 会话：S-0917-1252-体验优化
+
+## 待提交 — B3: 附件预览——图片/PDF/文本弹层预览，其余类型保持下载（EXPERIENCE_PLAN）
+- 用户拍板范围：图片、PDF、文本预览；其余下载。PRODUCT_PLAN 既定项（「图片和 PDF 预览」）落地
+- 后端 `/api/attachments/{id}/download` 加 `?inline=1`：mime 白名单（image/* 非 svg、application/pdf、text/*）才返回 inline disposition，其余强制 attachment；统一加 `X-Content-Type-Options: nosniff`；HTML/SVG 附件可携带同源脚本，永不 inline
+- 前端新增 AttachmentPreview 弹层：图片 `<img>` 直接渲染；PDF `<iframe>` 浏览器内置 viewer；文本 fetch 后 `<pre>`（>1MB 提示下载）；EmailReader 附件片可预览类型改为按钮打开弹层（带「预览」角标），不可预览类型保持原下载链接；弹层内仍可一键下载
+- 验证：npm build（tsc）通过；后端 ruff 通过
+- 会话：S-0917-1252-体验优化
+
+## 待提交 — B2: Markdown 转换开启 nl2br——模板/签名/AI 起草的单换行不再丢失（EXPERIENCE_PLAN）
+- 用户反馈「换行发出去就没了」，场景确认为模板/签名插入后；根因：`markdown_body_html`/`markdown_to_email_html` 未开 nl2br 扩展，单个换行被折叠为空格（编辑器直接打字不受影响，Enter 本就生成段落）
+- 两处转换函数 extensions 加 `nl2br`：波及模板插入、签名插入（含自动签名）、AI 起草（create_draft/update_draft）、编辑器 markdown 粘贴——单换行一律保留为 `<br>`，空行分段不变
+- 前端 Markdown 组件（AI 聊天气泡/晨报渲染）加 remark-breaks，站内渲染口径一致
+- 测试：test_mail_html.py 新增 nl2br 用例（单换行→`<br />`、空行仍分段）
+- 验证：pytest 27/27（mail_html）通过；ruff 通过；npm build 通过；运行实例 `/compose-extras/markdown` 实测往返
+- 会话：S-0917-1252-体验优化
+
 ## 76967b1 — UI: 设置页接入文档站入口——侧边栏「使用文档」+ 关于「帮助与文档」卡片，文档链接常量化
 - 设置侧边栏底部（nav 分隔线下）新增「使用文档」常驻外链（BookOpen 图标，新标签打开 nmail.whizzzest.com/docs/），所有分区可见；应用此前唯一文档入口散在 API/OAuth 两处深链
 - 「关于」新增「帮助与文档」卡片：文档首页 / 使用指南 / 常见问题 / 安装与更新 四入口（与「本机数据」卡同款样式）
