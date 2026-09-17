@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: Windows 启动即崩——raise_nofile_limit 平台保护（resource 模块 POSIX 专属）
+- 用户 Windows 机 `uvx --from nmail-app nmail` 装包成功但启动即 `ModuleNotFoundError: No module named 'resource'`——43e959f 的 fd 抬限修复在 cli.py 无条件 `import resource`，该模块 POSIX 专属，Windows 全渠道（uvx/pip/冻结 exe）启动即崩，v0.4.3 带病发布
+- 修复：`raise_nofile_limit` 开头 `sys.platform == "win32"` 直接返回 None（Windows 无 fd 软上限概念、无 Errno 24 风险，抬限本就不适用），调用处按 None 跳过 fd 日志回显；macOS/Linux 行为不变
+- v0.4.2 及更早无此代码不受影响；应急口径 `uvx --from nmail-app==0.4.2 nmail`。PyPI/资产恢复待下一补丁版发布
+- 会话：S-0918-0007-Windows-resource
+
 ## 099f355 — fix: macOS .app 运行中再点 Dock 图标重开页面（补 reopen 处理）
 - 用户反馈：关掉浏览器标签后（服务按设计驻留后台），再点 Dock 图标亮白点却无响应——根因是 macOS 对已运行应用不二次启动进程、只发 reopen 事件，而存根（scripts/nmail_stub.m）只实现了退出，未实现 `applicationShouldHandleReopen`，点击落空
 - 修复：存根补 reopen 处理，用默认浏览器重开页面；实际绑定地址由 cli 写入——bundle server 脚本经 `NMAIL_URL_FILE` 环境变量告知约定文件（`Contents/MacOS/url`），cli 起服时写入（8720 被占顺延也正确），存根读取后 `/usr/bin/open <url>`，文件缺失兜底 8720。Win/Linux 图标再点即起新进程走既有单实例探测，无需改动

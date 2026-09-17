@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0918-0007-Windows-resource
+- 目标: 用户 Windows 机 uvx 装 v0.4.3 启动即崩（No module named 'resource'）——cli.py `raise_nofile_limit` 补平台保护
+- 范围: backend(app/cli.py) + docs(CHANGELOG, SESSIONS)
+- 时间: 2026-09-18 00:07 开工
+
 ### S-0917-2352-发版0.4.3
 - 目标: 用户拍板发 v0.4.3（全平台更新收尾）——release.sh 全流程：版本号 0.4.2→0.4.3、提交打 tag 推送、盯 CI（PyPI nmail-app+nmail-cli / 三平台资产 / Homebrew tap）、winget PR、官网联动重建
 - 范围: scripts/release.sh 托管（pyproject.toml, nmail-cli/**, skills/SKILL.md 版本四文件）+ docs(CHANGELOG, SESSIONS) 收尾
