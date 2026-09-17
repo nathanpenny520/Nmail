@@ -16,11 +16,6 @@
 
 ## 进行中
 
-### S-0917-2314-dock-reopen
-- 目标: 用户反馈 macOS 关浏览器标签后再点 Dock 图标无法重开页面（亮白点但点击无响应）——根因存根缺 `applicationShouldHandleReopen`；补 reopen 处理（cli 写实际绑定地址、存根读取后 open）；顺带核对各渠道自动更新口径文档，官网单文件卡更新措辞对齐
-- 范围: scripts/nmail_stub.m, backend/app/core/desktop.py, backend/app/cli.py, backend/app/assets/nmail-stub（重编译产物）+ docs(UPDATE_AND_DESKTOP, INSTALL, CHANGELOG, SESSIONS)；官网 download.astro 措辞（独立仓）
-- 时间: 2026-09-17 23:14 开工
-
 ### S-0917-2210-fd泄漏排查 ✅
 - 目标: 接 S-0917-2145 遗留——后端 fd 泄漏致 21:30 整机瘫痪（Errno 24）根因定位与修复
 - 范围: backend(app/cli.py, app/db/database.py, app/scheduler.py, tests/test_database.py) + docs(CHANGELOG, SESSIONS)
@@ -788,6 +783,14 @@
 - 时间: 2026-09-11 13:35 完成
 
 ## 已完成
+
+### S-0917-2314-dock-reopen ✅
+- 目标: 用户反馈 macOS 关浏览器标签后再点 Dock 图标无法重开页面（亮白点但点击无响应）——根因存根缺 `applicationShouldHandleReopen`；补 reopen 处理（cli 写实际绑定地址、存根读取后 open）；顺带核对各渠道自动更新口径文档（结论：INSTALL.md「更新」节口径完整清晰），官网单文件卡更新措辞对齐
+- 范围: scripts/nmail_stub.m, backend/app/core/desktop.py, backend/app/cli.py, backend/app/assets/nmail-stub（重编译产物）+ docs(UPDATE_AND_DESKTOP §2, INSTALL, CHANGELOG, SESSIONS)；官网 download.astro 措辞（独立仓同轮提交）
+- 产出: 提交 099f355——存根补 `applicationShouldHandleReopen`（openPage：读 NMAIL_URL_FILE 约定文件 → `/usr/bin/open <url>`，文件缺失兜底 8720）+ desktop.py server 脚本模板导出该变量（文件在 bundle 内 `Contents/MacOS/url`）+ cli.py 起服后写实际绑定地址（端口顺延也正确）；存根重编译通用二进制；重装 wheel + 重新生成 /Applications/Nmail.app；INSTALL.md 桌面图标行补「关页面后重开」口径
+- 验证: ruff 通过；冷启动 url 文件写入 http://127.0.0.1:8720、/api/health ok；`osascript tell application "Nmail" to reopen` 事件被应用接受（未报 -1708，等价于点 Dock 图标，用户浏览器应已可见页面弹出）
+- 遗留: ①存根被裸 SIGTERM（`kill <stub-pid>`）时绕过 applicationWillTerminate、服务子进程成孤儿——Dock 右键 Quit/⌘Q 经 `terminate:` 路径正常，本轮未改 ②旧实例升级到本版需重装+重新生成 .app（本轮已做）
+- 时间: 2026-09-17 23:14 开工，23:40 完成
 
 ### S-0917-1300-设置文档入口 ✅
 - 目标: 设置页接入文档站——侧边栏底部「使用文档」外链 + 「关于」新增「帮助与文档」卡片（文档首页/使用指南/FAQ/安装与更新）；文档链接去硬编码（utils/links.ts 常量 + components/DocsLink.tsx 统一样式，替换 ExtApiSection/OauthSettings 两处）；使用指南「设置速览」表补写信/关于两行、更正更新检查归属；不加更多分区深链（用户拍板）
