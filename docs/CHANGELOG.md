@@ -10,6 +10,13 @@
 - 验证：ruff 通过；npm build（tsc）通过；隔离实例 curl 实测 created_at 输出本地时区 ISO；8720 重启后 /api/health 通过
 - 会话：S-0917-1401-通知时区（暂存窗口被并行 docs 提交扫入，随 6c11f17 入库）
 
+## fe808f1 — B1 修正: v27 迁移为存量账号初始化回补锚点 + 运行态兜底（EXPERIENCE_PLAN）
+- 真机验证发现：v26 只给存量 sync_state 行加列（backfill_uid=NULL），回补线程把「锚点 NULL」误判为无需回补直接标 done——老账号 30 天之前的历史永不回补
+- v27 迁移：存量行锚点初始化为本地该文件夹 MIN(uid)（从真正缺口开始补，重叠段 INSERT OR IGNORE 去重）；无本地邮件的行回退 last_uid；回补线程 `_backfill_folder_pass` 加同场景运行态兜底（锚点缺失从 last_uid 起步，绝不静默标完成）
+- 测试：新增 test_backfill_migration.py 2 例（直接执行 MIGRATIONS v27 原句 SQL 验证锚点语义与已完成行不回退）
+- 真机验证：清华账号升级后 INBOX 从 30 天扩到整年（2025-09-14 起 307 封）、Sent 103 封、Trash/Archived 全部补齐，断点/进度/完成态全部符合预期
+- 会话：S-0917-1252-体验优化
+
 ## 79d1988 — B1: 全量同步——首翻最新一页立即可用 + 后台回补全部文件夹全部历史（EXPERIENCE_PLAN）
 - 用户反馈清华邮箱只见最近 30 天；根因为 `FIRST_SYNC_DAYS=30` 首同步窗口且全项目无历史回补（客户端设计限制，非服务器限制）
 - 去掉 30 天窗口：首同步只拉最新一页（25 封）立即可用；新迁移 v26 给 `sync_state` 加 `backfill_uid`（回补断点）+ `backfill_done` 列
