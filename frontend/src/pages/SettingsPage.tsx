@@ -11,6 +11,7 @@ import { DOCS_URL, docsUrl } from '../utils/links'
 import ExtApiSection from '../components/ExtApiSection'
 import { OauthConfigCard, ReauthorizeButton } from '../components/OauthSettings'
 import { notifyPermission, type NotifyPermission } from '../components/NotificationBell'
+import { usePageActive } from '../hooks/usePageActive'
 import { useCompose } from '../components/compose/ComposeContext'
 import { SignatureEditor, TemplateManager } from '../components/compose/InsertDialogs'
 import { backendLocalDate } from '../utils/format'
@@ -65,11 +66,12 @@ export default function SettingsPage() {
   const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings })
 
-  // 代理状态独立 3s 轮询：系统代理开关一变，状态行实时跟上（与主设置查询隔离，不重置表单）
+  // 代理状态独立 3s 轮询：系统代理开关一变，状态行实时跟上（与主设置查询隔离，不重置表单；keep-alive 隐藏页签不轮询）
+  const pageActive = usePageActive('/settings') as boolean
   const { data: proxyStatus } = useQuery({
     queryKey: ['proxy-status'],
     queryFn: api.getSettings,
-    refetchInterval: 3000,
+    refetchInterval: pageActive ? 3000 : false,
   })
 
   const [section, setSection] = useState<SectionKey>(() => {
@@ -538,8 +540,8 @@ export default function SettingsPage() {
               启用键盘快捷键
             </label>
             <p className="mt-1.5 t-sm leading-relaxed text-gray-400">
-              关闭后以上全部键位停用（选择即生效），含写信 Ctrl/⌘+S、Ctrl/⌘+Enter 与 Esc/?。
-              键位仅在下方标注的范围内响应，焦点在输入框时暂不触发；界面按钮不受影响。
+              关闭后以上键位全部停用（选择即生效）；界面按钮不受影响。
+              键位说明详见 <DocsLink href={docsUrl('guide/')}>使用指南</DocsLink>。
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               {SHORTCUT_GROUPS.map((group) => (
@@ -568,9 +570,6 @@ export default function SettingsPage() {
                 </div>
               ))}
             </div>
-            <p className="mt-3 t-xs leading-relaxed text-gray-400">
-              阅读态按 j / k 直接切上下一封；焦点在输入框时按 Esc 退回列表。
-            </p>
           </section>
         )}
 
