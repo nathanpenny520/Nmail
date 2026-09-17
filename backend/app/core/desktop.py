@@ -56,14 +56,19 @@ def _ps(s: str) -> str:
 
 # ── 各平台产物内容（纯函数，便于测试）───────────────────────────────────
 
-def _mac_script(target: str, args: list[str], data_dir: Path) -> str:
+def _mac_script(target: str, args: list[str], data_dir: Path,
+                url_file: Path | None = None) -> str:
     """bundle 启动脚本：服务以子进程运行、本脚本存活等待——若用 exec 把自身
     替换成服务进程，LaunchServices 会跟丢 bundle，Dock 图标立刻消失（2026-09-15
-    用户实测反馈）。退出信号转发给服务子进程，Dock 右键 Quit 即完整停服。"""
+    用户实测反馈）。退出信号转发给服务子进程，Dock 右键 Quit 即完整停服。
+    url_file：导出 NMAIL_URL_FILE 让 cli 把实际绑定地址写进去（端口可能顺延），
+    存根 reopen（服务运行中再点 Dock 图标）读它重开页面。"""
     log = data_dir / "nmail-app.log"
     quoted = " ".join([_sh(target), *(_sh(a) for a in args)])
+    env = f"export NMAIL_URL_FILE={_sh(str(url_file))}\n" if url_file else ""
     return (
         "#!/bin/bash\n"
+        f"{env}"
         f"{quoted} \"$@\" >> {_sh(str(log))} 2>&1 &\n"
         "CHILD=$!\n"
         "trap 'kill \"$CHILD\" 2>/dev/null' TERM INT\n"
@@ -268,14 +273,15 @@ def _install_macos() -> list[str]:
     # 优先用编译好的 ObjC 存根做「应用面」（LaunchServices 只为 GUI 进程注册应用，
     # 纯脚本 bundle 无 Dock 图标，2026-09-15 用户实测）；无存根资产则退回脚本形态
     stub = _assets_dir() / "nmail-stub"
+    url_file = contents / "MacOS" / "url"
     if stub.is_file():
         shutil.copyfile(stub, contents / "MacOS" / "nmail")
         (contents / "MacOS" / "nmail").chmod(0o755)
         server = contents / "MacOS" / "server"
-        server.write_text(_mac_script(target, args, data))
+        server.write_text(_mac_script(target, args, data, url_file))
         server.chmod(0o755)
     else:
-        (contents / "MacOS" / "nmail").write_text(_mac_script(target, args, data))
+        (contents / "MacOS" / "nmail").write_text(_mac_script(target, args, data, url_file))
         (contents / "MacOS" / "nmail").chmod(0o755)
     (contents / "PkgInfo").write_text("APPL????")
     (contents / "Info.plist").write_text(_mac_info_plist())

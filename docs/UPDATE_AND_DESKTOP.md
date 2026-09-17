@@ -22,6 +22,7 @@
 产物：
 - **Windows**：桌面 + 开始菜单 `.lnk`（PowerShell WScript.Shell 生成）。binary 渠道图标用 exe 内嵌；pip/uvx 先把启动命令写进 `%DATA_DIR%/bin/nmail.cmd`，`.lnk` 指向它，图标用随包分发的 `nmail.ico`。
 - **macOS**：`/Applications/Nmail.app`（用户期望标准位置，2026-09-15 反馈后由 ~/Applications 改来；无写权限回退 `~/Applications`）（Info.plist + MacOS/nmail + MacOS/server 启动脚本 + Resources/nmail.icns）。binary 渠道脚本 exec 冻结二进制；pip/uvx exec 对应命令（uvx 绝对路径在安装时以 `shutil.which` 定死）。**Dock 图标常驻**依赖编译型存根 `assets/nmail-stub`（scripts/nmail_stub.m，通用二进制）：LaunchServices 不为纯脚本 bundle 注册应用——存根以 NSApplication 身份注册（图标/名称/⌘Q/Dock 右键 Quit），服务是其子进程；Quit → SIGTERM → server 脚本 trap 连带结束 Python；服务退出则应用随退。
+- **Dock 再点重开页面**（2026-09-17 补，用户反馈关标签后点图标无响应）：应用已运行时 macOS 不二次启动进程，只发 reopen 事件——此前存根未实现，点击是死点。现 `applicationShouldHandleReopen` 用默认浏览器重开页面：server 脚本经 `NMAIL_URL_FILE` 环境变量告知约定文件（bundle 内 `Contents/MacOS/url`），cli 起服后把**实际绑定地址**写入（端口顺延也正确），存根读取后 `/usr/bin/open <url>`，文件缺失兜底 8720。仅 macOS 需要——Win/Linux 图标再点即起新进程，cli 单实例探测本就重开页面。
 - **Linux**：`~/.local/share/applications/nmail.desktop` + 图标装进 hicolor。
 
 支撑改动：

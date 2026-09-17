@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import copy
 import logging
+import os
 import socket
 import sys
 import threading
@@ -257,6 +258,13 @@ def _launch(argv: list[str] | None = None) -> None:
             return
         port = find_free_port(args.port)
     url = f"http://127.0.0.1:{port}"
+
+    # macOS .app 存根握手（UPDATE_AND_DESKTOP.md §2）：bundle server 脚本经
+    # NMAIL_URL_FILE 告知约定文件，把实际绑定地址写进去——端口被占顺延也正确，
+    # 存根收到 Dock「再点图标」reopen 事件读它用默认浏览器重开页面
+    if url_file := os.environ.get("NMAIL_URL_FILE"):
+        with suppress(OSError):
+            Path(url_file).write_text(url, encoding="utf-8")
 
     print(f"Nmail 启动中: {url}  (Ctrl+C 退出)")
 

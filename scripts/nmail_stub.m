@@ -4,6 +4,7 @@
 // 是 bash 脚本时进程无法成为 Dock 应用，图标点开即消失（2026-09-15 用户实测）。
 // 本存根以 NSApplication 身份注册（Dock 图标 = Contents/Resources/AppIcon.icns、
 // 名称 = CFBundleName），服务作为它的子进程跑在 Contents/MacOS/server 脚本里；
+// 服务运行中再点 Dock 图标走 applicationShouldHandleReopen 重开页面（见 openPage）；
 // Dock 右键 Quit / ⌘Q 经 applicationWillTerminate 向子进程发 SIGTERM，由
 // server 脚本内的 trap 连带结束 Python。服务子进程退出时应用随退（已在运行的
 // 探测场景：cli 开完浏览器即返回，图标自动消失，不留僵尸）。
@@ -17,6 +18,7 @@
 #import <libgen.h>
 #import <signal.h>
 #import <errno.h>
+#import <string.h>
 #import <unistd.h>
 #import <limits.h>
 #import <stdlib.h>
@@ -25,6 +27,9 @@
 extern char **environ;
 
 static pid_t g_child = -1;
+// server 脚本导出 NMAIL_URL_FILE 指向本文件，cli 启动后把实际绑定地址写进来
+// （端口可能顺延，8720 被占即漂移）——reopen 据此重开页面
+static char g_url_file[PATH_MAX];
 
 static void terminateChild(void) {
     if (g_child <= 0) return;
@@ -37,10 +42,32 @@ static void terminateChild(void) {
     g_child = -1;
 }
 
+// 运行中再点 Dock 图标 → macOS 发 reopen 事件（不会二次启动进程）——用默认
+// 浏览器重开页面。URL 文件缺失/没写上时兜底 8720（本应用冷启动的常态端口）
+static void openPage(void) {
+    const char *url = "http://127.0.0.1:8720";
+    char buf[256];
+    FILE *fp = fopen(g_url_file, "r");
+    if (fp && fgets(buf, sizeof(buf), fp)) {
+        buf[strcspn(buf, "\r\n")] = 0;
+        if (strncmp(buf, "http://", 7) == 0) url = buf;
+    }
+    if (fp) fclose(fp);
+    pid_t pid;
+    char *cargv[] = {(char *)"/usr/bin/open", (char *)url, NULL};
+    if (posix_spawn(&pid, "/usr/bin/open", NULL, NULL, cargv, environ) == 0) {
+        waitpid(pid, NULL, 0);               // open 秒回，收尸防僵尸
+    }
+}
+
 @interface NmailDelegate : NSObject <NSApplicationDelegate>
 @end
 @implementation NmailDelegate
 - (void)applicationWillTerminate:(NSNotification *)note { terminateChild(); }
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag {
+    openPage();
+    return YES;
+}
 @end
 
 int main(int argc, const char *argv[]) {
@@ -49,6 +76,7 @@ int main(int argc, const char *argv[]) {
         char *dir = dirname(self_copy);
         char serverPath[PATH_MAX];
         snprintf(serverPath, sizeof(serverPath), "%s/server", dir);
+        snprintf(g_url_file, sizeof(g_url_file), "%s/url", dir);
 
         posix_spawn_file_actions_t fa;
         posix_spawn_file_actions_init(&fa);

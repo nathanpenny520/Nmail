@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: macOS .app 运行中再点 Dock 图标重开页面（补 reopen 处理）
+- 用户反馈：关掉浏览器标签后（服务按设计驻留后台），再点 Dock 图标亮白点却无响应——根因是 macOS 对已运行应用不二次启动进程、只发 reopen 事件，而存根（scripts/nmail_stub.m）只实现了退出，未实现 `applicationShouldHandleReopen`，点击落空
+- 修复：存根补 reopen 处理，用默认浏览器重开页面；实际绑定地址由 cli 写入——bundle server 脚本经 `NMAIL_URL_FILE` 环境变量告知约定文件（`Contents/MacOS/url`），cli 起服时写入（8720 被占顺延也正确），存根读取后 `/usr/bin/open <url>`，文件缺失兜底 8720。Win/Linux 图标再点即起新进程走既有单实例探测，无需改动
+- 存根重编译通用二进制（cc arm64+x86_64）；ruff 通过；重装 wheel + 重新生成 /Applications/Nmail.app 实测：冷启动写 url 文件、运行中 `open -a Nmail` 触发重开
+- 会话：S-0917-2314-dock-reopen
+
 ## 302bf07 — docs: Windows uv 安装命令补 powershell 前缀
 - 各文档 Windows 口径原为裸 `irm https://astral.sh/uv/install.ps1 | iex`，仅在已打开的 PowerShell 会话内可运行（cmd / Win+R 直接执行会报错，且可能被 ExecutionPolicy 拦截）；补齐官方完整写法 `powershell -ExecutionPolicy ByPass -c "irm … | iex"`。四处同步：README 双语、docs/INSTALL.md 方式④、官网 download.astro（正文与复制按钮 data-copy 一并改，引号转 `&quot;`）；/docs/install 走构建期同步
 - 会话：S-0917-2257-Windows uv 命令补前缀
