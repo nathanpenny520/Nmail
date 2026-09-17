@@ -16,12 +16,6 @@
 
 ## 进行中
 
-### S-0917-1300-设置文档入口 🔄
-- 目标: 设置页接入文档站——侧边栏底部「使用文档」外链 + 「关于」新增「帮助与文档」卡片（文档首页/使用指南/FAQ/安装与更新）；文档链接去硬编码（utils/links.ts 常量 + components/DocsLink.tsx 统一样式，替换 ExtApiSection/OauthSettings 两处）；使用指南「设置速览」表补写信/关于两行、更正更新检查归属；不加更多分区深链（用户拍板）
-- 范围: frontend(links.ts 新建, DocsLink.tsx 新建, SettingsPage.tsx, ExtApiSection.tsx, OauthSettings.tsx) + docs(使用指南, CHANGELOG, SESSIONS)
-- 协调: SettingsPage.tsx 与 S-0917-1255/S-0917-1252 声明范围重叠——小步快走、编辑前新鲜重读、提交只暂存本会话 hunks（构造 patch）
-- 时间: 2026-09-17 13:00 开工
-
 ### S-0917-1255-快捷键设置页 ✅
 - 目标: 设置页新增「快捷键」分类（总开关 + 分组清单，截图参照某客户端设置页）；SHORTCUTS 抽共享数据源 shortcuts.ts 并补写信 ⌘S/⌘Enter 两键；后端 shortcuts_enabled 设置项
 - 范围: backend(api/settings.py) + frontend(shortcuts.ts 新建, MailBrowser.tsx, SettingsPage.tsx, openapi.json, schema.d.ts) + docs(使用指南, CHANGELOG, SESSIONS)
@@ -676,6 +670,14 @@
 - 时间: 2026-09-11 13:35 完成
 
 ## 已完成
+
+### S-0917-1300-设置文档入口 ✅
+- 目标: 设置页接入文档站——侧边栏底部「使用文档」外链 + 「关于」新增「帮助与文档」卡片（文档首页/使用指南/FAQ/安装与更新）；文档链接去硬编码（utils/links.ts 常量 + components/DocsLink.tsx 统一样式，替换 ExtApiSection/OauthSettings 两处）；使用指南「设置速览」表补写信/关于两行、更正更新检查归属；不加更多分区深链（用户拍板）
+- 范围: frontend(links.ts 新建, DocsLink.tsx 新建, SettingsPage.tsx, ExtApiSection.tsx, OauthSettings.tsx) + docs(使用指南, CHANGELOG, SESSIONS)
+- 产出: 提交 76967b1——侧边栏「使用文档」常驻外链（BookOpen，nav 分隔线下、全部分区可见）、关于页「帮助与文档」卡四入口、DOCS_URL/docsUrl 唯一出口 + DocsLink 统一样式（ExtApiSection/OauthSettings 两处硬编码 URL 改走常量）、使用指南设置速览表 6→8 分区并对齐实际归属
+- 验证: npm build（含 tsc/字号门禁/vitest）通过；npm run build 后再由官网部署链路同步（gh workflow run 已触发）
+- 提示: 我的提交 76967b1 顺带把 S-0917-1252 的看板登记一并入库（git add 整文件时误扫入，内容真实无污染），其会话后续照常更新即可；给后继会话：SettingsPage 侧边栏 nav 下方已有文档外链块，勿重复添加
+- 时间: 2026-09-17 13:00 开工，13:12 完成
 
 ### S-0913-1504-新用户初始化与字号 ✅
 - 目标: 用户定版新用户初始化——①页签栏初始化只有「邮件」：页面页签 localStorage→sessionStorage（应用内刷新保留、关闭浏览器标签页/退出应用归零，浏览器行为）②默认设置：轮询 1 分钟、摘要 07:00、界面字号大、通讯录自动采集关（改 DEFAULT_SETTINGS，仅影响新装用户）③正文字号与界面字号解耦：HtmlMail 沙箱 zoom 除以界面档位（原先相乘，「都调小」正文仅 0.72）

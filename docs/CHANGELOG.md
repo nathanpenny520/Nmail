@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — UI: 设置页接入文档站入口——侧边栏「使用文档」+ 关于「帮助与文档」卡片，文档链接常量化
+## 76967b1 — UI: 设置页接入文档站入口——侧边栏「使用文档」+ 关于「帮助与文档」卡片，文档链接常量化
 - 设置侧边栏底部（nav 分隔线下）新增「使用文档」常驻外链（BookOpen 图标，新标签打开 nmail.whizzzest.com/docs/），所有分区可见；应用此前唯一文档入口散在 API/OAuth 两处深链
 - 「关于」新增「帮助与文档」卡片：文档首页 / 使用指南 / 常见问题 / 安装与更新 四入口（与「本机数据」卡同款样式）
 - 文档链接去硬编码：新增 frontend/src/utils/links.ts（DOCS_URL + docsUrl(slug) 唯一出口）与 frontend/src/components/DocsLink.tsx（新标签 + indigo 下划线统一样式），ExtApiSection / OauthSettings 两处写死 URL 改走常量
