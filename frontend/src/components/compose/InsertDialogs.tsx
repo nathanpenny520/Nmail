@@ -151,7 +151,7 @@ export function TemplateManager({ onClose }: { onClose: () => void }) {
           />
           <textarea
             className="h-48 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 t-sm leading-relaxed outline-none focus:border-indigo-500"
-            placeholder={'模板内容，支持 Markdown（加粗 **x**、列表 -、链接等），插入时自动转富文本'}
+            placeholder={'模板内容，支持 Markdown（加粗 **x**、列表 -、链接等）。单个换行=分段；行尾打两个空格再换行=紧贴一行（同 Shift+Enter）'}
             value={editing.content}
             onChange={(e) => setEditing({ ...editing, content: e.target.value })}
           />

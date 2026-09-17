@@ -18,6 +18,14 @@
 - 四处口径核对：README 双语（「一分钟上手 / Up and running」节）+ docs/INSTALL.md 方式④ 补命令；官网下载页 download.astro 本就有两条命令未动；官网 /docs/install 构建时从主仓同步（本地构建已验证含命令），随下次官网部署上线
 - 会话：S-0917-2230-uv安装命令补齐
 
+## 待提交 — fix: 换行语义全局统一——单换行=分段（Enter），行尾两空格=紧贴（Shift+Enter）
+- 用户拍板：模板/签名/AI 起草的文本源与编辑器键位语义全面对齐——单个换行一律=分段 <p>（与编辑器 Enter 一致）；紧贴换行（Shift+Enter 语义）用 Markdown 硬换行表达（行尾 ≥2 空格或反斜杠）。取代 B2 的 nl2br（单换行=<br> 曾致「模板插入后 Enter 变 Shift+Enter」的观感，实测确认）
+- 实现：`mail_html._enter_to_paragraph` 预处理器——单换行改双换行走 Markdown 分段；行尾 ≥2 空格/反斜杠保留硬换行；围栏代码块内逐字保留；列表/引用/标题/表格行相邻换行不拆（块结构依赖行相邻）；非结构行 ≥4 空格缩进转私有区占位符（防分段后落入缩进代码块 + markdown 吞行首 nbsp），转出 HTML 后还原为 nbsp（缩进收发两端一致显示）；`_normalize_md_html` 保留（硬换行 br 后字面 \n 删除）
+- 前端仅模板编辑框占位文案更新（写明新约定）；编辑器打字/粘贴路径本就段落语义，零改动
+- 数据迁移：用户签名行尾单空格→双空格（保留签名紧贴排版意图，API 一次性完成）
+- 测试：test_mail_html 更新 4 例+新增硬换行 1 例，全套 282 绿；ruff+build 通过；e2e 实测：真实模板插入=逐行段落+缩进保留、签名插入=紧贴行+中英文间分段
+- 会话：S-0917-2210-fd泄漏排查（续篇：换行语义统一）
+
 ## 43e959f — fix: 后端 fd 水位治理——启动抬 fd 软上限 + 调度 tick 回收死线程连接
 - 排查（playwright 驱动+隔离实例+真库副本压测+get_conn 创建点追踪）：泄漏实例 20:44→21:30 fd 打满 **256**（launchd GUI 会话 maxfiles soft=256）→ accept Errno 24 + sqlite 打不开，整机瘫痪只能重启。机制＝anyio 工作线程按负载起停（闲置 10s 退役），每个碰库工作线程持有 sqlite 连接（db+wal 句柄各 1），请求爆发期（写信台压测 16 分钟+前端 30s/60s 轮询+同步/总管家高频操作）连接水位堆高、GC 兜底回收滞后数分钟；连接最终会自愈（live 实测 40→6 回落），非单调泄漏，但 256 低上限下水位触顶即瘫痪
 - 修复三件：①`cli.raise_nofile_limit()` 启动即把软上限抬到 min(hard, 10240)（hard unlimited），启动日志回显便于核验 ②`database.reap_dead_thread_conns()` 连接登记表+调度 tick（60s）显式关闭已死线程遗留连接，把 fd 水位钉在活跃线程数 ③原 `close_thread_conn` 语义不变；IMAP/SMTP/LLM 客户端生命周期逐一核对均为 with/finally，无泄漏

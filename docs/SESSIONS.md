@@ -16,6 +16,14 @@
 
 ## 进行中
 
+### S-0917-2210-fd泄漏排查 ✅（续篇：换行语义统一）
+- 目标: 用户问「模板信中的 Enter 为什么在实际信件中是 Shift+Enter」——解释 Enter/<br> 语义差异后拍板全局统一：单换行=分段，行尾两空格=紧贴；模板/签名/AI 一致
+- 范围: backend(app/core/mail_html.py, tests/test_mail_html.py) + frontend(InsertDialogs 占位文案) + docs(CHANGELOG, SESSIONS)
+- 产出: 提交（哈希见 CHANGELOG 回填）——`_enter_to_paragraph` 预处理（围栏/表格/列表感知 + 缩进 nbsp 占位）；签名数据迁移（行尾单空格→双空格保紧贴）；测试 282 绿
+- 遗留: ①fd 水位治理已在前一提交落地（43e959f）②模板里此致/敬礼若想紧贴，行尾打两个空格即可（已写进模板编辑框提示）
+- 时间: 2026-09-17 23:10 开工，23:40 完成
+
+
 ### S-0917-2210-fd泄漏排查 ✅
 - 目标: 接 S-0917-2145 遗留——后端 fd 泄漏致 21:30 整机瘫痪（Errno 24）根因定位与修复
 - 范围: backend(app/cli.py, app/db/database.py, app/scheduler.py, tests/test_database.py) + docs(CHANGELOG, SESSIONS)

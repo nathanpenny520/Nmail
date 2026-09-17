@@ -49,12 +49,67 @@ _CSS_IMPORT_RE = re.compile(r"@import\b[^;]*;?", re.IGNORECASE)
 _TINY_ATTR_RE = re.compile(r"^\s*(\d+)")
 _TINY_STYLE_RE = re.compile(r"(?:^|[;\s])(?:width|height)\s*:\s*(\d+(?:\.\d+)?)px", re.IGNORECASE)
 
+# 换行语义统一（2026-09-17 用户拍板）：文本源（模板/签名/AI 起草）里单个换行
+# =分段（与编辑器 Enter 一致），行尾 ≥2 空格或反斜杠 =紧贴换行（=编辑器
+# Shift+Enter，Markdown 硬换行约定）。此前 nl2br 把单换行转 <br>（B2），用户
+# 实测后拍板改为段落语义并全局统一。
+_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+_MD_MARKER_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|>|#|\|)")
+
+
+def _enter_to_paragraph(text: str) -> str:
+    """把「Enter=分段」文本规范化为 Markdown 源（模板/签名/AI 文本 → 排版语义）。
+
+    规则：非围栏行的单个换行改双换行（分段）；行尾 ≥2 空格或反斜杠保留单换行
+    （Markdown 硬换行→<br>，即紧贴行）；围栏代码块内逐字保留；列表/引用/标题/
+    表格行相邻换行保留（块结构靠行相邻解析，拆散即坏）；非结构行的 ≥4 空格缩进
+    转 U+00A0（防止分段后落入缩进代码块，同时缩进在收发两端都不折叠）。
+    """
+    lines = text.split("\n")
+    # 预扫描围栏状态：fenced[i] = 第 i 行是否处于围栏内（含围栏行本身）
+    fenced = [False] * len(lines)
+    in_fence = False
+    fence = ""
+    for i, line in enumerate(lines):
+        m = _FENCE_RE.match(line)
+        if m:
+            if not in_fence:
+                in_fence, fence = True, m.group(1)[:3]
+            elif line.lstrip().startswith(fence):
+                in_fence = False
+            fenced[i] = True
+        else:
+            fenced[i] = in_fence
+    # 缩进代码块风险行（≥4 空格的非结构行）→ 前导空格转 nbsp
+    for i, line in enumerate(lines):
+        if fenced[i]:
+            continue
+        stripped = line.lstrip(" ")
+        if line[: len(line) - len(stripped)] and not _MD_MARKER_RE.match(line):
+            # 占位符（私有区字符）：markdown 会吞行首 nbsp，先占位、转出后还原
+            lines[i] = "\ue000" * (len(line) - len(stripped)) + stripped
+    # 分隔符决策
+    out: list[str] = []
+    for i, line in enumerate(lines):
+        out.append(line)
+        if i == len(lines) - 1:
+            break
+        nxt = lines[i + 1]
+        if (line.endswith("  ") or line.endswith("\\")
+                or nxt.strip() == "" or fenced[i + 1] or fenced[i]
+                or _MD_MARKER_RE.match(nxt) or _MD_MARKER_RE.match(line)):
+            out.append("\n")
+        else:
+            out.append("\n\n")  # 单换行 → 分段
+    return "".join(out)
+
+
 # Markdown 转换产物的空白规范化（编辑器所见=所发的前提）。python-markdown 的
-# nl2br 输出 "<br />\n"：br 后的字面换行在收件端永远折叠（white-space:normal），
-# 却会进编辑器文档并被其 break-spaces 渲染成第二个换行——模板/签名/AI 内容
-# 插入后「单换行变空行」；行首缩进空格同理（编辑器可见、收件端折叠，发送后
-# 「空格被吞」）。转出的 HTML 一律：①删 br 后字面 \n；②行首空格串转
-# U+00A0（任何客户端都不折叠，缩进收发两端一致显示）。
+# 硬换行输出 "<br />\n"：br 后的字面换行在收件端永远折叠（white-space:normal），
+# 却会进编辑器文档并被其 break-spaces 渲染成第二个换行——插入后「紧贴行变空行」；
+# 行首缩进空格同理（编辑器可见、收件端折叠，发送后「空格被吞」）。转出的 HTML
+# 一律：①删 br 后字面 \n；②行首空格串转 U+00A0（任何客户端都不折叠，缩进
+# 收发两端一致显示）。
 _MD_BR_NEWLINE_RE = re.compile(r"(<br[^>]*>)\n")
 _MD_LEADING_SPACES_RE = re.compile(r"(<(?:br|p)(?:\s[^>]*)?>)( +)")
 
@@ -275,17 +330,23 @@ def wrap_email_body_html(inner_html: str) -> str:
 
 
 def markdown_to_email_html(markdown_text: str) -> str:
-    """写信正文的 Markdown → 带基础样式的 HTML。nl2br：单换行保留为 <br>（用户按一次回车就要有一次换行）。"""
+    """写信正文的 Markdown → 带基础样式的 HTML。换行语义同 markdown_body_html（单换行=分段）。"""
     return wrap_email_body_html(_normalize_md_html(markdown_body_html(markdown_text)))
 
 
 def markdown_body_html(markdown_text: str) -> str:
-    """Markdown → 裸 HTML（无外层样式），供编辑器内插入/模板/签名转换用。nl2br：单换行保留为 <br>。"""
+    """Markdown → 裸 HTML（无外层样式），供编辑器内插入/模板/签名转换用。
+
+    换行语义：单个换行=分段（与编辑器 Enter 一致），行尾 ≥2 空格=紧贴 <br>
+    （与编辑器 Shift+Enter 一致）——全局统一，模板/签名/AI 同规则。
+    """
     import markdown as md_lib
 
-    return _normalize_md_html(md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables", "nl2br"]))
+    html = md_lib.markdown(_enter_to_paragraph(markdown_text or ""),
+                           extensions=["fenced_code", "tables"])
+    return _normalize_md_html(html.replace("\ue000", "\u00a0"))
 
 
 def markdown_to_plain_text(markdown_text: str) -> str:
-    """Markdown → 纯文本（系统通知等纯文本场景）：先转 HTML（含 nl2br）再派生纯文本。"""
+    """Markdown → 纯文本（系统通知等纯文本场景）：先转 HTML 再派生纯文本。"""
     return html_to_plain_text(markdown_body_html(markdown_text))
