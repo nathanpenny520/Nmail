@@ -34,7 +34,7 @@
 ### S-0917-1458-晨报合一改名AI摘要 ✅
 - 目标: 用户拍板三合一——①砍掉 AI 综述（内容贫乏，信息量被统计卡覆盖）②「AI 晨报」更名「AI 摘要」并全量同步（界面/文档；CHANGELOG 历史条目与既有落地记录不改写）③生成三路径：定时（原样）+ 摘要页「重新生成」异步触发 + 总管家对话 `save_brief` 工具落库；`build_digest` 变纯统计零 LLM，保留作回退与开关关闭时的统计摘要
 - 范围: backend(ai/digest.py, ai/tasks.py, ai/tools.py, ai/agent.py 注释, scheduler.py, api/digest.py, api/settings.py, tests/test_digest.py, tests/test_agent.py) + frontend(DigestPage.tsx, SettingsPage.tsx, NotificationBell.tsx, types.ts, client.ts, openapi.json+schema.d.ts) + docs(使用指南/FAQ/ARCHITECTURE/REDESIGN_PLAN §18.6 增补/CHANGELOG/SESSIONS/SKILL.md/对外API使用指南)
-- 产出: 主提交（哈希见 CHANGELOG 回填条目）——后端综述删除+store_brief 更名+start_daily_brief 互斥入口+手动异步触发+brief_running 暴露+统计重建保留同日正文；前端按钮异步化+区块更名；save_brief 工具+参数表；文档全量改名
+- 产出: 提交 d6311cc——后端综述删除+store_brief 更名+start_daily_brief 互斥入口+手动异步触发+brief_running 暴露+统计重建保留同日正文；前端按钮异步化+区块更名；save_brief 工具+参数表；文档全量改名
 - 验证: ruff 通过；pytest 276 全绿（+1 统计重建保留正文）；npm build（tsc）通过；8720 重启后真实 e2e 两轮——首轮模型端点第 6 步挂起超时→按设计回退统计摘要+正确通知；二轮 done（7 步/86.6s）767 字正文落库、GET agent_brief 与 brief_running 翻转全部正确
 - 遗留: 无（agent.py 注释已随其 WIP 提交后顺带改名）
 - 时间: 2026-09-17 14:58 开工，16:1x 完成
