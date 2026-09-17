@@ -37,12 +37,13 @@
 - 追记（第四轮，参考用户截图补键位）: 提交 7262f5d——新增 Ctrl/⌘+A 全选/清空、Del/Backspace 删除、Shift+M 检查新邮件、读信时 r/a/f（EmailReader 监听，受总开关与 keep-alive 前台态约束）；设置页说明只剩文档跳转一句；shortcuts.ts 五组卡片（+读信界面组）；npm build 通过
 - 追记（⚠共享 index 误卷说明）: 6c11f17 本意只提交 ARCHITECTURE.md，但 S-0917-1401-通知时区 已 git add 的整批（notifications.py/NotificationBell.tsx/CHANGELOG/SESSIONS）被一同卷入提交——该批 ruff 复检通过且其条目自述已验证；通知时区条目的「待提交」哈希即 **6c11f17**，请该会话知悉并回填。此后本会话改用 `git commit -- <pathspec>` 提交
 
-### S-0917-1252-体验优化 🔄
+### S-0917-1252-体验优化 ✅
 - 目标: 用户六项体验反馈落地——docs/EXPERIENCE_PLAN.md（B1 全量同步/B2 换行 nl2br/B3 附件预览/B4 Tab keep-alive/B5 通知修复/B6 AI 工具扩充），批次 B2→B3→B1→B5→B4→B6
-- 产出: 六批全部完成并推送——B2=1e37818（nl2br 单换行保住）、B3=f120525（附件图片/PDF/文本预览）、B1=79d1988（全量同步：30 天窗口移除+后台回补全部文件夹全部历史+断点续传）、B5=086fb29（通知只报 INBOX/点击直达/晨报纯文本+站内富文本/归档带清单）、B4=d23ba30（五页签 keep-alive+usePageActive 门控轮询键盘）、B6=237b677（AI 新增 8 工具+高风险设置强制审批+AI 信补签名）；CHANGELOG/ARCHITECTURE/FAQ 同步
-- 验证: ruff+pytest 265 全绿（新增 test_backfill 6 例、test_ai_tools_b6 9 例）；npm build 过；隔离实例 Chrome 实测 keep-alive 滚动保留与 ?focus= 深链；markdown 端点实测往返
-- 遗留: 真机全量回补观察（8720 实例升级后随首轮轮询自动开始）；并行会话 ff64458 卷入本会话 SettingsPage WIP（usePageActive 门控，内容无损已入库）
-- 时间: 2026-09-17 12:52 开工
+- 产出: 七批全部完成并推送——B2=1e37818（nl2br 单换行保住）、B3=f120525（附件图片/PDF/文本预览）、B1=79d1988（全量同步：30 天窗口移除+后台回补全部文件夹全部历史+断点续传）、B5=086fb29（通知只报 INBOX/点击直达/晨报纯文本+站内富文本/归档带清单）、B4=d23ba30（五页签 keep-alive+usePageActive 门控轮询键盘）、B6=237b677（AI 新增 8 工具+高风险设置强制审批+AI 信补签名）、B1修正=fe808f1（v27 存量账号回补锚点初始化+运行态兜底）；CHANGELOG/ARCHITECTURE/FAQ/EXPERIENCE_PLAN 同步
+- 验证: ruff+pytest 267 全绿（test_backfill 6 例、test_ai_tools_b6 9 例、test_backfill_migration 2 例）；npm build 过；隔离实例 Chrome 实测 keep-alive 滚动保留与 ?focus= 深链；**真机验证**：8720 实例 pip 重装源码+重启（commit fe808f1）——清华账号 INBOX 从 30 天扩到整年（2025-09-14 起 307 封）、Sent 103 封、Trash/Archived 全部补齐，回补进度文本/完成态正常；nl2br 端点实测出 <br>
+- 遗留: 清华服务器 IMAP 只暴露约一年历史（更早邮件服务器端不可达，回补已取尽服务器可给的）；并行会话 ff64458 卷入本会话 SettingsPage WIP（内容无损已入库）
+- 给下个会话: EXPERIENCE_PLAN 六项已收口；回补线程在生产稳定（INBOX/Sent/Archived done）；附件 inline 白名单与 AI set_settings 白名单如扩键先读 EXPERIENCE_PLAN B3/B6 安全注记
+- 时间: 2026-09-17 12:52 开工，15:1x 完成
 
 ### S-0916-1258-收尾计划 🔄
 - 目标: 收官阶段——按 docs/WIND_DOWN_PLAN.md（用户 2026-09-16 拍板：自家 tap cask、dmg 首选 .app.zip 保留、Intel 放弃、不迁 Tauri、Release Notes 自动化、键盘收尾）落地 P1–P4
