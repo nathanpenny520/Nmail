@@ -1,8 +1,14 @@
 import { BarChart3, FilePenLine, Inbox, Menu, Pencil, Settings, Sparkles, SquarePen, X } from 'lucide-react'
-import { useEffect, useState, type DragEvent as ReactDragEvent } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState, type DragEvent as ReactDragEvent, type ReactNode } from 'react'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAIEnabled } from '../api/useAI'
+import { PageActiveProvider } from '../hooks/usePageActive'
 import { toggleTreeCollapsed, useTreeCollapsed } from '../hooks/useSidebar'
+import DigestPage from '../pages/DigestPage'
+import DraftsHubPage from '../pages/DraftsHubPage'
+import MailPage from '../pages/MailPage'
+import ManagerPage from '../pages/ManagerPage'
+import SettingsPage from '../pages/SettingsPage'
 import { useCompose } from './compose/ComposeContext'
 import ComposeWorkbench from './compose/ComposeWorkbench'
 import NotificationBell from './NotificationBell'
@@ -349,9 +355,37 @@ function IconTab({
   )
 }
 
+/** keep-alive 页签（EXPERIENCE_PLAN B4）：五个页面首次到访即常驻挂载，切页签只
+ *  显隐不卸载——滚动位置/筛选/选中邮件/聊天记录/AI 流式输出全部保留。
+ *  visibility 隐藏（非 display:none）：布局与滚动位置不丢，且不进 Tab 焦点序与
+ *  无障碍树。隐藏页签的轮询与全局键盘监听由 usePageActive 门控。 */
+const KEEP_ALIVE_PAGES: { path: string; el: ReactNode }[] = [
+  { path: '/', el: <MailPage /> },
+  { path: '/drafts', el: <DraftsHubPage /> },
+  { path: '/digest', el: <DigestPage /> },
+  { path: '/assistant', el: <ManagerPage /> },
+  { path: '/settings', el: <SettingsPage /> },
+]
+const KNOWN_PATHS = new Set(KEEP_ALIVE_PAGES.map((p) => p.path))
+
 export default function Layout() {
   const composing = useCompose().activeTabId !== null
   const { pendingCloseTabId, settleClose } = useCompose()
+  const location = useLocation()
+
+  // /?view=drafts 旧深链在 MailPage 内兜底重定向；未知路径回落邮件基座
+  const activePath = KNOWN_PATHS.has(location.pathname) ? location.pathname : '/'
+  // 首次到访才挂载；挂过后常驻
+  const [mounted, setMounted] = useState<Set<string>>(() => new Set([activePath]))
+  useEffect(() => {
+    setMounted((prev) => (prev.has(activePath) ? prev : new Set([...prev, activePath])))
+  }, [activePath])
+
+  // 旧路由与未知路径兜底（原 Routes 重定向：/mydrafts、/archived、* → /）——
+  // 重定向渲染必须放在全部 hooks 之后（React hooks 顺序不可条件化）
+  if (location.pathname === '/mydrafts') return <Navigate to="/drafts" replace />
+  if (location.pathname === '/archived') return <Navigate to="/" replace />
+  if (location.pathname !== activePath) return <Navigate to="/" replace />
 
   return (
     <div className="flex h-full flex-col bg-gray-50 text-gray-900">
@@ -361,9 +395,21 @@ export default function Layout() {
       {/* 收件箱等页面在写信时仅隐藏不卸载（keep-alive），切回即恢复列表与阅读状态 */}
       <div className="relative min-h-0 flex-1">
         <main
-          className={`h-full overflow-y-auto overflow-x-hidden ${composing ? 'hidden' : 'block'}`}
+          className="absolute inset-0 overflow-hidden"
+          style={{ visibility: composing ? 'hidden' : 'visible' }}
         >
-          <Outlet />
+          <PageActiveProvider path={activePath}>
+            {KEEP_ALIVE_PAGES.map((page) => (
+              <div
+                key={page.path}
+                className="absolute inset-0 overflow-y-auto overflow-x-hidden"
+                style={{ visibility: page.path === activePath && !composing ? 'visible' : 'hidden' }}
+                aria-hidden={page.path !== activePath}
+              >
+                {mounted.has(page.path) ? page.el : null}
+              </div>
+            ))}
+          </PageActiveProvider>
         </main>
         {composing && (
           <div className="absolute inset-0 z-20 min-h-0">

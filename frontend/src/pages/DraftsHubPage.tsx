@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { parseBackendTime } from '../utils/format'
 import { useFlash } from '../hooks/useFlash'
+import { usePageActive } from '../hooks/usePageActive'
 import { appZoom, usePanelWidth } from '../hooks/usePanelWidth'
 import type { UserDraft } from '../types'
 import HtmlMail from '../components/HtmlMail'
@@ -49,10 +50,12 @@ export default function DraftsHubPage() {
     setColWidth((e.clientX - colRef.current.getBoundingClientRect().left) / appZoom())
   }
   const queryClient = useQueryClient()
+  // keep-alive 隐藏页签不轮询（EXPERIENCE_PLAN B4）
+  const pageActive = usePageActive('/drafts') as boolean
   const { data, isLoading } = useQuery({
     queryKey: ['user-drafts', tab],
     queryFn: () => api.getUserDrafts(tab),
-    refetchInterval: tab === 'pending_review' ? 20000 : undefined,
+    refetchInterval: pageActive && tab === 'pending_review' ? 20000 : undefined,
   })
   const drafts = data?.drafts ?? []
   const selected = drafts.find((d) => d.id === selectedId) ?? drafts[0] ?? null

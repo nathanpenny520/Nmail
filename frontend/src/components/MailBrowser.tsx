@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { usePageActive } from '../hooks/usePageActive'
 import { api, type EmailQuery } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
 import { useShortcutsEnabled } from '../api/useSettings'
@@ -62,6 +63,8 @@ export default function MailBrowser({
   const compose = useCompose()
   const aiEnabled = useAIEnabled()
   const categoryMeta = categoryBadgeMap(useCategories())
+  // keep-alive 页签前台态（EXPERIENCE_PLAN B4）：门控列表轮询与全局键盘监听
+  const pageActive = usePageActive('/') as boolean
 
   const [accountId, setAccountId] = useState<number | null>(() => {
     if (initialAccountId !== undefined) return initialAccountId
@@ -103,7 +106,7 @@ export default function MailBrowser({
     queryFn: api.getAccounts,
     // 后台同步进行中时轮询账号状态；检测到某账号从同步中恢复即刷新邮件列表
     refetchInterval: (query) =>
-      query.state.data?.accounts.some((a) => a.status === 'syncing') ? 2000 : false,
+      pageActive && query.state.data?.accounts.some((a) => a.status === 'syncing') ? 2000 : false,
   })
   const accounts = accountsQuery.data?.accounts ?? []
   const hasAccounts = accounts.length > 0
@@ -153,7 +156,7 @@ export default function MailBrowser({
         offset: page * PAGE_SIZE,
       } satisfies EmailQuery),
     enabled: hasAccounts,
-    refetchInterval: 20000,
+    refetchInterval: pageActive ? 20000 : false, // keep-alive 隐藏页签不轮询（B4）
     placeholderData: (prev) => prev,
   })
   const items: EmailSummary[] = listQuery.data?.items ?? []
@@ -197,15 +200,15 @@ export default function MailBrowser({
   // 快捷键总开关（设置页「快捷键」；Esc 与 ? 一样受控——关闭即全部停用）
   const shortcutsEnabled = useShortcutsEnabled()
 
-  // 全文模式下 Esc 返回列表（受快捷键总开关约束）
+  // 全文模式下 Esc 返回列表（受快捷键总开关约束；keep-alive 隐藏页签不响应）
   useEffect(() => {
-    if (selectedId == null || !shortcutsEnabled) return
+    if (selectedId == null || !shortcutsEnabled || !pageActive) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setSelectedId(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedId, shortcutsEnabled])
+  }, [selectedId, shortcutsEnabled, pageActive])
 
   // ── 键盘导航（VSCode/Gmail 风，REDESIGN_PLAN §4.3）──
   const [cursorId, setCursorId] = useState<number | null>(null)
@@ -231,6 +234,8 @@ export default function MailBrowser({
   }, [items, selectedId])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // keep-alive 隐藏页签（EXPERIENCE_PLAN B4）：邮件页不在前台时不响应全局按键
+      if (!pageActive) return
       // 总开关（设置页「快捷键」）：关闭=清单内全部键位停用（含 Esc/?/写信键），界面按钮不受影响
       if (!shortcutsEnabled) return
       // Esc 最先处理：焦点困在输入框会让全部快捷键静默失效——Esc 先退出输入框
@@ -296,7 +301,7 @@ export default function MailBrowser({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, cursorId, selectedIds, selectedId, helpOpen, shortcutsEnabled])
+  }, [items, cursorId, selectedIds, selectedId, helpOpen, shortcutsEnabled, pageActive])
 
   const actionMutation = useMutation({
     mutationFn: ({ id, action, folder: dest }: { id: number; action: string; folder?: string }) =>
