@@ -4,8 +4,32 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { NotificationItem } from '../types'
+import Markdown from './Markdown'
 
 export type NotifyPermission = 'default' | 'granted' | 'denied' | 'unsupported'
+
+/** 通知类型 → 跳转目标。ref_id 语义：new_mail/ai_draft/ai_archive 存 email id（?focus= 直达
+    邮件；旧版 new_mail/ai_archive 存账号 id 的存量行 focus 落空，回落邮件页顶部，可接受）。 */
+function targetFor(n: NotificationItem): string | null {
+  const ref = n.ref_id
+  switch (n.type) {
+    case 'new_mail':
+    case 'ai_archive':
+      return ref ? `/?focus=${ref}` : '/'
+    case 'ai_draft':
+      return ref ? `/?focus=${ref}` : null
+    case 'ai_draft_summary':
+    case 'compose':
+      return '/drafts'
+    case 'digest':
+      return '/digest'
+    case 'account_error':
+    case 'ai_proposal':
+      return '/settings'
+    default:
+      return null
+  }
+}
 
 export function notifyPermission(): NotifyPermission {
   if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported'
@@ -56,7 +80,12 @@ export default function NotificationBell() {
         if (desktopOn && typeOn(item.type) && notifyPermission() === 'granted') {
           try {
             const n = new Notification(item.title, { body: item.body ?? '', tag: `nmail-${item.id}` })
-            n.onclick = () => window.focus()
+            // 点击系统通知：聚焦窗口并跳到对应页面/邮件（与通知中心面板同映射）
+            n.onclick = () => {
+              window.focus()
+              const target = targetFor(item)
+              if (target) navigate(target)
+            }
           } catch {
             // 通知构造失败（如无头环境）静默忽略
           }
@@ -69,7 +98,7 @@ export default function NotificationBell() {
       void queryClient.invalidateQueries({ queryKey: ['user-drafts'] })
     }
     prevIds.current = ids
-  }, [data, queryClient, settings])
+  }, [data, queryClient, settings, navigate])
 
   const readAllMutation = useMutation({
     mutationFn: api.markNotificationsRead,
@@ -91,15 +120,10 @@ export default function NotificationBell() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   })
 
-  // 通知点击：按类型跳转到对应内容（草稿→原邮件，摘要→摘要页，账号异常→设置）
+  // 通知点击：按类型跳转到对应内容（映射见 targetFor）
   const openNotification = (n: NotificationItem) => {
     if (!n.is_read) readOneMutation.mutate(n.id)
-    const ref = n.ref_id
-    let target: string | null = null
-    if (n.type === 'ai_draft' && ref) target = `/?focus=${ref}`
-    else if (n.type === 'ai_draft_summary') target = '/drafts'
-    else if (n.type === 'digest') target = '/digest'
-    else if (n.type === 'account_error') target = '/settings'
+    const target = targetFor(n)
     if (target) {
       setOpen(false)
       navigate(target)
@@ -181,14 +205,21 @@ export default function NotificationBell() {
                     {!n.is_read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />}
                     <div className="min-w-0">
                       <div className="truncate t-sm font-medium text-gray-800">{n.title}</div>
-                      {n.body && (
-                        <div
-                          className={`mt-0.5 t-xs text-gray-500 ${
-                            expandedId === n.id ? 'whitespace-pre-wrap' : 'line-clamp-2'
-                          }`}
-                        >
-                          {n.body}
+                      {n.body && expandedId === n.id && n.type === 'digest' ? (
+                        // 晨报正文是 markdown：展开时富文本渲染（系统通知仍为纯文本——平台限制）
+                        <div className="mt-0.5">
+                          <Markdown text={n.body} />
                         </div>
+                      ) : (
+                        n.body && (
+                          <div
+                            className={`mt-0.5 t-xs text-gray-500 ${
+                              expandedId === n.id ? 'whitespace-pre-wrap' : 'line-clamp-2'
+                            }`}
+                          >
+                            {n.body}
+                          </div>
+                        )
                       )}
                       {n.body && n.body.length > 90 && (
                         <button

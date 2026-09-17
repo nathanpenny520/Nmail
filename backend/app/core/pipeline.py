@@ -56,12 +56,13 @@ def _body_head(row) -> str:  # noqa: ANN001
     return re.sub(r"\s+", " ", text)[:BODY_HEAD_CHARS]
 
 
-def _apply_classification(results: list[dict]) -> tuple[int, int]:
-    """写回分类结果，执行营销自动归档。返回 (归档数, 需回复数)。"""
+def _apply_classification(results: list[dict]) -> tuple[int, int, list[dict]]:
+    """写回分类结果，执行营销自动归档。返回 (归档数, 需回复数, 被归档邮件 [{id, subject}])。"""
     conn = get_conn()
     now = datetime.now(UTC).isoformat(timespec="seconds")
     archived = 0
     need_reply = 0
+    archived_ids: list[int] = []
     for r in results:
         to_archive = 1 if r["category"] in AUTO_ARCHIVE_CATEGORIES else 0
         conn.execute(
@@ -73,9 +74,20 @@ def _apply_classification(results: list[dict]) -> tuple[int, int]:
              r["reason"], now, to_archive, r["id"]),
         )
         archived += to_archive
+        if to_archive:
+            archived_ids.append(r["id"])
         need_reply += 1 if r["needs_reply"] else 0
     conn.commit()
-    return archived, need_reply
+    archived_items: list[dict] = []
+    if archived_ids:
+        ph = ",".join("?" * len(archived_ids))
+        archived_items = [
+            {"id": int(row["id"]), "subject": row["subject"] or ""}
+            for row in conn.execute(
+                f"SELECT id, subject FROM emails WHERE id IN ({ph})", archived_ids
+            ).fetchall()
+        ]
+    return archived, need_reply, archived_items
 
 
 def _sweep_server_archive(account_id: int) -> int:
@@ -162,6 +174,7 @@ def process_new_emails(account: dict, email_ids: list[int]) -> None:
 
     try:
         archived_by_ai = 0
+        archived_samples: list[dict] = []
         draft_emails: list = []
         for start in range(0, len(to_classify), CLASSIFY_BATCH_SIZE):
             batch = to_classify[start : start + CLASSIFY_BATCH_SIZE]
@@ -170,8 +183,9 @@ def process_new_emails(account: dict, email_ids: list[int]) -> None:
             except Exception as exc:  # noqa: BLE001 — 分类失败跳过该批
                 logger.warning("classify batch failed: %s", exc)
                 continue
-            archived_count, _need = _apply_classification(results)
+            archived_count, _need, archived_items = _apply_classification(results)
             archived_by_ai += archived_count
+            archived_samples.extend(archived_items)
 
             result_map = {r["id"]: r for r in results}
             for item in batch:
@@ -182,11 +196,18 @@ def process_new_emails(account: dict, email_ids: list[int]) -> None:
 
         if archived_by_ai > 0:
             _sweep_server_archive(account_id)
+            # 通知带被归档邮件清单（点击跳到第一封）；ref_id 从账号 id 改为可定位 email id
+            samples = [it["subject"] or "（无主题）" for it in archived_samples[:3]]
+            body = "、".join(samples)
+            if archived_by_ai > len(samples):
+                body += f" 等 {archived_by_ai} 封"
+            body += "\n已移入该账号的 Archived 文件夹（网页端同步可见）"
+            first_id = archived_samples[0]["id"] if archived_samples else None
             add_notification(
                 "ai_archive",
                 f"AI 已归档 {archived_by_ai} 封营销邮件",
-                "已移入该账号的 Archived 文件夹（网页端同步可见）",
-                str(account_id),
+                body,
+                str(first_id) if first_id else str(account_id),
             )
 
         _generate_drafts(account, draft_emails)
@@ -296,7 +317,7 @@ def classify_missing(account_id: int, folder: str = "INBOX", limit: int = 200) -
         except Exception as exc:  # noqa: BLE001
             logger.warning("organize classify failed: %s", exc)
             continue
-        arch, _ = _apply_classification(results)
+        arch, _, _items = _apply_classification(results)
         classified += len(results)
         archived += arch
     # v0.4：补跑出的营销归档同样走服务器移动

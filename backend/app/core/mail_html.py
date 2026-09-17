@@ -265,3 +265,8 @@ def markdown_body_html(markdown_text: str) -> str:
     import markdown as md_lib
 
     return md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables", "nl2br"])
+
+
+def markdown_to_plain_text(markdown_text: str) -> str:
+    """Markdown → 纯文本（系统通知等纯文本场景）：先转 HTML（含 nl2br）再派生纯文本。"""
+    return html_to_plain_text(markdown_body_html(markdown_text))

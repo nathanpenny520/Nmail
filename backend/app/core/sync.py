@@ -212,14 +212,19 @@ def sync_account(account: Account, folders: tuple[str, ...] = ("INBOX",)) -> dic
     )
     conn.commit()
 
-    new_total = sum(r["new_count"] for r in results)
+    # 新邮件通知只看 INBOX：按需/轮询同步的其他文件夹（垃圾、归档夹等）入信不弹
+    # 「新邮件」——用户反馈 Trash 收信也通知是误报。ref_id 存首封新邮件 id（点击
+    # 经 /?focus= 直达邮件；旧版存账号 id 的存量行点击回落邮件页顶部，可接受）。
+    inbox_results = [r for r in results if r["folder"] == "INBOX"]
+    new_total = sum(r["new_count"] for r in inbox_results)
     if new_total > 0:
-        first = results[0]
+        first = inbox_results[0]
+        new_ids = first.get("new_email_ids") or []
         add_notification(
             "new_mail",
             f"{account['email']}：{new_total} 封新邮件",
             first.get("latest_subject") or "",
-            str(account_id),
+            str(new_ids[0]) if new_ids else str(account_id),
         )
 
     # AI 流水线（白/黑名单 → 分类 → 自动归档 → 草稿）；失败不影响同步结果。

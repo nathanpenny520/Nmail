@@ -92,9 +92,15 @@ def _run_daily_brief() -> None:
         text = "".join(e.get("text", "") for e in events if e.get("type") == "text").strip()
         if text:
             store_agent_brief(text)
-            # 通知正文带晨报全文（通知中心可展开阅读；跳转去摘要页看完整排版）
+            # 通知是纯文本（Notification API 平台限制，无法渲染 markdown）——
+            # 先 md→plain 清理再截短；完整排版站内看（摘要页渲染 markdown）
+            from app.core.mail_html import markdown_to_plain_text
+
+            plain = markdown_to_plain_text(text)
+            if len(plain) > 500:
+                plain = plain[:500].rstrip() + "…"
             add_notification("digest", "AI 晨报已生成",
-                             text[:2000] + "\n\n—— 拟好的回复草稿在待审列表；点击前往「每日摘要」页")
+                             plain + "\n\n—— 拟好的回复草稿在待审列表；点击前往「每日摘要」页看完整排版")
             logger.info("agent daily brief finished (chars=%d)", len(text))
         else:
             # 无产出（步数/预算触顶等）：回退旧版摘要，当天内容不缺席
