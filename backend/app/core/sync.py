@@ -404,6 +404,17 @@ def _backfill_folder_pass(mb, account_id: int, folder: str) -> str:  # noqa: ANN
     if state is None or state["backfill_done"]:
         return "done"  # 常规同步时发现历史已齐（文件夹总量不足一页）
     upper = state["backfill_uid"] if state else None
+    if upper is None:
+        # 锚点缺失的存量行（迁移边界情况）：从 last_uid 起步向下补，绝不静默标完成——
+        # 否则旧账号 30 天之前的历史永远不补（v27 会在库级初始化锚点，此处兜底运行态）
+        lrow = conn.execute(
+            "SELECT last_uid FROM sync_state WHERE account_id = ? AND folder = ?",
+            (account_id, folder),
+        ).fetchone()
+        upper = int(lrow["last_uid"] or 0)
+        if upper > 1:
+            _save_backfill_state(conn, account_id, folder, upper, 0)
+            conn.commit()
     if not upper or upper <= 1:
         _save_backfill_state(conn, account_id, folder, upper, 1)
         conn.commit()

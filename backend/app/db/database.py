@@ -561,6 +561,23 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE sync_state ADD COLUMN backfill_done INTEGER NOT NULL DEFAULT 0;
         """,
     ),
+    (
+        27,
+        """
+        -- 存量账号回补锚点初始化（B1 修正，2026-09-17）：v26 加列后存量行
+        -- backfill_uid 为 NULL，回补线程会误判「无需回补」直接标 done——30 天
+        -- 之前的历史永远不补。此处把锚点设为本地该文件夹最小 UID（从真正缺口
+        -- 开始，已入库的重叠段由 INSERT OR IGNORE 去重）；无本地邮件的行回退
+        -- last_uid 全量走一遍。
+        UPDATE sync_state
+        SET backfill_uid = COALESCE(
+                (SELECT MIN(e.uid) FROM emails e
+                  WHERE e.account_id = sync_state.account_id AND e.folder = sync_state.folder),
+                last_uid),
+            backfill_done = 0
+        WHERE backfill_uid IS NULL AND last_uid > 0;
+        """,
+    ),
 ]
 
 
