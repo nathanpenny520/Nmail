@@ -14,7 +14,7 @@
 [![License](https://img.shields.io/github/license/nathanpenny520/Nmail)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows_%7C_macOS_%7C_Linux-lightgrey)
 
-<img src="assets/promo/nmail-demo-inbox.png" alt="Nmail 主界面：多账号聚合收件箱，AI 分类标签、文件夹树、三栏布局" width="880">
+<img src="assets/Nmail-demo.gif" alt="Nmail 操作演示：多账号收件箱、AI 总管家对话执行、审批与整理" width="880">
 
 **让 AI 替你收拾邮箱，而每一次发送、每一个动作，都经你的手。**
 
@@ -33,15 +33,12 @@
 
 ## 👀 眼见为实
 
+<img src="assets/promo/nmail-demo-inbox.png" alt="Nmail 主界面：多账号聚合收件箱，AI 分类标签、文件夹树、三栏布局" width="880">
+
 | AI 总管家 | 每日摘要 |
 |---|---|
 | <img src="assets/promo/nmail-demo-assistant.png" alt="AI 总管家对话页：一句话任务，多步执行，写操作先审批" width="430"> | <img src="assets/promo/nmail-demo-digest.png" alt="每日摘要页：统计卡片、近 7 天图表、分类分布、待回复清单" width="430"> |
 | 边做边汇报，写操作先审批 | 图表 + AI 摘要，一天的邮件一眼看完 |
-
-<details>
-<summary>🎬 观看完整操作演示（GIF，约 3.6 MB）</summary>
-<p align="center"><img src="assets/Nmail-demo.gif" alt="Nmail 操作演示" width="880"></p>
-</details>
 
 ## 🚀 一分钟上手
 

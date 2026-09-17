@@ -14,7 +14,7 @@ You read, you edit, you decide — and **not a byte of your data ever leaves you
 [![License](https://img.shields.io/github/license/nathanpenny520/Nmail)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows_%7C_macOS_%7C_Linux-lightgrey)
 
-<img src="assets/promo/nmail-demo-inbox.png" alt="Nmail main view: multi-account unified inbox with AI labels, folder tree, three-pane layout" width="880">
+<img src="assets/Nmail-demo.gif" alt="Nmail demo: multi-account inbox, AI butler executing tasks, approvals and organizing" width="880">
 
 **AI does the chores; every send and every action still goes through you.**
 
@@ -33,15 +33,12 @@ You read, you edit, you decide — and **not a byte of your data ever leaves you
 
 ## 👀 See it in action
 
+<img src="assets/promo/nmail-demo-inbox.png" alt="Nmail main view: multi-account unified inbox with AI labels, folder tree, three-pane layout" width="880">
+
 | AI butler | Daily digest |
 |---|---|
 | <img src="assets/promo/nmail-demo-assistant.png" alt="AI butler chat: one-sentence tasks, multi-step execution, approval before writes" width="430"> | <img src="assets/promo/nmail-demo-digest.png" alt="Daily digest: stat cards, 7-day chart, category breakdown, pending replies" width="430"> |
 | It reports as it works; writes need your approval | Charts + AI summary — a whole day of mail at a glance |
-
-<details>
-<summary>🎬 Full demo (GIF, ~3.6 MB)</summary>
-<p align="center"><img src="assets/Nmail-demo.gif" alt="Nmail demo" width="880"></p>
-</details>
 
 ## 🚀 Up and running in a minute
 
