@@ -392,7 +392,7 @@ export default function SettingsPage() {
             <div className="mt-4 grid grid-cols-2 gap-4">
               <label className="block">
                 <span className="mb-1 block t-md text-gray-600">
-                  AI 晨报<span className="ml-1 t-sm text-gray-400">到摘要时间自动总结未读并拟好回复草稿（替代每日摘要；草稿进待审列表，绝不自动发送）</span>
+                  AI 晨报<span className="ml-1 t-sm text-gray-400">到点自动总结未读并拟好回复草稿，绝不自动发送</span>
                 </span>
                 <select
                   className={inputClass}
@@ -439,7 +439,7 @@ export default function SettingsPage() {
             </div>
             <label className="mt-4 block">
               <span className="mb-1 block t-md text-gray-600">
-                显示邮件外部图片<span className="ml-1 t-sm text-gray-400">选择即生效；默认拦截以防追踪像素，也可在邮件内对单个发件人「始终显示」</span>
+                显示邮件外部图片<span className="ml-1 t-sm text-gray-400">默认拦截以防追踪像素；可在邮件内对单个发件人放行</span>
               </span>
               <select
                 className={inputClass}
@@ -514,12 +514,10 @@ export default function SettingsPage() {
             <div className="mt-4">
               <span className="t-md text-gray-600">网络代理</span>
               <span className="mt-1 block t-sm leading-relaxed text-gray-400">
-                自动跟随系统代理，无需设置（和浏览器一致）——
+                自动跟随系统代理（和浏览器一致），所有邮箱统一生效——
                 {proxyStatus?.effective_proxy
                   ? <span className="font-medium text-gray-600">当前经 {proxyStatus.effective_proxy} 连接</span>
-                  : <span className="font-medium text-gray-600">当前直连</span>}
-                （系统代理开关一变，这里几秒内自动刷新）；所有邮箱统一生效，
-                本机服务（如 Proton Bridge）不受影响。
+                  : <span className="font-medium text-gray-600">当前直连</span>}。
               </span>
             </div>
           </section>
@@ -780,14 +778,12 @@ export default function SettingsPage() {
                 启用 AI 功能
               </label>
               <p className="mt-1.5 t-sm leading-relaxed text-gray-400">
-                关闭即回归传统邮件：整理 / 拟稿 / AI 写作 / 总管家 / 摘要生成等入口全部隐藏，
-                已有分类与草稿保留，配置档案不丢失，随时可重新开启。
+                关闭后所有 AI 入口隐藏；已有分类与草稿保留，随时可重新开启。
               </p>
             </div>
 
             <p className="mt-4 t-sm leading-relaxed text-gray-500">
-              可保存多套端点配置（如 DeepSeek 快速、强模型写草稿、本地 Ollama），标「使用中」的配置供所有
-              AI 功能默认使用；对话界面可临时切换。云端端点会收到邮件正文，本地端点则 0 外发。
+              可保存多套配置，标「使用中」的供所有 AI 功能使用；云端配置会收到邮件正文，本地端点数据不出本机。
             </p>
 
             <div className="mt-4 space-y-3">
@@ -948,7 +944,7 @@ export default function SettingsPage() {
             <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
               <div className="t-md font-medium text-gray-700">本机数据</div>
               <p className="mt-1 t-sm leading-relaxed text-gray-400">
-                Nmail 是纯本地应用：邮件、附件、密钥与设置都只存在这台电脑上，不依赖任何云端账号。
+                邮件、附件、密钥与设置都只存在这台电脑上，不依赖任何云端账号。
               </p>
               <PathRow
                 label="数据目录"

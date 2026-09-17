@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0917-1453-设置页文案瘦身 🔄
+- 目标: 用户反馈设置页部分地方文字过多，违背「界面简约、细节进文档」——AI 配置区说明压缩（「对话界面可临时切换」经核实功能存在（2+ 套配置才显示下拉），文字简化、细节挪文档）；AI 晨报/外部图片/网络代理/本机数据四处长句同步精简
+- 范围: frontend/src/pages/SettingsPage.tsx + docs(使用指南.md 新增「AI 配置档案」节、CHANGELOG、SESSIONS)
+- 时间: 2026-09-17 14:53 开工
+
 ### S-0917-1446-总管家空响应修复 🔄
 - 目标: 会话 36 报 400「Invalid 'messages[50].tool_calls': empty array」（run 52 实测）——deepseek 思考 token 单独耗尽 agent 单步 max_tokens=2000 → 空响应（无文本无调用）被 `_append_assistant_calls` 落库成 `tool_calls:[]` → 下步请求被 OpenAI 兼容端点 400。修复：单步上限 8192 + 空响应回灌重试兜底 + 落库防御
 - 范围: backend(app/ai/agent.py, tests/test_agent_loop.py) + docs(CHANGELOG, SESSIONS)
