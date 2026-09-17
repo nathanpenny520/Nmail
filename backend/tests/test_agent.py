@@ -53,7 +53,7 @@ def _script(monkeypatch, replies: list[str]) -> None:
     monkeypatch.setattr(agent, "_native_supported", lambda *a, **k: False)
     calls = {"n": 0}
 
-    def fake_chat(base_url, model, api_key, messages):
+    def fake_chat(base_url, model, api_key, messages, max_tokens=2000, temperature=0.3):
         idx = min(calls["n"], len(replies) - 1)
         calls["n"] += 1
         return replies[idx], {"prompt_tokens": 1, "completion_tokens": 1}

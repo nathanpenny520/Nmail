@@ -50,6 +50,9 @@ MAX_STEPS = 25
 TIME_BUDGET_S = 180.0
 DAILY_SEND_LIMIT = 20
 DAILY_ACTION_LIMIT = 200
+# agent 单步生成上限：推理模型的思考 token 同样计入该额度，太小会被思考单独
+# 耗尽 → 空响应（无文本无调用；run 52 实测 2026-09-17，2000 必触顶）。
+AGENT_MAX_TOKENS = 8192
 
 # 调度器定时运行（AI 晨报，§18.6）的工具白名单：只读 + 本地标记 + 拟草稿。
 # 硬边界——send/trash/move/文件夹/通讯录/名单/记忆写一律不可用，防无人值守误操作；
@@ -476,7 +479,8 @@ def _call_model(state: RunState, tools_schema: list[dict] | None, tool_choice: s
         parts: list[str] = []
         try:
             gen = llm.iter_chat_step(base_url, model, api_key, state.messages,
-                                     tools=tools_schema, tool_choice=tool_choice)
+                                     tools=tools_schema, tool_choice=tool_choice,
+                                     max_tokens=AGENT_MAX_TOKENS)
             while True:
                 try:
                     piece = next(gen)
@@ -502,7 +506,8 @@ def _call_model(state: RunState, tools_schema: list[dict] | None, tool_choice: s
             if gen is not None:
                 gen.close()
     # JSON 工具协议降级路径（非流式，v1 形态）
-    text, usage = llm.chat_messages(base_url, model, api_key, state.messages)
+    text, usage = llm.chat_messages(base_url, model, api_key, state.messages,
+                                    max_tokens=AGENT_MAX_TOKENS)
     calls = []
     action = _parse_model_action(text or "")
     if isinstance(action, dict) and action.get("tool"):
@@ -514,16 +519,15 @@ def _call_model(state: RunState, tools_schema: list[dict] | None, tool_choice: s
 def _append_assistant_calls(state: RunState, mode: str, content: str, calls: list[dict]) -> None:
     """把模型的工具调用落进 messages（原生=assistant.tool_calls；JSON=原文回显）。"""
     if mode == "native":
-        state.messages.append({
-            "role": "assistant",
-            "content": content or "",
-            "tool_calls": [
+        msg: dict = {"role": "assistant", "content": content or ""}
+        if calls:  # 防御：绝不落 tool_calls:[]——OpenAI 兼容端点校验 minItems 1，必 400
+            msg["tool_calls"] = [
                 {"id": c["id"], "type": "function",
                  "function": {"name": c["name"],
                               "arguments": json.dumps(c["arguments"] or {}, ensure_ascii=False)}}
                 for c in calls
-            ],
-        })
+            ]
+        state.messages.append(msg)
     else:
         for i, c in enumerate(calls):
             state.messages.append({"role": "assistant", "content": json.dumps(
@@ -710,7 +714,8 @@ def _wrap_up_events(state: RunState, reason: str, base_url: str, model: str,
             parts: list[str] = []
             try:
                 gen = llm.iter_chat_step(base_url, model, api_key, state.messages,
-                                         tools=None, tool_choice=None)
+                                         tools=None, tool_choice=None,
+                                         max_tokens=AGENT_MAX_TOKENS)
                 while True:
                     try:
                         piece = next(gen)
@@ -724,7 +729,8 @@ def _wrap_up_events(state: RunState, reason: str, base_url: str, model: str,
                 text = ""
         else:
             try:
-                raw, _usage = llm.chat_messages(base_url, model, api_key, state.messages)
+                raw, _usage = llm.chat_messages(base_url, model, api_key, state.messages,
+                                                max_tokens=AGENT_MAX_TOKENS)
             except Exception:  # noqa: BLE001
                 raw = ""
             action = _parse_model_action(raw or "")
@@ -791,6 +797,7 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
     note_pending = False
     check_used = False  # A2 纠正只给一次，防来回拉扯
     overflow_retry_left = 1  # 溢出自愈只重试一次（§17.8）
+    empty_retry_left = 2  # 空响应自愈：回灌提示重试两次，仍空则报错终止（防步数内空转）
     try:
         while True:
             if state.steps >= MAX_STEPS:
@@ -912,6 +919,21 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
                     yield {"type": "text", "text": shown}  # 全量事件（旧前端/对外 API 兼容）
                     yield {"type": "done"}
                     return
+                # 空响应兜底（run 52 实测 2026-09-17）：推理模型的思考 token 单独
+                # 耗尽单步上限时，流里既无文本也无调用分片。此时照常落库会产生
+                # tool_calls:[] 的 assistant 消息，OpenAI 兼容端点下一步必 400——
+                # 回灌提示重试（限次），仍空则如实报错终止，绝不落空 tool_calls 消息。
+                if empty_retry_left > 0:
+                    empty_retry_left -= 1
+                    state.messages.append({"role": "user",
+                                           "content": "（系统提示：上一次响应为空（可能是思考超限被截断），请继续任务。）"})
+                    _save_run(state, "running")
+                    continue
+                _save_run(state, "failed")
+                yield {"type": "error",
+                       "error": "模型返回了空响应（思考 token 可能耗尽单步生成上限），请重试或换个说法。"}
+                yield {"type": "done"}
+                return
 
             if force_text:
                 # 预算耗尽模型仍要调工具 → A1 强制小结后暂停，等用户点继续（新一轮预算）

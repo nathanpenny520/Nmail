@@ -750,3 +750,44 @@ def test_session_memory_writeback_and_injection(monkeypatch):
     finally:
         conn.execute("DELETE FROM chat_sessions WHERE id = ?", (sid,))
         conn.commit()
+
+
+def test_empty_response_retry_then_error(monkeypatch):
+    """空响应兜底（run 52 实测 2026-09-17）：思考 token 耗尽单步上限 → 无文本无调用。
+    不得落 tool_calls:[] 消息（端点 400），回灌提示重试限 2 次，超限报错终止。"""
+    aid = _aid()
+    monkeypatch.setattr(agent.tasks, "_ai_config", lambda pid=None: ("http://x", "test-model", None))
+    monkeypatch.setattr(agent, "_native_supported", lambda *a, **k: True)
+    rec = {"n": 0, "max_tokens": []}
+
+    def fake_iter(base_url, model, api_key, messages, tools=None, tool_choice=None,
+                  max_tokens=2000, temperature=0.3):
+        rec["n"] += 1
+        rec["max_tokens"].append(max_tokens)
+        yield from ()  # 成为生成器（真实 iter_chat_step 为生成器函数）
+        return "", [], {"prompt_tokens": 2, "completion_tokens": 2}, "length"
+
+    monkeypatch.setattr(agent.llm, "iter_chat_step", fake_iter)
+    events = list(agent.run_stream("帮我找招新的邮件", None, None, [aid], "approval", None))
+    assert rec["n"] == 3  # 首次 + 2 次重试
+    assert rec["max_tokens"] == [8192] * 3  # 单步生成上限 8192（推理模型思考也占额度）
+    assert _collect(events, "error")[-1]["error"].startswith("模型返回了空响应")
+    assert events[-1]["type"] == "done"
+    row = _run_row(events[0]["run_id"])
+    assert row["status"] == "failed"
+    messages = json.loads(row["messages_json"])
+    assert all(m.get("tool_calls") != [] for m in messages)  # 绝不落空 tool_calls
+    nudges = [m for m in messages if m.get("role") == "user"
+              and str(m.get("content") or "").startswith("（系统提示：上一次响应为空")]
+    assert len(nudges) == 2
+
+
+def test_append_assistant_calls_empty_no_tool_calls_key():
+    """防御：native 模式 calls 为空时不写 tool_calls 键（空数组会被端点 400 拒绝）。"""
+    state = agent.RunState(session_id=None, account_ids=[1], mode="approval",
+                           profile_id=None, origin="ui")
+    agent._append_assistant_calls(state, "native", "有内容但没调用", [])
+    assert state.messages[0] == {"role": "assistant", "content": "有内容但没调用"}
+    agent._append_assistant_calls(state, "native", "", [
+        {"id": "c1", "name": "search_emails", "arguments": {"q": "x"}}])
+    assert state.messages[1]["tool_calls"][0]["id"] == "c1"
