@@ -16,6 +16,12 @@
 
 ## 进行中
 
+### S-0917-2257-Windows uv 命令补前缀 ✅
+- 目标: 用户指出各文档 Windows uv 安装命令有缺陷——裸 `irm … | iex` 仅 PowerShell 会话内可用，须补 `powershell -ExecutionPolicy ByPass -c` 前缀
+- 范围: README.md / README.zh-CN.md / docs/INSTALL.md + docs(CHANGELOG, SESSIONS)；官网 download.astro（复制按钮 data-copy 一并改）
+- 产出: 主仓提交（哈希见 CHANGELOG 回填）；官网同轮提交推送部署，npm run build 验证 dist 两处命令均已更新
+- 时间: 2026-09-17 22:57 完成
+
 ### S-0917-2230-uv安装命令补齐 ✅
 - 目标: 用户检查 uv 各平台一键安装命令是否已写入 README 与官网——查得官网下载页已有两条命令，README 双语与 docs/INSTALL.md 仅外链，补齐之
 - 范围: README.md / README.zh-CN.md / docs/INSTALL.md + docs(CHANGELOG, SESSIONS)；官网源码与代码零改动（download.astro 命令本就齐全）

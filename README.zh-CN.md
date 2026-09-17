@@ -50,7 +50,7 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (once — 
 # macOS / Linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
 # Windows (PowerShell)
-irm https://astral.sh/uv/install.ps1 | iex
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 Then launch:
