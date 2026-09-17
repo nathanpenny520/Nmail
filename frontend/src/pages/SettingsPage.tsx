@@ -2503,19 +2503,20 @@ function AgentActionsList() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['ai-actions'] }),
   })
   const [clearScope, setClearScope] = useState('')
+  const [clearMsg, setClearMsg] = useState<{ text: string; bad?: boolean } | null>(null)
   const clearMutation = useMutation({
     mutationFn: (scope: 'old' | 'failed' | 'all') => api.clearAgentActions(scope),
-    onSuccess: () => {
-      setClearScope('')
+    onSuccess: (r) => {
+      setClearMsg({ text: `已删 ${r.deleted} 条记录` })
       void queryClient.invalidateQueries({ queryKey: ['ai-actions'] })
     },
+    onError: (e) => setClearMsg({ text: `清理失败：${(e as Error).message}`, bad: true }),
   })
   const onClear = (scope: string) => {
+    setClearScope('') // 立即复位：请求失败/取消后重选同一项仍能触发 onChange
     if (!scope) return
-    if (scope === 'all' && !window.confirm('确定清空全部操作记录？已发送记录也会删除，不可恢复。')) {
-      setClearScope('')
-      return
-    }
+    if (scope === 'all' && !window.confirm('确定清空全部操作记录？已发送记录也会删除，不可恢复。')) return
+    setClearMsg(null)
     clearMutation.mutate(scope as 'old' | 'failed' | 'all')
   }
 
@@ -2525,12 +2526,16 @@ function AgentActionsList() {
         <span className="t-sm font-medium text-gray-700">操作记录</span>
         <span className="t-xs text-gray-400">总管家写动作全量留痕，支持撤销与删除追溯</span>
         <span className="flex-1" />
+        {clearMsg && (
+          <span className={`t-xs ${clearMsg.bad ? 'text-red-600' : 'text-gray-400'}`}>{clearMsg.text}</span>
+        )}
         <select
-          className="rounded-lg border border-gray-200 px-2 py-1 t-xs text-gray-600 outline-none"
+          className="rounded-lg border border-gray-200 px-2 py-1 t-xs text-gray-600 outline-none disabled:opacity-50"
           value={clearScope}
+          disabled={clearMutation.isPending}
           onChange={(e) => onClear(e.target.value)}
         >
-          <option value="">清理…</option>
+          <option value="" disabled hidden>清理…</option>
           <option value="old">90 天前记录</option>
           <option value="failed">失败与拒绝</option>
           <option value="all">全部记录</option>
