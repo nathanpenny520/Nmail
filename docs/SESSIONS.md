@@ -35,6 +35,7 @@
 - 追记（第二轮，用户反馈：总开关不应留例外）: 提交 73b8fa8——总开关改全量（写信 ⌘S/⌘Enter、`?`、Esc 读信返回全部受控；RichEditor 经 ref 跟随、ComposeForm 容器守卫），分组加生效范围标注（仅「邮件」页签/写信时），`?`/`#` 补物理键位备注（Shift+//Shift+3），帮助面板与使用指南同步；npm build 通过，13:45 完成
 - 追记（第三轮，用户反馈：文案精简+文档跳转）: 提交 ff64458——设置页说明压到一句、删脚注，补 DocsLink 跳官网使用指南（复用 links.ts/DocsLink.tsx 现有模式）；卡片范围标注与物理键位备注保留；npm build 通过，14:0x 完成
 - 追记（第四轮，参考用户截图补键位）: 提交 7262f5d——新增 Ctrl/⌘+A 全选/清空、Del/Backspace 删除、Shift+M 检查新邮件、读信时 r/a/f（EmailReader 监听，受总开关与 keep-alive 前台态约束）；设置页说明只剩文档跳转一句；shortcuts.ts 五组卡片（+读信界面组）；npm build 通过
+- 追记（⚠共享 index 误卷说明）: 6c11f17 本意只提交 ARCHITECTURE.md，但 S-0917-1401-通知时区 已 git add 的整批（notifications.py/NotificationBell.tsx/CHANGELOG/SESSIONS）被一同卷入提交——该批 ruff 复检通过且其条目自述已验证；通知时区条目的「待提交」哈希即 **6c11f17**，请该会话知悉并回填。此后本会话改用 `git commit -- <pathspec>` 提交
 
 ### S-0917-1252-体验优化 🔄
 - 目标: 用户六项体验反馈落地——docs/EXPERIENCE_PLAN.md（B1 全量同步/B2 换行 nl2br/B3 附件预览/B4 Tab keep-alive/B5 通知修复/B6 AI 工具扩充），批次 B2→B3→B1→B5→B4→B6
