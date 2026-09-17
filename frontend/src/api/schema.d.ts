@@ -2913,6 +2913,8 @@ export interface components {
             contacts_auto_collect?: boolean | null;
             /** Desktop Notifications Enabled */
             desktop_notifications_enabled?: boolean | null;
+            /** Shortcuts Enabled */
+            shortcuts_enabled?: boolean | null;
             /** Notify Types */
             notify_types?: {
                 [key: string]: boolean;

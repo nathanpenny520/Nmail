@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — feat: 设置页新增「快捷键」分类——总开关 + 分组清单，键位清单数据源单一化
+- 设置页侧栏新增「快捷键」（通用之后）：总开关「启用键盘快捷键」选择即保存；四组键位卡片（列表导航/邮件操作/搜索与帮助/写信）
+- 键位清单抽为共享数据源 frontend/src/shortcuts.ts：设置页与邮件页 `?` 帮助面板同源（帮助面板同步改分组渲染，顺带补上写信 Ctrl/⌘+S、Ctrl/⌘+Enter 两键的展示——此前仅文档有）
+- 总开关生效逻辑（MailBrowser keydown 守卫）：关闭时仅屏蔽动作键；Esc（输入框脱困/关浮层）与 ?（帮助入口）保留——关了也能按 ? 找到设置在哪；写信 Ctrl/⌘+S、Ctrl/⌘+Enter 不受控
+- 后端 shortcuts_enabled 设置项（api/settings.py：DEFAULT_SETTINGS/SettingsIn/GET/PUT 四处）；openapi.json + schema.d.ts 再生
+- 验证：ruff 通过；npm build（含 tsc）通过；隔离实例（8931）curl 往返——默认 True、PUT false 落库回读 False
+- 会话：S-0917-1255-快捷键设置
+
 ## 051f4c9 — ci: 发版产物补齐——DMG / Windows zip / Release Notes 自动化 / tap cask（WIND_DOWN_PLAN P1）
 - release.yml binaries job：macOS 分支新增 DMG 两栏拖装（Nmail.app + /Applications 软链，hdiutil UDZO）→ 新资产 `nmail-macos-arm64.dmg`；Windows 分支新增 portable zip（Compress-Archive 打包 exe）→ 新资产 `nmail-windows-x64.zip`
 - homebrew-tap job 新增「更新 tap cask」步骤：从 `scripts/cask_template.rb` 渲染版本号与 SHA256 后 create-or-update `Casks/nmail.rb`（首版自动创建，后续自动 bump；指 dmg 资产、`depends_on arch: :arm64`、livecheck github_latest）

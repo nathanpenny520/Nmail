@@ -25,6 +25,7 @@ DEFAULT_SETTINGS: dict[str, object] = {
     "auto_update_enabled": True,  # 自动安装更新：检查到新版本后台下载换身，重启时生效（UPDATE_AND_DESKTOP.md §3.3）
     "contacts_auto_collect": False,  # 通讯录自动采集（收发往来地址自动入册；关=仅手动）
     "desktop_notifications_enabled": True,  # 桌面通知总开关（应用内铃铛与角标不受影响）
+    "shortcuts_enabled": True,  # 键盘快捷键总开关（只屏蔽动作类键；Esc 与 ? 帮助不受控）
     # 桌面通知按类型细分（读侧与默认合并，缺省键视为开）；其余系统通知（更新/黑名单归档）不受控
     "notify_types": {"new_mail": True, "ai_draft": True, "digest": True, "account_error": True},
     "auto_insert_signature": False,  # 写信/回复自动带该账号签名（设置页「写信」管理签名内容）
@@ -46,6 +47,7 @@ class SettingsIn(BaseModel):
     auto_update_enabled: bool | None = None
     contacts_auto_collect: bool | None = None
     desktop_notifications_enabled: bool | None = None
+    shortcuts_enabled: bool | None = None
     notify_types: dict[str, bool] | None = None
     auto_insert_signature: bool | None = None
     agent_brief_enabled: bool | None = None
@@ -113,6 +115,9 @@ def read_settings() -> dict:
         "desktop_notifications_enabled": get_setting(
             "desktop_notifications_enabled", DEFAULT_SETTINGS["desktop_notifications_enabled"]
         ),
+        "shortcuts_enabled": get_setting(
+            "shortcuts_enabled", DEFAULT_SETTINGS["shortcuts_enabled"]
+        ),
         # 与默认合并：老用户 KV 里缺新键时回退 True（缺省视为开）
         "notify_types": {
             **DEFAULT_SETTINGS["notify_types"],
@@ -147,6 +152,8 @@ def update_settings(payload: SettingsIn) -> dict:
         set_setting("contacts_auto_collect", payload.contacts_auto_collect)
     if payload.desktop_notifications_enabled is not None:
         set_setting("desktop_notifications_enabled", payload.desktop_notifications_enabled)
+    if payload.shortcuts_enabled is not None:
+        set_setting("shortcuts_enabled", payload.shortcuts_enabled)
     if payload.notify_types is not None:
         set_setting("notify_types", payload.notify_types)
     if payload.auto_insert_signature is not None:

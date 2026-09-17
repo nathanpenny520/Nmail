@@ -6,10 +6,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, type EmailQuery } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
+import { useShortcutsEnabled } from '../api/useSettings'
 import { useFlash } from '../hooks/useFlash'
 import { useJob } from '../api/useJob'
 import { categoryBadgeMap, useCategories } from '../api/useMeta'
 import { shortDate } from '../utils/format'
+import { SHORTCUT_GROUPS } from '../shortcuts'
 import {
   type EmailDetail, type EmailListResp, type EmailSummary, type FolderCacheItem, type JobInfo,
   type OrganizeResult,
@@ -24,20 +26,6 @@ const PAGE_SIZE = 50
 
 const batchBtn =
   'rounded-md border border-indigo-200 bg-white px-1.5 py-0.5 t-sm text-gray-600 transition-colors hover:text-indigo-700 disabled:opacity-50'
-
-// 快捷键清单（`?` 帮助面板数据源；与 docs/使用指南.md 的表格保持一致）
-const SHORTCUTS: [string, string][] = [
-  ['j / ↓', '下一封'],
-  ['k / ↑', '上一封'],
-  ['Enter / o', '打开'],
-  ['e', '归档'],
-  ['#', '删除（废纸篓）'],
-  ['x', '勾选/取消'],
-  ['c', '写新邮件'],
-  ['/', '聚焦搜索'],
-  ['?', '本帮助'],
-  ['Esc', '关闭/返回列表'],
-]
 
 /** 后台任务进度条（列表工具条内联显示；job 为 null 或已终态时不渲染）。 */
 function JobProgressBar({ job, label }: { job: JobInfo | null; label: string }) {
@@ -219,6 +207,8 @@ export default function MailBrowser({
   // ── 键盘导航（VSCode/Gmail 风，REDESIGN_PLAN §4.3）──
   const [cursorId, setCursorId] = useState<number | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
+  // 快捷键总开关（设置页「快捷键」；Esc 与 ? 不受控）
+  const shortcutsEnabled = useShortcutsEnabled()
   const searchRef = useRef<HTMLInputElement>(null)
   // 邮件行右键菜单（§4.3；系统右键已在应用层全局屏蔽）
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; item: EmailSummary } | null>(null)
@@ -253,6 +243,11 @@ export default function MailBrowser({
           return
         }
       }
+      // 总开关（设置页「快捷键」）：关闭时仅屏蔽动作键——Esc（上方已处理）与 ? 帮助入口保留，
+      // 关了也能按 ? 找到这里；isHelpKey 匹配与下方 Slash 分支同一逻辑（code||key 双通道）
+      const isHelpKey = (e.code === 'Slash' || e.key === '/' || e.key === '?')
+        && (e.shiftKey || e.key === '?')
+      if (!shortcutsEnabled && !isHelpKey) return
       if (items.length === 0) return
       const target = e.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
@@ -303,7 +298,7 @@ export default function MailBrowser({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, cursorId, selectedIds, selectedId, helpOpen])
+  }, [items, cursorId, selectedIds, selectedId, helpOpen, shortcutsEnabled])
 
   const actionMutation = useMutation({
     mutationFn: ({ id, action, folder: dest }: { id: number; action: string; folder?: string }) =>
@@ -568,20 +563,27 @@ export default function MailBrowser({
                 ×
               </button>
             </div>
-            <table className="w-full t-sm text-gray-600">
-              <tbody>
-                {SHORTCUTS.map(([keys, desc]) => (
-                  <tr key={keys}>
-                    <td className="py-1 pr-3 align-top whitespace-nowrap">
-                      <kbd className="rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5 font-mono t-xs text-gray-700">
-                        {keys}
-                      </kbd>
-                    </td>
-                    <td className="py-1">{desc}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="space-y-3">
+              {SHORTCUT_GROUPS.map((group) => (
+                <div key={group.title}>
+                  <div className="mb-1 t-xs font-medium text-gray-400">{group.title}</div>
+                  <table className="w-full t-sm text-gray-600">
+                    <tbody>
+                      {group.items.map((it) => (
+                        <tr key={it.keys}>
+                          <td className="py-1 pr-3 align-top whitespace-nowrap">
+                            <kbd className="rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5 font-mono t-xs text-gray-700">
+                              {it.keys}
+                            </kbd>
+                          </td>
+                          <td className="py-1">{it.desc}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
             <p className="mt-2 t-xs text-gray-400">阅读态按 j / k 直接切上下一封；焦点在输入框时按 Esc 退回列表。</p>
           </div>
         </div>

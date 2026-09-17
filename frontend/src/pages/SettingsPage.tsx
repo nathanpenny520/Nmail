@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BadgeCheck, Ban, BarChart3, BookUser, Bot, Check, ChevronLeft, Copy, Eye, EyeOff, Info, Loader2, Mail, MailPlus, Pencil, PenLine, Plug, Plus, RefreshCw, SlidersHorizontal, Trash2, UserCheck, UserPlus, UsersRound } from 'lucide-react'
+import { BadgeCheck, Ban, BarChart3, BookUser, Bot, Check, ChevronLeft, Copy, Eye, EyeOff, Info, Keyboard, Loader2, Mail, MailPlus, Pencil, PenLine, Plug, Plus, RefreshCw, SlidersHorizontal, Trash2, UserCheck, UserPlus, UsersRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
@@ -10,6 +10,7 @@ import { notifyPermission, type NotifyPermission } from '../components/Notificat
 import { useCompose } from '../components/compose/ComposeContext'
 import { SignatureEditor, TemplateManager } from '../components/compose/InsertDialogs'
 import { backendLocalDate } from '../utils/format'
+import { SHORTCUT_GROUPS } from '../shortcuts'
 import { restartForUpdateThenReload } from '../utils/updateRestart'
 import { ACCOUNT_COLOR_PALETTE } from '../utils/accountColor'
 import type { Account, AITestResult, AIProfile, ContactGroup, ContactItem, NotifyTypeKey, SenderListEntry, Settings } from '../types'
@@ -37,6 +38,7 @@ const fmtTokens = (n: number) =>
 // ── 设置侧边栏分类 ──
 const SECTIONS = [
   { key: 'general', label: '通用', icon: SlidersHorizontal },
+  { key: 'shortcuts', label: '快捷键', icon: Keyboard },
   { key: 'accounts', label: '邮箱账号', icon: Mail },
   { key: 'compose', label: '写信', icon: PenLine },
   { key: 'contacts', label: '通讯录', icon: BookUser },
@@ -81,6 +83,7 @@ export default function SettingsPage() {
   const [bodyFont, setBodyFont] = useState<'small' | 'standard' | 'large'>('standard')
   const [allowRemoteImages, setAllowRemoteImages] = useState(false)
   const [desktopNotif, setDesktopNotif] = useState(true)
+  const [shortcutsOn, setShortcutsOn] = useState(true)
   const [notifyTypes, setNotifyTypes] = useState<Record<NotifyTypeKey, boolean>>({
     new_mail: true, ai_draft: true, digest: true, account_error: true,
   })
@@ -125,6 +128,7 @@ export default function SettingsPage() {
     setBodyFont(data.body_font)
     setAllowRemoteImages(data.allow_remote_images)
     setDesktopNotif(data.desktop_notifications_enabled !== false)
+    setShortcutsOn(data.shortcuts_enabled !== false) // 缺省视为开（同后端合并语义）
     setNotifyTypes((prev) => ({
       ...prev,
       ...Object.fromEntries(
@@ -182,6 +186,10 @@ export default function SettingsPage() {
   const changeDesktopNotif = (v: boolean) => {
     setDesktopNotif(v)
     instantMutation.mutate({ desktop_notifications_enabled: v })
+  }
+  const changeShortcuts = (v: boolean) => {
+    setShortcutsOn(v)
+    instantMutation.mutate({ shortcuts_enabled: v }) // guardVersion 回填 ['settings'] 缓存，邮件页即时跟随
   }
   const changeNotifyType = (key: NotifyTypeKey, v: boolean) => {
     const next = { ...notifyTypes, [key]: v }
@@ -496,6 +504,51 @@ export default function SettingsPage() {
                 本机服务（如 Proton Bridge）不受影响。
               </span>
             </div>
+          </section>
+        )}
+
+        {/* ── 快捷键：总开关 + 分组清单（数据源 src/shortcuts.ts，与邮件页 `?` 帮助面板同源） ── */}
+        {section === 'shortcuts' && (
+          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="t-lg font-semibold">快捷键</h2>
+            <label className="mt-4 flex items-center gap-2 t-md font-medium text-gray-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-indigo-600"
+                checked={shortcutsOn}
+                disabled={instantMutation.isPending}
+                onChange={(e) => changeShortcuts(e.target.checked)}
+              />
+              启用键盘快捷键
+            </label>
+            <p className="mt-1.5 t-sm leading-relaxed text-gray-400">
+              关闭后列表导航与操作键停用（选择即生效）；Esc 与 ? 帮助始终可用，
+              写信的 Ctrl/⌘+S、Ctrl/⌘+Enter 不受影响。
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {SHORTCUT_GROUPS.map((group) => (
+                <div key={group.title} className="rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+                  <div className="t-md font-medium text-gray-700">{group.title}</div>
+                  <table className="mt-1.5 w-full t-sm text-gray-600">
+                    <tbody>
+                      {group.items.map((it) => (
+                        <tr key={it.keys}>
+                          <td className="py-1 pr-3 align-top whitespace-nowrap">
+                            <kbd className="rounded border border-gray-300 bg-white px-1.5 py-0.5 font-mono t-xs text-gray-700">
+                              {it.keys}
+                            </kbd>
+                          </td>
+                          <td className="py-1">{it.desc}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 t-xs leading-relaxed text-gray-400">
+              阅读态按 j / k 直接切上下一封；焦点在输入框时按 Esc 退回列表。
+            </p>
           </section>
         )}
 

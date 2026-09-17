@@ -34,6 +34,8 @@ export interface Settings {
   contacts_auto_collect: boolean
   /** 桌面通知总开关（应用内铃铛与未读角标不受影响） */
   desktop_notifications_enabled: boolean
+  /** 键盘快捷键总开关（只屏蔽动作类键；Esc 与 ? 帮助不受控） */
+  shortcuts_enabled: boolean
   /** 桌面通知按类型细分 */
   notify_types: Partial<Record<NotifyTypeKey, boolean>>
   /** 写信/回复自动带该账号签名（设置页「写信」管理签名内容） */
@@ -52,6 +54,7 @@ export interface SettingsPayload {
   auto_update_enabled?: boolean
   contacts_auto_collect?: boolean
   desktop_notifications_enabled?: boolean
+  shortcuts_enabled?: boolean
   notify_types?: Partial<Record<NotifyTypeKey, boolean>>
   auto_insert_signature?: boolean
   agent_brief_enabled?: boolean
