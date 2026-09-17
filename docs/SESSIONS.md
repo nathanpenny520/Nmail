@@ -16,6 +16,14 @@
 
 ## 进行中
 
+### S-0917-1520-A2移除与失败回执 ✅
+- 目标: 用户拍板「相信模型智力，不需要正则猜语义」——整体移除 A2 完成断言门（9 组断言正则+纠正回灌+系统注记+名词白名单），改为确定性失败回执：写类工具真实执行失败时由代码在最终回答末尾附一行事实（零语义猜测零误伤）；权限/参数被拒与用户拒绝审批不算失败
+- 范围: backend(app/ai/agent.py, tests/test_agent_loop.py) + docs(ARCHITECTURE, REDESIGN_PLAN §20.2, CHANGELOG, SESSIONS)
+- 产出: 提交（哈希见 CHANGELOG 回填）——`_RUN_FAILED_WRITES` 按 run 计数（直接执行与审批批准后执行两路都记，`_ACTION_RUN` 归属、决定后一次性消费）、`_note_failed_writes` 挂最终回答、run 终态即回收计数；删 `_COMPLETION_PATTERNS`/`_NOUN_SENT_RE`/`_attempted_tools`/`_completion_mismatch`/`check_used`
+- 验证: pytest 274 全绿（删 4 个 A2 用例，新增失败回执+只读零回执 2 例）、ruff 通过；8720 重启后 agent ask 真实回归——「已发送文件夹」句式直接正常回答、无注记无纠正往返
+- 备注: 免迁移设计（未给 ai_actions 加 run_id 列——database.py 有晨报会话 WIP 在途，避免撞车；进程重启在审批/续跑间隙丢计数属可接受，审计表仍是事实源）；提交顺带卷入晨报会话在 agent.py 的两处晨报→摘要注释改名（内容无损，其会话知悉）
+- 时间: 2026-09-17 15:20 开工，15:5x 完成
+
 ### S-0917-1505-操作记录清理修复 ✅
 - 目标: 用户问 AI 用量「清理」是什么并疑有 bug——核实三处：清理请求失败后下拉不复位且重选同项不触发 onChange（该清理项卡死）、成功/失败均无反馈、占位项「清理…」可选中且勾标停在占位上令人困惑
 - 产出: 提交 964886b——选择即复位（失败/取消可重试）+「已删 N 条/清理失败」内联反馈 + 请求中禁用 + 占位项 disabled+hidden
@@ -26,7 +34,7 @@
 ### S-0917-1458-晨报合一改名AI摘要 🔄
 - 目标: 用户拍板三合一——①砍掉 AI 综述（内容贫乏，信息量被统计卡覆盖）②「AI 晨报」更名「AI 摘要」并全量同步（界面/文档；CHANGELOG 历史条目与既有落地记录不改写）③生成三路径：定时（原样）+ 摘要页「重新生成」异步触发 + 总管家对话 `save_brief` 工具落库；`build_digest` 变纯统计零 LLM，保留作回退与开关关闭时的统计摘要
 - 范围: backend(ai/digest.py, ai/tasks.py, scheduler.py, api/digest.py, ai/tools.py, api/settings.py, tests/test_digest.py, tests/test_agent.py) + frontend(DigestPage.tsx, SettingsPage.tsx, client.ts, 类型重生成) + docs(使用指南/FAQ/ARCHITECTURE/REDESIGN_PLAN §18.6 增补/CHANGELOG/SESSIONS/SKILL.md/对外API使用指南)
-- 协调: **不动 agent.py / test_agent_loop.py**（S-0917-1446 WIP 中，其内晨报注释改名列遗留）；openapi.json/schema.d.ts 按路径随本会话提交
+- 协调: agent.py / test_agent_loop.py 原属 S-0917-1446 WIP，其已提交——agent.py 两处晨报注释改名由本会话顺带完成；openapi.json/schema.d.ts 按路径随本会话提交
 - 时间: 2026-09-17 14:58 开工
 
 ### S-0917-1453-设置页文案瘦身 ✅

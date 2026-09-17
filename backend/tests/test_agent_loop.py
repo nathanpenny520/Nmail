@@ -249,76 +249,39 @@ def test_budget_forces_text_then_pauses_if_ignored(monkeypatch):
     assert _run_row(run_id)["status"] == "done"
 
 
-def test_final_answer_mismatch_gets_corrected(monkeypatch):
-    """A2 完成断言校验：本 run 零工具调用却声称「已发送」→ 回灌纠正一次，
-    模型改口后正常收尾（无警示行、无虚构）。"""
-    aid = _aid()
+def test_failed_write_appends_receipt(monkeypatch):
+    """写类执行失败 → 最终回答由代码附一行事实回执（2026-09-17 替代 A2 正则门）。
+    模型声称成功也盖不住回执；无失败时零附加。"""
+    aid = _aid(grants='{"read":true,"organize":true}')
+    _seed_email(aid, 1, "待加星")
     _native_script(monkeypatch, [
-        (["已发送给 boss@x.com 了。"], []),
-        (["刚才那封还没有发送，需要我现在起草吗？"], []),
+        ([], [{"id": "c1", "name": "star_emails",
+               "arguments": {"ids": [1], "star": True}}]),
+        (["已加星标，完成了。"], []),
     ])
-    events = list(agent.run_stream("帮我发给老板", None, None, [aid], "approval", None))
-    texts = [e["text"] for e in _collect(events, "text")]
-    assert texts[-1].startswith("刚才那封还没有发送")  # 改口后的回答
-    assert "系统注记" not in texts[-1]  # 一次纠正即改正 → 不加警示
-    row = _run_row(events[0]["run_id"])
-    assert row["status"] == "done"
-    messages = json.loads(row["messages_json"])
-    assert any("没有对应的工具执行记录" in str(m.get("content")) for m in messages)  # 纠正已回灌
-    assert events[-1]["type"] == "done"
-
-
-def test_final_answer_mismatch_twice_warns_not_blocks(monkeypatch):
-    """A2 二次仍不一致：原文放行 + 末尾警示行（不静默、不阻断，拍板项 4 推荐值）。"""
-    aid = _aid()
-    _native_script(monkeypatch, [
-        (["已发送给 boss@x.com 了。"], []),
-    ])
-    events = list(agent.run_stream("帮我发给老板", None, None, [aid], "approval", None))
+    monkeypatch.setattr(agent.T, "execute",
+                        lambda name, args, primary, account_ids: {"error": "IMAP 连接失败"})
+    events = list(agent.run_stream("给这封邮件加星", None, None, [aid], "auto", None))
     final = _collect(events, "text")[-1]["text"]
-    assert final.startswith("已发送给")  # 原文保留
-    assert "没有对应的执行记录" in final  # 警示行附加
+    assert final.startswith("已加星标")  # 模型原文保留（不再有纠正回灌）
+    assert "1 项操作未成功" in final and "操作历史" in final  # 确定性回执附加
     assert _run_row(events[0]["run_id"])["status"] == "done"
+    # 同 run 二次计数与终态回收
+    assert agent._RUN_FAILED_WRITES.get(events[0]["run_id"]) is None  # 终态已回收
 
 
-def test_completion_mismatch_matrix():
-    """A2 判定矩阵：有本 run 工具调用记录的断言放行；无关断言/否定句不拦。"""
+def test_read_only_run_no_receipt(monkeypatch):
+    """纯只读 run（含读类失败）不附回执——回执只针对写类真实执行失败。"""
     aid = _aid()
-    state = agent.RunState(session_id=None, account_ids=[aid], mode="auto",
-                           profile_id=None, origin="ui")
-    # 空历史：发送断言 → 不一致
-    assert agent._completion_mismatch(state, "已发送给 a@b.com") != ""
-    # 有 send_draft 调用记录（native 形态）→ 放行
-    state.messages = [{"role": "assistant", "content": "",
-                       "tool_calls": [{"id": "c1", "type": "function",
-                                       "function": {"name": "send_draft", "arguments": "{}"}}]}]
-    assert agent._completion_mismatch(state, "已发送给 a@b.com") == ""
-    # JSON 降级协议回显形态同样被识别
-    state.messages = [{"role": "assistant", "content": '{"tool": "send_draft", "args": {}}'}]
-    assert agent._completion_mismatch(state, "已回复对方了") == ""
-    # 无关断言（只读类动词）不拦
-    assert agent._completion_mismatch(state, "搜到了 3 封邮件") == ""
-    # 归档断言只有搜索记录 → 不一致
-    state.messages = [{"role": "assistant", "content": "",
-                       "tool_calls": [{"id": "c2", "type": "function",
-                                       "function": {"name": "search_emails", "arguments": "{}"}}]}]
-    assert agent._completion_mismatch(state, "已归档 5 封") != ""
-
-
-def test_completion_mismatch_sent_folder_noun_not_flagged():
-    """A2 误报回归（2026-09-17 用户实测）：Sent 文件夹中文名「已发送」是名词不是
-    完成断言——列文件夹清单/查已发送邮件零工具调用也不拦，真断言仍拦。"""
-    aid = _aid()
-    state = agent.RunState(session_id=None, account_ids=[aid], mode="auto",
-                           profile_id=None, origin="ui")
-    # 名词性用法（纯查询回合常见句式）→ 不触发纠正
-    assert agent._completion_mismatch(state, "Sent Items（已发送）") == ""
-    assert agent._completion_mismatch(state, "你已发送文件夹里最近的邮件如下：") == ""
-    assert agent._completion_mismatch(state, "已发送的邮件共 20 封") == ""
-    assert agent._completion_mismatch(state, "在已发送中找到 3 封") == ""
-    # 真完成断言（谓词用法）→ 仍拦
-    assert agent._completion_mismatch(state, "邮件已发送。") != ""
-    assert agent._completion_mismatch(state, "已发送给 a@b.com") != ""
+    _seed_email(aid, 1, "招新合作洽谈")
+    _native_script(monkeypatch, [
+        ([], [{"id": "c1", "name": "search_emails", "arguments": {"q": "招新"}}]),
+        (["收件箱里有 1 封招新相关的邮件。"], []),
+    ])
+    events = list(agent.run_stream("帮我找招新的邮件", None, None, [aid], "approval", None))
+    final = _collect(events, "text")[-1]["text"]
+    assert final.startswith("收件箱里有")
+    assert "操作未成功" not in final
 
 
 def test_feedback_truncation_keeps_head_and_tail():

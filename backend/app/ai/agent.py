@@ -7,9 +7,9 @@ JSON 降级模式非流式（与 v1 一致）。
 
 循环（§17.2）：时间预算优先（TIME_BUDGET_S，超预算 tool_choice=none 强制文本收尾，
 仍要调工具则暂停），MAX_STEPS 兜底；步数/预算触顶 → 先强制一段进度小结再 paused
-（A1，AGENT_EXTEND_PLAN，拍板：小结+手动继续，前端「继续」续跑）。最终回答过完成
-断言校验（A2：声称已完成的写操作在本 run 无工具执行记录 → 回灌纠正一次，仍不符原文
-放行+警示）。工具结果按预算保头尾截断（A3）。
+（A1，AGENT_EXTEND_PLAN，拍板：小结+手动继续，前端「继续」续跑）。最终回答按本 run
+写类执行结果附事实回执（2026-09-17 拍板移除 A2 正则断言门：相信模型转述，仅对
+ai_actions 落 failed 的写操作由代码附一行，零语义猜测）。工具结果按预算保头尾截断（A3）。
 写类动作遇审批：落 ai_actions pending → run 置 waiting_approval → paused 结束本轮——
 批准/拒绝后经 /api/ai/agent/resume 续跑（拒绝同样回灌让模型改道），刷新/重启可续。
 
@@ -54,7 +54,7 @@ DAILY_ACTION_LIMIT = 200
 # 耗尽 → 空响应（无文本无调用；run 52 实测 2026-09-17，2000 必触顶）。
 AGENT_MAX_TOKENS = 8192
 
-# 调度器定时运行（AI 晨报，§18.6）的工具白名单：只读 + 本地标记 + 拟草稿。
+# 调度器定时运行（AI 摘要，§18.6）的工具白名单：只读 + 本地标记 + 拟草稿。
 # 硬边界——send/trash/move/文件夹/通讯录/名单/记忆写一律不可用，防无人值守误操作；
 # 草稿进待审列表由用户确认发送，绝不直接外发。
 SCHEDULER_ALLOWED = frozenset({
@@ -427,6 +427,9 @@ def _create_run(state: RunState) -> int:
 def _save_run(state: RunState, status: str | None = None) -> None:
     if status:
         state.status = status
+    if state.status in ("done", "failed", "cancelled"):
+        # 终态即回收失败回执计数（防跨 run 泄漏；waiting_approval/paused 需保留待续跑）
+        _RUN_FAILED_WRITES.pop(state.run_id, None)
     conn = get_conn()
     conn.execute(
         "UPDATE agent_runs SET messages_json = ?, pending_json = ?, status = ?, steps = ?,"
@@ -634,65 +637,22 @@ def _maybe_autocompact(state: RunState, base_url: str, model: str, api_key: str 
         _autocompact(state, base_url, model, api_key)
 
 
-# ── A2 最终回答完成断言校验（AGENT_EXTEND_PLAN §2-A2）───────────────
-# 目标：防「没调工具就声称已完成」的幻觉收尾。断言 ↔ 本 run 出现过的工具调用
-# （从 messages 提取，跨审批/步数续跑天然持久）比对；不一致回灌纠正一次，
-# 仍不一致原文放行 + 末尾警示（拍板项 4 推荐值）。纯读断言/历史陈述不拦——
-# 纠正消息允许模型说明「指历史记录」，误伤代价只是一次额外往返。
-
-_COMPLETION_PATTERNS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
-    (re.compile(r"已发送|已发出|已回复|已答复|已转发"), ("send_draft",)),
-    (re.compile(r"已创建草稿|已起草|草稿已创建|草稿已建好"),
-     ("create_draft", "update_draft", "send_draft")),
-    (re.compile(r"已归档"), ("archive_emails",)),
-    (re.compile(r"已移入废纸篓|已删除"), ("trash_emails", "delete_folder")),
-    (re.compile(r"已移动|已移到|已移至"), ("move_emails", "archive_emails")),
-    (re.compile(r"已标为已读|已标记为已读|已标成已读|已标为未读|已加星标|已取消星标|已标星"),
-     ("mark_emails", "star_emails")),
-    (re.compile(r"已套用模板|已用模板|已按模板"), ("apply_template", "create_draft")),
-    (re.compile(r"已修改设置|已更新设置|已调整设置|已关闭通知|已开启通知"), ("set_settings",)),
-    (re.compile(r"已新建联系组|已删除联系组|已添加组成员|已移除组成员"), ("manage_contact_group",)),
-)
-_JSON_TOOL_RE = re.compile(r'"tool"\s*:\s*"([^"]+)"')
-
-# 名词性「已发送」不是完成断言：Sent 文件夹中文名即「已发送」，列文件夹清单
-# （「Sent Items（已发送）」）或查已发送邮件（「你已发送文件夹里…」）必误触发，
-# 纠正回灌还会引出模型防御性澄清（2026-09-17 用户实测）。比对前摘除名词性用法；
-# 真断言（「邮件已发送」「已发送给…」「已发送邮件给…」）不受影响。
-_NOUN_SENT_RE = re.compile(
-    r"已发送(?=文件夹|箱|夹|里|中|列表|记录|的)"   # 「已发送文件夹里」「已发送的邮件」等名词性短语
-    r"|[（(「『“”\"]已发送[）)」』“”\"]"          # 「Sent Items（已发送）」括注
-)
+# ── 写类失败回执（2026-09-17 替代原 A2 完成断言门，拍板：相信模型+事实回执）──
+# 原 A2 用 9 组断言正则猜「模型话里的完成声称」再比对执行记录——名词性文件夹名
+# （已发送）等必然误伤，纠正回灌还引出防御性澄清，已整体移除。
+# 替代：不做任何语义猜测——写类工具真实执行失败（ai_actions 落 failed）时由代码
+# 在最终回答末尾附一行事实回执；模型说什么都盖不住这行。权限/参数被拒、用户拒绝
+# 审批均不算（未执行或有意改道）。审计表（ai_actions）始终是事实源。
+_RUN_FAILED_WRITES: dict[int, int] = {}   # run_id -> 实际执行失败的写类次数
+_ACTION_RUN: dict[int, int] = {}          # 审批 action_id -> 发起它的 run_id
 
 
-def _attempted_tools(state: RunState) -> set[str]:
-    """本 run 内出现过的工具调用名（assistant.tool_calls + JSON 降级协议回显）。"""
-    names: set[str] = set()
-    for m in state.messages:
-        if m.get("role") != "assistant":
-            continue
-        for tc in m.get("tool_calls") or []:
-            name = (tc.get("function") or {}).get("name")
-            if name:
-                names.add(str(name))
-        content = str(m.get("content") or "")
-        if content.startswith("{"):
-            jm = _JSON_TOOL_RE.search(content)
-            if jm:
-                names.add(jm.group(1))
-    return names
-
-
-def _completion_mismatch(state: RunState, text: str) -> str:
-    """最终回答完成断言 ↔ 已尝试工具比对；不一致返回纠正提示，否则空串。"""
-    attempted = _attempted_tools(state)
-    text = _NOUN_SENT_RE.sub("SENT_PLACEHOLDER", text)  # 占位串不含断言词，仅用于比对
-    for pattern, tools in _COMPLETION_PATTERNS:
-        if pattern.search(text) and not (attempted & set(tools)):
-            return ("（系统提示：你刚才的回答声称已完成某些操作，但本次运行中没有对应的工具执行记录。"
-                    "如确实未执行，请如实告知用户或先执行再汇报；如指历史记录，请改口说明。"
-                    "不要虚构完成状态。）")
-    return ""
+def _note_failed_writes(run_id: int) -> str:
+    """本 run 有真实执行失败的写类动作时，生成一行确定性回执；否则空串。"""
+    n = _RUN_FAILED_WRITES.get(run_id, 0)
+    if n <= 0:
+        return ""
+    return f"\n\n（注：本轮有 {n} 项操作未成功，详情见「设置-AI 用量-操作历史」。）"
 
 
 # ── A1 触顶强制收尾（AGENT_EXTEND_PLAN §2-A1，拍板：小结+手动继续）──
@@ -751,7 +711,7 @@ def _approval_reason(state: RunState, tool_name: str, args: dict) -> str:
         return ""
     if state.mode != "auto":
         return "审批模式：写操作需人工批准"
-    # 高风险设置（晨报开关/时间、远程图片、读信截断）：自动模式也强制降审批（EXPERIENCE_PLAN B6）
+    # 高风险设置（摘要开关/时间、远程图片、读信截断）：自动模式也强制降审批（EXPERIENCE_PLAN B6）
     if tool_name == "set_settings" and str((args or {}).get("key") or "") in T.SETTING_KEYS_APPROVAL:
         return "该设置项影响面较大（无人值守行为/隐私/成本），需人工批准"
     if tool_name == "send_draft":
@@ -795,7 +755,6 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
         for t in tool_specs
     ]
     note_pending = False
-    check_used = False  # A2 纠正只给一次，防来回拉扯
     overflow_retry_left = 1  # 溢出自愈只重试一次（§17.8）
     empty_retry_left = 2  # 空响应自愈：回灌提示重试两次，仍空则报错终止（防步数内空转）
     try:
@@ -900,19 +859,8 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
                     # 二次防御（压测 2026-09-15）：解析失败的工具标记绝不原样下发
                     text = "（模型输出了一段内部调用标记，已拦截、未执行任何操作。请重试或换个说法。）"
                 if text:
-                    # A2 完成断言校验：声称已完成但本 run 无对应工具调用 → 回灌纠正一次
-                    if not check_used:
-                        hint = _completion_mismatch(state, text)
-                        if hint:
-                            check_used = True
-                            state.messages.append({"role": "assistant", "content": text})
-                            state.messages.append({"role": "user", "content": hint})
-                            _save_run(state, "running")
-                            continue
-                    # 二次仍不一致：原文放行 + 警示行（AGENT_EXTEND_PLAN 拍板项 4 推荐值）
-                    shown = text
-                    if check_used and _completion_mismatch(state, text):
-                        shown = text + "\n\n（系统注记：以上提到的操作在本轮运行中没有对应的执行记录，请注意核实。）"
+                    # 写类失败回执：由代码按真实执行结果附加，不做语义猜测
+                    shown = text + _note_failed_writes(state.run_id)
                     # 最终回答也要落 messages（run 记录完整性；JSON 降级路径同样回显）
                     state.messages.append({"role": "assistant", "content": text})
                     _save_run(state, "done")
@@ -1064,6 +1012,7 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
                         return
                     action_id = _record_action(state.session_id, primary, tool_name, call_args,
                                                state.mode, state.origin, "pending")
+                    _ACTION_RUN[action_id] = state.run_id  # 审批后执行失败时回执归属本 run
                     state.pending = {"action_id": action_id, "call_id": call.get("id"),
                                      "tool": tool_name, "args": call_args}
                     _save_run(state, "waiting_approval")
@@ -1094,6 +1043,8 @@ def _loop(state: RunState) -> Generator[dict, None, None]:
                                                    state.mode, state.origin,
                                                    "executed" if ok_run else "failed", result, undo,
                                                    None if ok_run else result.get("error"))
+                    if not ok_run:
+                        _RUN_FAILED_WRITES[state.run_id] = _RUN_FAILED_WRITES.get(state.run_id, 0) + 1
                 summary = _summarize_result(tool_name, result)
                 yield {"type": "tool_result", "tool": tool_name, "call_id": call.get("id"),
                        "ok": ok_run, "summary": summary,
@@ -1299,6 +1250,7 @@ def execute_action(action_id: int, decision: str, args_override: dict | None = N
             (datetime_now(), action_id),
         )
         conn.commit()
+        _ACTION_RUN.pop(action_id, None)  # 拒绝是有意改道，不算失败回执
         return {"status": "rejected", "summary": "已拒绝"}
 
     if spec is None:
@@ -1343,6 +1295,11 @@ def execute_action(action_id: int, decision: str, args_override: dict | None = N
          datetime_now(), action_id),
     )
     conn.commit()
+    if not ok:
+        rid = _ACTION_RUN.get(action_id)
+        if rid is not None:
+            _RUN_FAILED_WRITES[rid] = _RUN_FAILED_WRITES.get(rid, 0) + 1
+    _ACTION_RUN.pop(action_id, None)  # 决定已落库，归属映射一次性消费
     # status 键独立（工具结果里也有各自的 status 字段，不能让它覆盖外层）
     return {"status": "executed" if ok else "failed",
             "summary": _summarize_result(tool, result),
