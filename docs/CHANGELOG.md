@@ -36,7 +36,7 @@
 - 验证：pytest 27/27（mail_html）通过；ruff 通过；npm build 通过；运行实例 `/compose-extras/markdown` 实测往返
 - 会话：S-0917-1252-体验优化
 
-## 待回填 B6 — B6: AI 总管家人人对等扩充——模板/签名/联系组/受限设置/立即收信（EXPERIENCE_PLAN）
+## 237b677 — B6: AI 总管家人人对等扩充——模板/签名/联系组/受限设置/立即收信（EXPERIENCE_PLAN）
 - 用户拍板「评估开放的所有都给 AI，不直接开放的出审批卡」。新增 8 工具（tools.py 注册 + 参数表 + 结果摘要 + 前端 TOOL_LABELS 中文名）：
   - 读类：`list_templates`（模板名+内容）、`list_signatures`（各账号签名）、`list_contact_groups`（联系组）
   - 写类 organize（自动模式可执行）：`apply_signature`（幂等补签名）、`manage_contact_group`（create/rename/delete/add_members/remove_members，成员须先在通讯录）、`set_settings`（白名单键：desktop_notifications_enabled / auto_insert_signature / contacts_auto_collect / poll_interval_minutes(1..120) / notify_types 子键合并）、`trigger_sync`（后台增量同步）
