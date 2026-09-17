@@ -196,8 +196,8 @@ def poll_due_accounts() -> None:
             # 轮询 = INBOX + 归档文件夹（仅当该账号缓存里已有此文件夹——从未归档过
             # 的账号服务器上还没有它，带上只会报错）。归档是真实服务器移动，归档夹
             # 不进轮询时，移动后删行重建的邮件要等手动同步才可见。
-            # 其余文件夹仍按需同步（界面点开/POST /folders/sync），全量轮询不值得：
-            # 每文件夹一次 SELECT 的开销换不来高频访问。
+            # 其余文件夹的历史回补由独立回补线程负责（sync.maybe_start_backfill，
+            # EXPERIENCE_PLAN B1）；轮询不扩展到全部文件夹——高频访问的仍是 INBOX。
             archive = archive_folder_name(row["id"])
             known = get_conn().execute(
                 "SELECT 1 FROM folders WHERE account_id = ? AND name = ?", (row["id"], archive)

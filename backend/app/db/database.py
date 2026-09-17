@@ -550,6 +550,17 @@ MIGRATIONS: list[tuple[int, str]] = [
         ALTER TABLE agent_runs ADD COLUMN allowed_json TEXT;
         """,
     ),
+    (
+        26,
+        """
+        -- 全量同步（EXPERIENCE_PLAN B1，2026-09-17）：去掉 30 天首同步窗口，
+        -- 改为「最新一页立即可用 + 后台从新到旧回补全部历史」。backfill_uid 是
+        -- 回补断点（下一个待拉取的更旧 UID 上界）；backfill_done=1 表示该文件夹
+        -- 历史已补齐。存量账号迁移后默认 0 → 下次轮询自动开始回补。
+        ALTER TABLE sync_state ADD COLUMN backfill_uid INTEGER;
+        ALTER TABLE sync_state ADD COLUMN backfill_done INTEGER NOT NULL DEFAULT 0;
+        """,
+    ),
 ]
 
 

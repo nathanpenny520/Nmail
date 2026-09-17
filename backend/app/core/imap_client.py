@@ -9,7 +9,7 @@ import smtplib
 import time
 from contextlib import suppress
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from email.message import EmailMessage
 
 from imap_tools import AND, MailBox, MailMessageFlags
@@ -157,8 +157,34 @@ def find_sent_folder(mb: MailBox) -> str | None:
     return _find_special_folder(mb, "\\sent", ("sent", "已发送"))
 
 
-def iter_new_mail(mb: MailBox, folder: str, last_uid: int,
-                  first_sync_days: int = 30, chunk_size: int = 25):
+def fetch_uids_parsed(mb: MailBox, window: list[int]) -> list[ParsedMessage]:
+    """按 UID 集合拉取并解析（升序/降序均可）。稀疏集合逐 UID 精确拉取的 defensive 逻辑见下。
+
+    稠密集合（如收件箱：UID 与日期同调）→ 区间 FETCH 一批拉回；
+    稀疏集合（如「已删除/已发送」：邮件为移入、日期与 UID 不单调）——
+    区间/逗号集合都会被服务器展开成 min:max 连续拉取（实测 42 个 UID
+    拉回 388 封、31s，大文件夹直接撞超时→Windows SSL 报 Errno 22），
+    只能逐 UID 精确拉取。
+    """
+    parsed: list[ParsedMessage] = []
+    lo, hi = min(window), max(window)
+
+    def _fetch_one(criteria_str: str, out: list[ParsedMessage]) -> None:
+        for msg in mb.fetch(criteria_str, mark_seen=False, bulk=True):
+            # 部分版本 imap-tools 返回 str 型 uid，统一转 int
+            if msg.uid is None:
+                continue
+            out.append(_parse_message(msg, int(msg.uid)))
+
+    if hi - lo + 1 <= len(window) * 2 + 5:
+        _fetch_one(f"UID {lo}:{hi}", parsed)
+    else:
+        for uid in window:
+            _fetch_one(f"UID {uid}", parsed)
+    return parsed
+
+
+def iter_new_mail(mb: MailBox, folder: str, last_uid: int, chunk_size: int = 25):
     """按 UID 升序分块产出新增邮件（每块为 ≤chunk_size 封的 ParsedMessage 列表）。
 
     先 SEARCH 拿 UID 清单（轻量，只传 ID），再逐块 FETCH：
@@ -166,42 +192,16 @@ def iter_new_mail(mb: MailBox, folder: str, last_uid: int,
       ~8s 处被掐，Windows SSL 层报 `[Errno 22] Invalid argument`），块太大
       会在提交断点前被掐，重试永远原地踏步；
     - 调用方每块入库并提交断点，中断后从断点续传，不会整批重放。
-    首次同步（last_uid=0）只拉最近 N 天，避免大邮箱首翻过久；
+    首翻全量（含历史回补）由 sync 层负责：最新一页经 _sync_folder 立即可用，
+    更早历史由回补线程从新到旧补齐（EXPERIENCE_PLAN B1）。
     注意 IMAP 语义 `UID x:*` 在 x 大于最大 UID 时也会返回最后一封，
     因此仍按 uid > last_uid 过滤一次。
     """
     mb.folder.set(folder)
-    if last_uid <= 0:
-        # imap-tools 的 INTERNALDATE 条件参数是 date_gte（不是 IMAP 原生的 SINCE 关键字）
-        since_date = (datetime.now() - timedelta(days=first_sync_days)).date()
-        criteria = AND(date_gte=since_date)
-    else:
-        criteria = f"UID {last_uid + 1}:*"
-
-    pending = sorted(int(u) for u in mb.uids(criteria) if int(u) > last_uid)
+    pending = sorted(int(u) for u in mb.uids(f"UID {last_uid + 1}:*") if int(u) > last_uid)
     for start in range(0, len(pending), chunk_size):
         window = pending[start : start + chunk_size]
-        parsed: list[ParsedMessage] = []
-
-        def _fetch_one(criteria_str: str, out: list[ParsedMessage]) -> None:
-            for msg in mb.fetch(criteria_str, mark_seen=False, bulk=True):
-                # 部分版本 imap-tools 返回 str 型 uid，统一转 int
-                uid = int(msg.uid) if msg.uid is not None else None
-                if uid is None or uid <= last_uid:
-                    continue
-                out.append(_parse_message(msg, uid))
-
-        # 稠密集合（如收件箱：UID 与日期同调）→ 区间 FETCH 一批拉回；
-        # 稀疏集合（如「已删除/已发送」：邮件为移入、日期与 UID 不单调）——
-        # 区间/逗号集合都会被服务器展开成 min:max 连续拉取（实测 42 个 UID
-        # 拉回 388 封、31s，大文件夹直接撞超时→Windows SSL 报 Errno 22），
-        # 只能逐 UID 精确拉取
-        span = window[-1] - window[0] + 1
-        if span <= len(window) * 2 + 5:
-            _fetch_one(f"UID {window[0]}:{window[-1]}", parsed)
-        else:
-            for uid in window:
-                _fetch_one(f"UID {uid}", parsed)
+        parsed = [p for p in fetch_uids_parsed(mb, window) if p.uid > last_uid]
         time.sleep(0.2)  # 块间轻微节流，降低触发服务商频控的概率
         yield parsed
 

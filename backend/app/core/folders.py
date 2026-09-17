@@ -100,15 +100,9 @@ def cached_list(account_id: int) -> list[dict]:
     ]
 
 
-def refresh_cache(account_id: int) -> list[dict]:
-    """IMAP LIST 刷新 folders 缓存（服务器增删文件夹以服务器为准），返回缓存列表。"""
-    handle = mailbox.load_account(account_id)
-    with mailbox.open_imap(handle) as mb:
-        listing = imap_client.list_folders(mb)
-    if not listing:
-        # 空 LIST（网络抖动/异常响应）不清缓存：宁用旧数据，勿把本地文件夹全部 purge（审查 C4）
-        logger.warning("refresh_cache: 账号 %s 的 LIST 返回空，保留本地文件夹缓存", account_id)
-        return cached_list(account_id)
+def upsert_listing(account_id: int, listing: list[dict]) -> None:
+    """LIST 结果写入 folders 缓存（refresh_cache 与回补线程共用）；
+    服务器上已消失的文件夹 purge 本地（以服务器为准）。"""
     conn = get_conn()
     seen: set[str] = set()
     for item in listing:
@@ -128,6 +122,18 @@ def refresh_cache(account_id: int) -> list[dict]:
         if name["name"] not in seen:
             purge_local_folder(account_id, name["name"], cleanup_attachments=False)
     conn.commit()
+
+
+def refresh_cache(account_id: int) -> list[dict]:
+    """IMAP LIST 刷新 folders 缓存（服务器增删文件夹以服务器为准），返回缓存列表。"""
+    handle = mailbox.load_account(account_id)
+    with mailbox.open_imap(handle) as mb:
+        listing = imap_client.list_folders(mb)
+    if not listing:
+        # 空 LIST（网络抖动/异常响应）不清缓存：宁用旧数据，勿把本地文件夹全部 purge（审查 C4）
+        logger.warning("refresh_cache: 账号 %s 的 LIST 返回空，保留本地文件夹缓存", account_id)
+        return cached_list(account_id)
+    upsert_listing(account_id, listing)
     return cached_list(account_id)
 
 
