@@ -49,6 +49,23 @@ _CSS_IMPORT_RE = re.compile(r"@import\b[^;]*;?", re.IGNORECASE)
 _TINY_ATTR_RE = re.compile(r"^\s*(\d+)")
 _TINY_STYLE_RE = re.compile(r"(?:^|[;\s])(?:width|height)\s*:\s*(\d+(?:\.\d+)?)px", re.IGNORECASE)
 
+# Markdown 转换产物的空白规范化（编辑器所见=所发的前提）。python-markdown 的
+# nl2br 输出 "<br />\n"：br 后的字面换行在收件端永远折叠（white-space:normal），
+# 却会进编辑器文档并被其 break-spaces 渲染成第二个换行——模板/签名/AI 内容
+# 插入后「单换行变空行」；行首缩进空格同理（编辑器可见、收件端折叠，发送后
+# 「空格被吞」）。转出的 HTML 一律：①删 br 后字面 \n；②行首空格串转
+# U+00A0（任何客户端都不折叠，缩进收发两端一致显示）。
+_MD_BR_NEWLINE_RE = re.compile(r"(<br[^>]*>)\n")
+_MD_LEADING_SPACES_RE = re.compile(r"(<(?:br|p)(?:\s[^>]*)?>)( +)")
+
+
+def _normalize_md_html(html: str) -> str:
+    """规范 Markdown 转换产物的空白：只处理 br/p 开标签后的文本，<pre> 内换行缩进不受影响。"""
+    html = _MD_BR_NEWLINE_RE.sub(r"\1", html)
+    return _MD_LEADING_SPACES_RE.sub(
+        lambda m: m.group(1) + "\u00a0" * len(m.group(2)), html
+    )
+
 
 def _scrub_css(css: str, allow_remote_images: bool) -> str:
     """按远程图片放行口径清洗 CSS：拦截时剥掉远程 url() 与 @import（data: 内联保留）。"""
@@ -244,7 +261,7 @@ def html_to_plain_text(html: str) -> str:
     for cell in soup.find_all(["td", "th"]):
         cell.append(" ")  # 单元格之间补空格（无处理时 "表头A表头B" 粘连）
     text = soup.get_text()
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
+    return re.sub(r"\n{3,}", "\n\n", text).replace("\u00a0", " ").strip()
 
 
 def wrap_email_body_html(inner_html: str) -> str:
@@ -259,17 +276,14 @@ def wrap_email_body_html(inner_html: str) -> str:
 
 def markdown_to_email_html(markdown_text: str) -> str:
     """写信正文的 Markdown → 带基础样式的 HTML。nl2br：单换行保留为 <br>（用户按一次回车就要有一次换行）。"""
-    import markdown as md_lib
-
-    body = md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables", "nl2br"])
-    return wrap_email_body_html(body)
+    return wrap_email_body_html(_normalize_md_html(markdown_body_html(markdown_text)))
 
 
 def markdown_body_html(markdown_text: str) -> str:
     """Markdown → 裸 HTML（无外层样式），供编辑器内插入/模板/签名转换用。nl2br：单换行保留为 <br>。"""
     import markdown as md_lib
 
-    return md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables", "nl2br"])
+    return _normalize_md_html(md_lib.markdown(markdown_text or "", extensions=["fenced_code", "tables", "nl2br"]))
 
 
 def markdown_to_plain_text(markdown_text: str) -> str:

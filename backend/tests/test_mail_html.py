@@ -219,3 +219,30 @@ def test_plain_text_table_cells_separated():
     )
     assert "甲 乙" in out
     assert "1 2" in out
+
+
+def test_markdown_normalize_no_literal_newline_after_br():
+    """br 后字面 \n 必须删除：收件端永远折叠，却会被编辑器 break-spaces 渲染成空行。"""
+    out = markdown_body_html("第一行\n第二行")
+    assert "<br />\n" not in out
+    assert "<br />第二行" in out
+
+
+def test_markdown_normalize_leading_indent_becomes_nbsp():
+    """行首缩进空格转 U+00A0：编辑器与收件端都不折叠，中文书信缩进两端一致。"""
+    out = markdown_body_html("敬启者：\n        您好！")
+    assert "<br />\xa0" in out  # 缩进保留（nbsp 不折叠）
+    assert "\n" not in out  # 不再携带字面换行
+
+
+def test_markdown_normalize_pre_untouched():
+    """<pre> 代码块内换行与缩进是语义，不受规范化影响。"""
+    out = markdown_body_html("```\ncode line1\n    indented\n```")
+    assert "<pre><code>code line1\n    indented\n</code></pre>" in out
+
+
+def test_plain_text_nbsp_back_to_space():
+    """nbsp 在纯文本派生里还原为普通空格。"""
+    plain = html_to_plain_text(markdown_to_email_html("A：\n        缩进行"))
+    assert plain == "A：\n        缩进行"
+    assert "\xa0" not in plain

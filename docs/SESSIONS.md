@@ -16,6 +16,14 @@
 
 ## 进行中
 
+### S-0917-2145-写信所见即所发 ✅
+- 目标: 用户反馈①模板插入后换行变空行②发送后换行和空格被吞——定位写信区排版逻辑与根因并修复
+- 范围: backend(app/core/mail_html.py, tests/test_mail_html.py) + docs(CHANGELOG, SESSIONS)；前端零改动（问题不在前端）
+- 根因: 编辑器 break-spaces vs 收件端 normal 的空白口径差 × nl2br 产物携带字面 `\n`——详见 CHANGELOG「写信所见即所发」条目。全部结论经 playwright 驱动真实编辑器 + 后端管线实测复现（测试脚本在 /tmp/nmail-editortest/，浏览器隔离开关：草稿 POST/PATCH 全 mock 不落数据库）
+- 产出: 提交（哈希见 CHANGELOG 回填）——`_normalize_md_html` 收口两路 Markdown 转换；测试 +4（278 绿）；pip install . 重装 site-packages 后 .app 重启生效
+- 遗留: ①后端 fd 泄漏未修（运行 ~46 分钟即 Errno 24 瘫痪，本会话中重启两次；下次排查建议挂 lsof 计数对照 poll/backfill 时间线）②手打连续空格编辑器可见、收件端仍折叠（Gmail 式输入转换 nbsp 可作后续）③HTML 源码视图贴入的原始 HTML 不做空白规范化（高级功能，保持原样）
+- 时间: 2026-09-17 21:45 开工，22:05 完成
+
 ### S-0917-1620-文档补齐与README重写 ✅
 - 目标: 用户要求补齐对外文档并让官网与文档统一；README 重写为「第一眼吸引」形态——只保留 uvx 安装方式、其余渠道引导到 INSTALL.md，用 promo/pictures 演示截图排版；同步修正官网滞后文案（AI 晨报→AI 摘要 等）并给首页/功能页补界面截图
 - 范围: 主仓(README.md, README.zh-CN.md, docs/README.md 新增索引, docs/SESSIONS.md, docs/CHANGELOG.md, assets/promo/ 新增截图) + nmail-site(index.astro, features.astro, public/shots/ 新增截图, docs/CHANGELOG.md)；不改任何安装/升级命令本身，四处命令口径不动

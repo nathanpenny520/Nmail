@@ -3,6 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: 写信所见即所发——Markdown 转换产物空白规范化（删 br 后字面换行 + 缩进转 nbsp）
+- 用户反馈两个症状实机复现并根因定位：①模板/签名/AI 内容插入编辑器后「单换行变空行」②发送后「换行和空格被吞」。总根因是**两套空白口径不一致**：编辑器（ProseMirror）以 `break-spaces` 渲染（字面 `\n` 显示为换行、空格全保留），收件端 HTML 恒为 `normal`（`\n` 与连续空格折叠）；而 python-markdown 的 nl2br 输出 `<br />\n` 携带字面换行进编辑器文档——同一段内容编辑器显示空行+缩进、收件人看到紧凑无缩进（B2 修复前则是无 br 时字面 `\n` 被编辑器显示、收件端折叠成「换行被吞」）
+- 修复（单一收口）：`mail_html._normalize_md_html` 在 `markdown_body_html`/`markdown_to_email_html` 两路统一规范化——①删 `<br>` 后字面 `\n`（收件端永远折叠，编辑器不该显示）②`<br>`/`<p>` 后行首空格串转 U+00A0（任何客户端不折叠，中文书信缩进收发两端一致显示）；`<pre>` 代码块内换行缩进是语义，不受影响；`html_to_plain_text` 把 U+00A0 还原为普通空格（text/plain 同步保真，原 f561783 的 br-换行吞除逻辑保留作防御）
+- 测试：test_mail_html 新增 4 例（br 后无字面换行/缩进转 nbsp/pre 不受影响/纯文本 nbsp 还原），全套 278 绿；ruff 通过
+- 端到端验证（真实用户模板「关于咨询课题组组会旁听…」注入编辑器实测）：插入后文档无字面 `\n`、缩进以 nbsp 存活于 ProseMirror 文档（getHTML 带 `&nbsp;`）；编辑器渲染与真实发送管线（消毒→内联化→wrap）输出并排对比完全一致
+- 附带发现（未修，另开跟进）：后端进程 fd 泄漏——运行约 46 分钟后 `accept: [Errno 24] Too many open files` + sqlite 打不开（nmail.log 21:30 起 138 条），重启恢复；泄漏源需挂 fd 计数排查（疑 IMAP/同步连接未关）
+- 会话：S-0917-2145-写信所见即所发
+
 ## ec5a85d — docs: README 中英主次对调——中文成为主 README，顶部补语言切换行
 - 用户指出重写时漏了语言切换行、且文档以中文为主：README.md ↔ README.zh-CN.md 内容对调——**中文版成为主 README**（GitHub/PyPI 默认展示中文），英文版移至 README.zh-CN.md；两份顶部补「中文 ｜ English」互链
 - docs/INSTALL.md（方式⑤、源码开发两处）与 docs/README.md 索引的 `../README.zh-CN.md` 引用跟改为 `../README.md`；官网 sync-docs 的 EXTRA_LINKS 本就同时映射两文件名，构建自动跟上
