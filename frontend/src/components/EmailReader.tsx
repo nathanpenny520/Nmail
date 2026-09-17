@@ -8,8 +8,9 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
 import { formatDate } from '../utils/format'
-import type { EmailDetail } from '../types'
+import type { EmailAttachment, EmailDetail } from '../types'
 import AiPanel from './AiPanel'
+import AttachmentPreview, { previewKind } from './AttachmentPreview'
 import HtmlMail from './HtmlMail'
 
 interface EmailReaderProps {
@@ -39,6 +40,7 @@ export default function EmailReader({
 }: EmailReaderProps) {
   const [moveOpen, setMoveOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
+  const [previewAtt, setPreviewAtt] = useState<EmailAttachment | null>(null)
   const [listMessage, setListMessage] = useState<string | null>(null)
   const [draftInstrOpen, setDraftInstrOpen] = useState(false)
   const [draftInstr, setDraftInstr] = useState('')
@@ -310,17 +312,35 @@ export default function EmailReader({
                 附件（{detail.attachments.length}）
               </div>
               <div className="flex flex-wrap gap-2">
-                {detail.attachments.map((att) => (
-                  <a
-                    key={att.id}
-                    href={att.download_url}
-                    className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 t-sm text-gray-700 hover:border-indigo-300 hover:bg-indigo-50"
-                    title={att.filename}
-                  >
-                    <span className="max-w-52 truncate font-medium">{att.filename}</span>
-                    <span className="text-gray-400">{formatSize(att.size)}</span>
-                  </a>
-                ))}
+                {detail.attachments.map((att) => {
+                  const canPreview = previewKind(att) !== null
+                  const chip = (
+                    <>
+                      <span className="max-w-52 truncate font-medium">{att.filename}</span>
+                      <span className="text-gray-400">{formatSize(att.size)}</span>
+                      {canPreview && <span className="t-xs text-indigo-500">预览</span>}
+                    </>
+                  )
+                  return canPreview ? (
+                    <button
+                      key={att.id}
+                      onClick={() => setPreviewAtt(att)}
+                      className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 t-sm text-gray-700 hover:border-indigo-300 hover:bg-indigo-50"
+                      title={`预览 ${att.filename}`}
+                    >
+                      {chip}
+                    </button>
+                  ) : (
+                    <a
+                      key={att.id}
+                      href={att.download_url}
+                      className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 t-sm text-gray-700 hover:border-indigo-300 hover:bg-indigo-50"
+                      title={att.filename}
+                    >
+                      {chip}
+                    </a>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -328,6 +348,7 @@ export default function EmailReader({
       </div>
 
       {aiOpen && <AiPanel email={detail} onClose={() => setAiOpen(false)} />}
+      {previewAtt && <AttachmentPreview att={previewAtt} onClose={() => setPreviewAtt(null)} />}
     </div>
   )
 }

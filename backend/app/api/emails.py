@@ -461,14 +461,24 @@ def email_action(email_id: int, payload: EmailActionIn) -> dict:
 
 
 @router.get("/attachments/{attachment_id}/download")
-def download_attachment(attachment_id: int) -> FileResponse:
+def download_attachment(attachment_id: int, inline: int = 0) -> FileResponse:
     row = get_conn().execute(
         "SELECT filename, mime, path FROM attachments WHERE id = ?", (attachment_id,)
     ).fetchone()
     if not row or not Path(row["path"]).exists():
         raise HTTPException(404, "附件不存在")
+    # inline 仅对预览安全类型放行（前端弹层用）；HTML/SVG 可携带同源脚本，一律强制下载。
+    mime = (row["mime"] or "application/octet-stream").lower()
+    base = mime.split(";")[0].strip()
+    inline_ok = inline == 1 and (
+        (base.startswith("image/") and base != "image/svg+xml")
+        or base == "application/pdf"
+        or base.startswith("text/")
+    )
     return FileResponse(
         row["path"],
         filename=row["filename"],
-        media_type=row["mime"] or "application/octet-stream",
+        media_type=mime,
+        content_disposition_type="inline" if inline_ok else "attachment",
+        headers={"X-Content-Type-Options": "nosniff"},
     )
