@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import AddAccountModal from '../components/AddAccountModal'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
+// BookOpen 独立一行导入：主 lucide 导入行正被并行会话（快捷键设置页）修改，合并时可上移合并
+import { BookOpen } from 'lucide-react'
+import DocsLink from '../components/DocsLink'
+import { DOCS_URL, docsUrl } from '../utils/links'
 import ExtApiSection from '../components/ExtApiSection'
 import { OauthConfigCard, ReauthorizeButton } from '../components/OauthSettings'
 import { notifyPermission, type NotifyPermission } from '../components/NotificationBell'
@@ -326,6 +330,18 @@ export default function SettingsPage() {
             </button>
           ))}
         </nav>
+        {/* 文档站常驻入口：所有分区可见，新标签打开 */}
+        <div className="mt-3 border-t border-gray-100 pt-3">
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 t-md text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+          >
+            <BookOpen className="h-4 w-4 shrink-0" />
+            使用文档
+          </a>
+        </div>
       </div>
 
       <div className="min-w-0 flex-1 space-y-6">
@@ -945,6 +961,18 @@ export default function SettingsPage() {
                   数据目录已通过 NMAIL_DATA_DIR 环境变量重定向（当前显示即生效路径）
                 </p>
               )}
+            </div>
+
+            {/* 帮助与文档：在线文档随版本更新（站点构建期自动同步主仓 docs/） */}
+            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+              <div className="t-md font-medium text-gray-700">帮助与文档</div>
+              <p className="mt-1 t-sm leading-relaxed text-gray-400">
+                完整操作手册与常见问题在线查看：
+                <DocsLink href={DOCS_URL}>文档首页</DocsLink> ·{' '}
+                <DocsLink href={docsUrl('guide/')}>使用指南</DocsLink> ·{' '}
+                <DocsLink href={docsUrl('faq/')}>常见问题</DocsLink> ·{' '}
+                <DocsLink href={docsUrl('install/')}>安装与更新</DocsLink>
+              </p>
             </div>
           </section>
         )}

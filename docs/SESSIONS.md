@@ -16,6 +16,12 @@
 
 ## 进行中
 
+### S-0917-1300-设置文档入口 🔄
+- 目标: 设置页接入文档站——侧边栏底部「使用文档」外链 + 「关于」新增「帮助与文档」卡片（文档首页/使用指南/FAQ/安装与更新）；文档链接去硬编码（utils/links.ts 常量 + components/DocsLink.tsx 统一样式，替换 ExtApiSection/OauthSettings 两处）；使用指南「设置速览」表补写信/关于两行、更正更新检查归属；不加更多分区深链（用户拍板）
+- 范围: frontend(links.ts 新建, DocsLink.tsx 新建, SettingsPage.tsx, ExtApiSection.tsx, OauthSettings.tsx) + docs(使用指南, CHANGELOG, SESSIONS)
+- 协调: SettingsPage.tsx 与 S-0917-1255/S-0917-1252 声明范围重叠——小步快走、编辑前新鲜重读、提交只暂存本会话 hunks（构造 patch）
+- 时间: 2026-09-17 13:00 开工
+
 ### S-0917-1255-快捷键设置页 ✅
 - 目标: 设置页新增「快捷键」分类（总开关 + 分组清单，截图参照某客户端设置页）；SHORTCUTS 抽共享数据源 shortcuts.ts 并补写信 ⌘S/⌘Enter 两键；后端 shortcuts_enabled 设置项
 - 范围: backend(api/settings.py) + frontend(shortcuts.ts 新建, MailBrowser.tsx, SettingsPage.tsx, openapi.json, schema.d.ts) + docs(使用指南, CHANGELOG, SESSIONS)
@@ -24,6 +30,12 @@
 - 验证: ruff 通过；npm build（含 tsc）通过；隔离实例（8931）curl 往返——默认 True、PUT false 落库回读 False
 - 遗留: 后端改动需重启 python run.py 生效（盘上有并行会话后端 WIP，本会话不代重启）；新分类 UI 待用户真机过目
 - 时间: 2026-09-17 12:55 开工，13:04 完成
+
+### S-0917-1252-体验优化 🔄
+- 目标: 用户六项体验反馈落地——docs/EXPERIENCE_PLAN.md（B1 全量同步/B2 换行 nl2br/B3 附件预览/B4 Tab keep-alive/B5 通知修复/B6 AI 工具扩充），批次 B2→B3→B1→B5→B4→B6
+- 范围: backend(sync.py, imap_client.py, mail_html.py, emails.py, folders.py, scheduler.py, database.py 迁移, pipeline.py, ai/tools.py, ai/agent.py, outbox.py, prompts.py) + frontend(Layout.tsx, MailBrowser.tsx, EmailReader.tsx, Markdown.tsx, NotificationBell.tsx, InsertDialogs 相关不动, ManagerPage.tsx, SettingsPage.tsx) + docs(EXPERIENCE_PLAN/CHANGELOG/SESSIONS/ARCHITECTURE)
+- 与 S-0916-1258-收尾计划 无文件冲突（其剩余为发版轮打包与渠道文档）
+- 时间: 2026-09-17 12:52 开工
 
 ### S-0916-1258-收尾计划 🔄
 - 目标: 收官阶段——按 docs/WIND_DOWN_PLAN.md（用户 2026-09-16 拍板：自家 tap cask、dmg 首选 .app.zip 保留、Intel 放弃、不迁 Tauri、Release Notes 自动化、键盘收尾）落地 P1–P4

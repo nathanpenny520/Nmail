@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Eye, EyeOff, KeyRound, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import DocsLink from './DocsLink'
 import { api } from '../api/client'
+import { docsUrl } from '../utils/links'
 import type { ApiScope, ExtApiKey } from '../types'
 
 // ── 设置页「API」分类（v0.4 P7，REDESIGN_PLAN §7.2）：
@@ -99,16 +101,7 @@ export default function ExtApiSection() {
       <h2 className="t-lg font-semibold">API</h2>
       <p className="mt-1 t-sm text-gray-400">
         供你自己的脚本、自动化（快捷指令/Raycast/n8n）或其他设备（经自建隧道）调用本机邮件能力。
-        服务始终只监听 127.0.0.1；隧道配置示例见{' '}
-        <a
-          className="text-indigo-600 underline underline-offset-2"
-          href="https://nmail.whizzzest.com/docs/api/"
-          target="_blank"
-          rel="noreferrer"
-        >
-          对外 API 使用指南
-        </a>
-        。
+        服务始终只监听 127.0.0.1；隧道配置示例见 <DocsLink href={docsUrl('api/')}>对外 API 使用指南</DocsLink>。
       </p>
 
       {/* 总开关与日志开关 */}
