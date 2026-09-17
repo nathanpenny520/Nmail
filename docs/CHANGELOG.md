@@ -3,7 +3,14 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — B1: 全量同步——首翻最新一页立即可用 + 后台回补全部文件夹全部历史（EXPERIENCE_PLAN）
+## 待提交 — fix: 通知中心时间改按系统时区显示（原为裸 UTC 串）
+- 用户反馈通知时间比系统慢 8 小时；根因：`notifications.created_at` 由 SQLite `datetime('now')` 默认值落库（恒为 UTC），API 原样透传、前端原样渲染字符串，全程无时区转换（邮件列表走了 formatDate 所以一直正确，仅通知中心漏了这层）
+- 架构保持「存 UTC、显示本地」：`/api/notifications` 出口 `_to_local_iso()` 把 UTC 裸串转系统时区带偏移 ISO（存量行同样覆盖，无需迁移）；前端 NotificationBell 改用共用 `formatDate` 渲染；依赖 UTC 存储做边界比较的 scheduler 定时逻辑不动
+- 未来自定义时区：`_to_local_iso()` 单点把系统时区换成设置项即可
+- 验证：ruff 通过；npm build（tsc）通过；隔离实例 curl 实测 created_at 输出本地时区 ISO
+- 会话：S-0917-1401-通知时区
+
+## 79d1988 — B1: 全量同步——首翻最新一页立即可用 + 后台回补全部文件夹全部历史（EXPERIENCE_PLAN）
 - 用户反馈清华邮箱只见最近 30 天；根因为 `FIRST_SYNC_DAYS=30` 首同步窗口且全项目无历史回补（客户端设计限制，非服务器限制）
 - 去掉 30 天窗口：首同步只拉最新一页（25 封）立即可用；新迁移 v26 给 `sync_state` 加 `backfill_uid`（回补断点）+ `backfill_done` 列
 - 新增独立回补线程（`maybe_start_backfill` → `_backfill_worker` → `_backfill_folder_pass`）：LIST 枚举全部服务器文件夹（排除 Gmail All Mail）+ 为每个文件夹确保 sync_state 行，从新到旧分页（25 封/页 × 80 页/趟，趟间重连换气）补齐全部历史；断点逐页落库，中断/重启/断连自动续传；INBOX 优先
@@ -14,19 +21,47 @@
 - 验证：ruff 通过；pytest 256 全绿；临时数据目录启动冒烟 /api/health 通过；真机全量回补待用户实例升级后观察
 - 会话：S-0917-1252-体验优化
 
-## 待提交 — B3: 附件预览——图片/PDF/文本弹层预览，其余类型保持下载（EXPERIENCE_PLAN）
+## f120525 — B3: 附件预览——图片/PDF/文本弹层预览，其余类型保持下载（EXPERIENCE_PLAN）
 - 用户拍板范围：图片、PDF、文本预览；其余下载。PRODUCT_PLAN 既定项（「图片和 PDF 预览」）落地
 - 后端 `/api/attachments/{id}/download` 加 `?inline=1`：mime 白名单（image/* 非 svg、application/pdf、text/*）才返回 inline disposition，其余强制 attachment；统一加 `X-Content-Type-Options: nosniff`；HTML/SVG 附件可携带同源脚本，永不 inline
 - 前端新增 AttachmentPreview 弹层：图片 `<img>` 直接渲染；PDF `<iframe>` 浏览器内置 viewer；文本 fetch 后 `<pre>`（>1MB 提示下载）；EmailReader 附件片可预览类型改为按钮打开弹层（带「预览」角标），不可预览类型保持原下载链接；弹层内仍可一键下载
 - 验证：npm build（tsc）通过；后端 ruff 通过
 - 会话：S-0917-1252-体验优化
 
-## 待提交 — B2: Markdown 转换开启 nl2br——模板/签名/AI 起草的单换行不再丢失（EXPERIENCE_PLAN）
+## 1e37818 — B2: Markdown 转换开启 nl2br——模板/签名/AI 起草的单换行不再丢失（EXPERIENCE_PLAN）
 - 用户反馈「换行发出去就没了」，场景确认为模板/签名插入后；根因：`markdown_body_html`/`markdown_to_email_html` 未开 nl2br 扩展，单个换行被折叠为空格（编辑器直接打字不受影响，Enter 本就生成段落）
 - 两处转换函数 extensions 加 `nl2br`：波及模板插入、签名插入（含自动签名）、AI 起草（create_draft/update_draft）、编辑器 markdown 粘贴——单换行一律保留为 `<br>`，空行分段不变
 - 前端 Markdown 组件（AI 聊天气泡/晨报渲染）加 remark-breaks，站内渲染口径一致
 - 测试：test_mail_html.py 新增 nl2br 用例（单换行→`<br />`、空行仍分段）
 - 验证：pytest 27/27（mail_html）通过；ruff 通过；npm build 通过；运行实例 `/compose-extras/markdown` 实测往返
+- 会话：S-0917-1252-体验优化
+
+## 待回填 B6 — B6: AI 总管家人人对等扩充——模板/签名/联系组/受限设置/立即收信（EXPERIENCE_PLAN）
+- 用户拍板「评估开放的所有都给 AI，不直接开放的出审批卡」。新增 8 工具（tools.py 注册 + 参数表 + 结果摘要 + 前端 TOOL_LABELS 中文名）：
+  - 读类：`list_templates`（模板名+内容）、`list_signatures`（各账号签名）、`list_contact_groups`（联系组）
+  - 写类 organize（自动模式可执行）：`apply_signature`（幂等补签名）、`manage_contact_group`（create/rename/delete/add_members/remove_members，成员须先在通讯录）、`set_settings`（白名单键：desktop_notifications_enabled / auto_insert_signature / contacts_auto_collect / poll_interval_minutes(1..120) / notify_types 子键合并）、`trigger_sync`（后台增量同步）
+  - 写类 draft：`apply_template`（模板内容+可选补充段 → create_draft 同一落地路径 → 待审）
+- 高风险设置键强制审批（自动模式也降审批，`_approval_reason` 硬规则）：`agent_brief_enabled` / `digest_time` / `allow_remote_images` / `read_email_max_chars`（读信截断改为可调设置，默认 3000，上限 20000）
+- AI 信补签名：`outbox.send_user_draft` 对 origin='ai' 草稿在用户开启 auto_insert_signature 时自动追加该账号默认签名（幂等，正文已含同款跳过）；修 prompts.py「结尾不签名（系统会自动处理）」失真说明
+- 白名单外设置键一律拒绝（§17.3 豁免不动摇：secrets/授权位/账号凭据/API key/HTTP·命令执行依旧不提供）
+- 测试：新增 test_ai_tools_b6.py 9 例（模板套用落待审/签名幂等/联系组全生命周期/设置白名单与校验/高风险强制审批/trigger_sync 派发/outbox 签名幂等）
+- 验证：pytest 265 全绿；ruff/npm build 通过
+- 会话：S-0917-1252-体验优化
+
+## d23ba30 — B4: Tab keep-alive——五个页面常驻挂载，切页签只显隐（EXPERIENCE_PLAN）
+- 用户反馈切 tab 后滚动/筛选/打开的邮件/聊天记录全回初始态。根因：路由切换=页面组件整体卸载，状态全在组件内 useState（唯一 keep-alive 是写信台）
+- Layout 改为五个页面（邮件/草稿/每日摘要/AI 总管家/设置）常驻挂载：首次到访才挂载，切页签只 `visibility` 显隐（布局与滚动位置保留、不进焦点序与无障碍树）；`?focus=` 深链在常驻化后验证可达；/mydrafts、/archived、未知路径重定向兜底迁入 Layout
+- 新增 `usePageActive` 上下文：隐藏页签门控列表轮询（MailBrowser 20s/2s、待审草稿 20s、设置代理状态 3s）与全局键盘监听（MailBrowser 两处 window keydown）——隐藏页签不拉取不响应按键
+- AI 总管家切走再回：聊天记录/流式输出保留（组件不再卸载，SSE 流继续在后台跑）
+- 验证：npm build 通过；隔离实例 Chrome 实测——切走再切回滚动位置精确保留（292.41px 不变）、五页签 DOM 常驻、`?focus=` 消费正常、控制台无错误
+- 会话：S-0917-1252-体验优化
+
+## 086fb29 — B5: 通知修复——只报 INBOX 新邮件/点击直达/晨报纯文本化（EXPERIENCE_PLAN）
+- Trash 误报：`sync_account` 汇总通知只统计 INBOX 新邮件（原为本次同步全部文件夹加总，点开树/按需同步垃圾文件夹也弹「新邮件」）；ref_id 从账号 id 改为首封新邮件 email id
+- 点击跳转：桌面通知 `onclick` 补 navigate（复用通知面板同款 `targetFor` 类型映射）；新增 new_mail/ai_archive → `/?focus=<email_id>` 直达邮件、compose → /drafts、ai_proposal → /settings；存量「账号 id」ref_id 行点击回落邮件页顶部（可接受）
+- 晨报通知纯文本化：Notification API body 平台限制纯文本——scheduler 晨报原文 md→plain 清理（新 `markdown_to_plain_text`）+ 截短 500 字；完整 markdown 排版站内看；通知中心 digest 类型展开时用 Markdown 组件渲染
+- ai_archive 通知带清单：`_apply_classification` 返回被归档邮件 {id, subject}，通知正文列前 3 个主题 + 总数，ref_id 改为首个被归档邮件 id（移动后行 id 保留，focus 可达）
+- 验证：pytest 265 全绿；ruff/npm build 通过
 - 会话：S-0917-1252-体验优化
 
 ## 76967b1 — UI: 设置页接入文档站入口——侧边栏「使用文档」+ 关于「帮助与文档」卡片，文档链接常量化

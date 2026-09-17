@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { NotificationItem } from '../types'
+import { formatDate } from '../utils/format'
 import Markdown from './Markdown'
 
 export type NotifyPermission = 'default' | 'granted' | 'denied' | 'unsupported'
@@ -232,7 +233,7 @@ export default function NotificationBell() {
                           {expandedId === n.id ? '收起' : '展开全文'}
                         </button>
                       )}
-                      <div className="mt-0.5 t-xs text-gray-300">{n.created_at}</div>
+                      <div className="mt-0.5 t-xs text-gray-300">{formatDate(n.created_at)}</div>
                     </div>
                   </div>
                   <button

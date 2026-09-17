@@ -16,6 +16,12 @@
 
 ## 进行中
 
+### S-0917-1401-通知时区 🔄
+- 目标: 通知中心时间与系统时间一致——存 UTC 不动，`/api/notifications` 出口转系统时区 ISO，前端改共用 `formatDate` 渲染；为未来自定义时区留单点接缝（`_to_local_iso`）
+- 范围: backend(api/notifications.py) + frontend(NotificationBell.tsx) + docs(CHANGELOG/SESSIONS)
+- 协调: 与 S-0917-1252-体验优化 在 NotificationBell.tsx 有重叠（其 B5 通知修复未开工）——本会话小改先提交先占，对方编辑前即时重读即可
+- 时间: 2026-09-17 14:01 开工
+
 ### S-0917-1255-快捷键设置页 ✅
 - 目标: 设置页新增「快捷键」分类（总开关 + 分组清单，截图参照某客户端设置页）；SHORTCUTS 抽共享数据源 shortcuts.ts 并补写信 ⌘S/⌘Enter 两键；后端 shortcuts_enabled 设置项
 - 范围: backend(api/settings.py) + frontend(shortcuts.ts 新建, MailBrowser.tsx, SettingsPage.tsx, openapi.json, schema.d.ts) + docs(使用指南, CHANGELOG, SESSIONS)

@@ -1,11 +1,22 @@
 """应用内通知中心 API。"""
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, HTTPException
 
 from app.db.database import get_conn
 
 router = APIRouter(prefix="/api", tags=["notifications"])
+
+
+def _to_local_iso(value: str) -> str:
+    """created_at 落库为 datetime('now')（UTC 裸串），出口转系统时区 ISO；自定义时区将来在此单点接入。"""
+    try:
+        dt = datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+    except ValueError:
+        return value
+    return dt.astimezone().isoformat(timespec="seconds")
 
 
 @router.get("/notifications")
@@ -29,7 +40,7 @@ def list_notifications(unread_only: bool = False) -> dict:
                 "body": r["body"],
                 "ref_id": r["ref_id"],
                 "is_read": bool(r["is_read"]),
-                "created_at": r["created_at"],
+                "created_at": _to_local_iso(r["created_at"]),
             }
             for r in items
         ],
