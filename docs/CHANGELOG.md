@@ -3,12 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: 通知中心时间改按系统时区显示（原为裸 UTC 串）
+## 6c11f17 — fix: 通知中心时间改按系统时区显示（原为裸 UTC 串）
 - 用户反馈通知时间比系统慢 8 小时；根因：`notifications.created_at` 由 SQLite `datetime('now')` 默认值落库（恒为 UTC），API 原样透传、前端原样渲染字符串，全程无时区转换（邮件列表走了 formatDate 所以一直正确，仅通知中心漏了这层）
 - 架构保持「存 UTC、显示本地」：`/api/notifications` 出口 `_to_local_iso()` 把 UTC 裸串转系统时区带偏移 ISO（存量行同样覆盖，无需迁移）；前端 NotificationBell 改用共用 `formatDate` 渲染；依赖 UTC 存储做边界比较的 scheduler 定时逻辑不动
 - 未来自定义时区：`_to_local_iso()` 单点把系统时区换成设置项即可
-- 验证：ruff 通过；npm build（tsc）通过；隔离实例 curl 实测 created_at 输出本地时区 ISO
-- 会话：S-0917-1401-通知时区
+- 验证：ruff 通过；npm build（tsc）通过；隔离实例 curl 实测 created_at 输出本地时区 ISO；8720 重启后 /api/health 通过
+- 会话：S-0917-1401-通知时区（暂存窗口被并行 docs 提交扫入，随 6c11f17 入库）
 
 ## 79d1988 — B1: 全量同步——首翻最新一页立即可用 + 后台回补全部文件夹全部历史（EXPERIENCE_PLAN）
 - 用户反馈清华邮箱只见最近 30 天；根因为 `FIRST_SYNC_DAYS=30` 首同步窗口且全项目无历史回补（客户端设计限制，非服务器限制）
