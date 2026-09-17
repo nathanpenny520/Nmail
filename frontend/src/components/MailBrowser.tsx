@@ -255,6 +255,14 @@ export default function MailBrowser({
       const target = e.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
         || target.tagName === 'SELECT' || target.isContentEditable)) return
+      // Ctrl/⌘+A 全选/清空当前列表——须在修饰键放行之前拦截；输入框内不劫持系统全选
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.code === 'KeyA' || e.key === 'a')) {
+        e.preventDefault()
+        setSelectedIds((prev) =>
+          prev.length > 0 && prev.length === items.length ? [] : items.map((i) => i.id),
+        )
+        return
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const idx = items.findIndex((i) => i.id === cursorId)
       const move = (delta: number) => {
@@ -285,13 +293,18 @@ export default function MailBrowser({
       } else if (is('KeyE', 'e')) {
         e.preventDefault()
         if (cursorId != null) actionMutation.mutate({ id: cursorId, action: 'archive' })
-      } else if (e.key === '#' || (e.code === 'Digit3' && e.shiftKey)) {
-        // Shift+3；裸 3 不作删除
+      } else if (e.key === '#' || (e.code === 'Digit3' && e.shiftKey)
+        || e.key === 'Delete' || e.key === 'Backspace') {
+        // Shift+3 / Del / Backspace；裸 3 不作删除
         e.preventDefault()
         if (cursorId != null) actionMutation.mutate({ id: cursorId, action: 'trash' })
       } else if (is('KeyC', 'c')) {
         e.preventDefault()
         compose.openNew()
+      } else if (e.shiftKey && is('KeyM', 'm')) {
+        // Shift+M 检查新邮件（与工具条刷新同一条同步链路）
+        e.preventDefault()
+        syncMutation.mutate()
       } else if (is('Slash', '/')) {
         e.preventDefault()
         if (e.shiftKey || e.key === '?') setHelpOpen((v) => !v)

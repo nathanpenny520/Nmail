@@ -540,7 +540,6 @@ export default function SettingsPage() {
               启用键盘快捷键
             </label>
             <p className="mt-1.5 t-sm leading-relaxed text-gray-400">
-              关闭后以上键位全部停用（选择即生效）；界面按钮不受影响。
               键位说明详见 <DocsLink href={docsUrl('guide/')}>使用指南</DocsLink>。
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">

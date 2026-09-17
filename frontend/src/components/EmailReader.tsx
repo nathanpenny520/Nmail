@@ -3,11 +3,13 @@ import {
   Archive, ArchiveRestore, Ban, CircleCheck, CornerUpLeft, CornerUpRight,
   ExternalLink, Forward, Loader2, Maximize2, Minimize2, PenLine, Sparkles, Star, Trash2, X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAIEnabled } from '../api/useAI'
+import { useShortcutsEnabled } from '../api/useSettings'
 import { formatDate } from '../utils/format'
+import { usePageActive } from '../hooks/usePageActive'
 import type { EmailAttachment, EmailDetail } from '../types'
 import AiPanel from './AiPanel'
 import AttachmentPreview, { previewKind } from './AttachmentPreview'
@@ -47,6 +49,30 @@ export default function EmailReader({
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const aiEnabled = useAIEnabled()
+
+  // 读信态快捷键（Gmail 语义）：r 回复 / a 全部回复 / f 转发；受总开关与 keep-alive 前台态约束
+  const shortcutsEnabled = useShortcutsEnabled()
+  const pageActive = usePageActive('/') as boolean
+  useEffect(() => {
+    if (!shortcutsEnabled || !pageActive) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.isComposing || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA'
+        || t.tagName === 'SELECT' || t.isContentEditable)) return
+      // code||key 双通道，与 MailBrowser 键盘链同一约定（免疫输入法全角标点/合成事件）
+      const is = (code: string, key: string) => e.code === code || e.key === key
+      const mode = is('KeyR', 'r') ? 'reply'
+        : is('KeyA', 'a') ? 'replyAll'
+        : is('KeyF', 'f') ? 'forward' : null
+      if (mode) {
+        e.preventDefault()
+        onCompose(mode)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [shortcutsEnabled, pageActive, onCompose])
 
   // 手动触发 AI 拟稿（可带要求提示词）：生成后直接跳到待审草稿页
   const draftMutation = useMutation({

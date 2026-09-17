@@ -23,6 +23,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'k / ↑', desc: '上一封' },
       { keys: 'Enter / o', desc: '打开' },
       { keys: 'x', desc: '勾选/取消' },
+      { keys: 'Ctrl/⌘+A', desc: '全选/清空' },
     ],
   },
   {
@@ -30,8 +31,18 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     scope: '仅「邮件」页签',
     items: [
       { keys: 'e', desc: '归档' },
-      { keys: '#', desc: '删除（废纸篓）', sub: '即 Shift+3' },
+      { keys: '# / Del', desc: '删除（废纸篓）', sub: '# 即 Shift+3' },
       { keys: 'c', desc: '写新邮件' },
+      { keys: 'Shift+M', desc: '检查新邮件' },
+    ],
+  },
+  {
+    title: '读信界面',
+    scope: '读信时',
+    items: [
+      { keys: 'r', desc: '回复' },
+      { keys: 'a', desc: '全部回复' },
+      { keys: 'f', desc: '转发' },
     ],
   },
   {
