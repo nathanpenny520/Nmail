@@ -1,6 +1,6 @@
 # Nmail 文档索引（docs/README.md）
 
-面向用户的全部文档都在这里维护（官网 <https://nmail.whizzzest.com/docs/> 由构建脚本从本目录白名单同步镜像）。安装与产品概览见仓库 [README](../README.zh-CN.md)。
+面向用户的全部文档都在这里维护（官网 <https://nmail.whizzzest.com/docs/> 由构建脚本从本目录白名单同步镜像）。安装与产品概览见仓库 [README](../README.md)。
 
 ## 上手
 

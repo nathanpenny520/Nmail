@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — docs: README 中英主次对调——中文成为主 README，顶部补语言切换行
+- 用户指出重写时漏了语言切换行、且文档以中文为主：README.md ↔ README.zh-CN.md 内容对调——**中文版成为主 README**（GitHub/PyPI 默认展示中文），英文版移至 README.zh-CN.md；两份顶部补「中文 ｜ English」互链
+- docs/INSTALL.md（方式⑤、源码开发两处）与 docs/README.md 索引的 `../README.zh-CN.md` 引用跟改为 `../README.md`；官网 sync-docs 的 EXTRA_LINKS 本就同时映射两文件名，构建自动跟上
+- 注意：PyPI 项目页自下次发布起长描述展示中文 README（pyproject `readme = "README.md"`），无需改打包
+- 会话：S-0917-1620-文档补齐与README重写（补记）
+
 ## 644a694 — docs: 对外文档补齐——README 重写（uvx 唯一安装入口）+ docs 索引 + 演示截图入库
 - README 双语重写为「产品门面」（用户要求第一眼吸引）：居中 hero（logo + Release/PyPI/License/平台徽章 + 主截图）、六卖点清单、「眼见为实」双截图（总管家/每日摘要）、GIF 折叠演示块、文档索引表、隐私摘要、开发折叠块；安装章节只保留 uvx 一条命令 + uv 官方安装器，单文件/winget/Homebrew/pip/源码改为指向 docs/INSTALL.md——**命令与渠道说明本身零改动**（INSTALL.md / 官网下载页 / 代码内文案三处不动，四处口径一致）
 - docs/README.md 新增：docs/ 目录对外索引（上手/了解/进阶/开发者四组；自建 OAuth 教程等此前无入口的文档纳入）；内部工作文档（REDESIGN_PLAN/SESSIONS 等）文末注明不面向用户

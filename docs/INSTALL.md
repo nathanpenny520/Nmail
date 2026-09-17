@@ -10,7 +10,7 @@ Nmail 是本地优先的单机应用：任何安装方式都只在本机跑一�
 | ② winget | Windows 想要免维护升级 | Windows | `winget install nathanpenny520.Nmail` |
 | ③ Homebrew | macOS (Apple Silicon) | macOS | `brew tap nathanpenny520/nmail https://github.com/nathanpenny520/homebrew-nmail && brew trust nathanpenny520/nmail && brew install nathanpenny520/nmail/nmail` |
 | ④ uvx / pip | 命令行熟手，不想手动换文件 | 全平台 | `uvx --from nmail-app nmail` |
-| ⑤ 源码开发 | 开发者 | 全平台 | 见 [README 开发章节](../README.zh-CN.md) |
+| ⑤ 源码开发 | 开发者 | 全平台 | 见 [README 开发章节](../README.md) |
 
 > PyPI 发行名为 `nmail-app`（`nmail` 在 PyPI 已被无关项目占用）；产品名与命令名都是 Nmail / `nmail`，不受影响。
 
@@ -70,7 +70,7 @@ pip install nmail-app                # 升级: pip install -U nmail-app；卸载
 
 ### ⑤ 源码开发
 
-见 [README「从源码运行」](../README.zh-CN.md)：venv + `pip install -r backend/requirements.txt` + 前端构建 + `python run.py`。
+见 [README「从源码运行」](../README.md)：venv + `pip install -r backend/requirements.txt` + 前端构建 + `python run.py`。
 
 ## 首次使用（约 5 分钟）
 
