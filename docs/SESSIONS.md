@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0917-2352-发版0.4.3
+- 目标: 用户拍板发 v0.4.3（全平台更新收尾）——release.sh 全流程：版本号 0.4.2→0.4.3、提交打 tag 推送、盯 CI（PyPI nmail-app+nmail-cli / 三平台资产 / Homebrew tap）、winget PR、官网联动重建
+- 范围: scripts/release.sh 托管（pyproject.toml, nmail-cli/**, skills/SKILL.md 版本四文件）+ docs(CHANGELOG, SESSIONS) 收尾
+- 时间: 2026-09-17 23:52 开工
+
 ### S-0917-2210-fd泄漏排查 ✅（续篇：换行语义统一）
 - 目标: 用户问「模板信中的 Enter 为什么在实际信件中是 Shift+Enter」——解释 Enter/<br> 语义差异后拍板全局统一：单换行=分段，行尾两空格=紧贴；模板/签名/AI 一致
 - 范围: backend(app/core/mail_html.py, tests/test_mail_html.py) + frontend(InsertDialogs 占位文案) + docs(CHANGELOG, SESSIONS)
