@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 # 发行名不能叫 "nmail"：PyPI 上已被第三方占用（One-line SMTP email sender）。
 # 命令名保持 nmail；安装用 `pip install nmail-app`，uvx 用 `uvx --from nmail-app nmail`。
 name = "nmail-app"
-version = "0.4.4"  # 版本唯一来源：config.py 运行时解析本文件（冻结包由 nmail.spec 打入随包资源），无需改他处
+version = "0.4.5"  # 版本唯一来源：config.py 运行时解析本文件（冻结包由 nmail.spec 打入随包资源），无需改他处
 description = "AI 驱动的本地聚合邮箱客户端 · 本地优先 · 隐私自持"
 readme = "README.md"
 requires-python = ">=3.11"
