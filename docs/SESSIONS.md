@@ -16,10 +16,12 @@
 
 ## 进行中
 
-### S-0918-1335-idle退出与图标重构 🔄
+### S-0918-1335-idle退出与图标重构 ✅
 - 目标: 用户拍板三件套——①图标点击=开标签页（已有单实例探测，零改动）②关标签页 90s 后台自动退出（`--idle-exit` + 活动看门狗，推翻 §6「关标签不退服」）③uvx 渠道桌面图标改指 uvx 命令（修 Windows 死链 + 永远最新版）+ 首跑横幅弹一次引导装图标
 - 范围: backend(app/cli.py, app/main.py, app/core/{idle_exit,desktop}.py, api/{settings,system}.py) + frontend(SettingsPage 桌面卡片加开关、App 首跑横幅) + tests(test_channel_desktop/test_idle_exit) + docs(UPDATE_AND_DESKTOP/INSTALL/README双语/ARCHITECTURE/CHANGELOG/SESSIONS) + 官网 download.astro 四处同步
-- 时间: 2026-09-18 13:35 开工
+- 产出: b64aa62（功能+文档+测试，291 绿；隔离实例与 uvx 真环境三轮冒烟）；affb80f（哈希回填）；官网 9797254（download.astro 口径）；v0.4.5 已发（41bab39，release.sh 一次全绿，winget PR #436892，Release body 恰 1 行 Full Changelog——4b86cd7 修复在真实发版中生效）；macOS 真机全链路 ✅（uvx 装图标→点图标→0.4.5 就绪，本机 0.4.3 旧实例已优雅升级）
+- 遗留: **Windows 真机验证待用户**——检查清单：①设置/横幅装图标 ②双击图标无终端开标签 ③再点一次多开标签 ④关标签约 1.5 分钟后台消失 ⑤图标在 `uv cache prune` 后仍可用；跑通即 uvx 体验收官
+- 时间: 2026-09-18 13:35 开工，14:45 完成（含发版）
 
 ### S-0918-1150-更新日志去重 ✅
 - 目标: 官网更新日志页 v0.4.3「Full Changelog」连排 5 遍——查根因并修

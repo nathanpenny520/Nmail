@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 41bab39 — release: v0.4.5 + tag
+- 收录：uvx 体验优先三件套（b64aa62——图标指向 uvx 命令 §2.1、空闲 90s 自动退出 §7、首跑横幅 §7.2）；winget PR microsoft/winget-pkgs#436892
+- 验证：PyPI `nmail-app`/`nmail-cli` 0.4.5 ✅；Release 六资产齐 ✅；**Release body「Full Changelog」恰好 1 行**——上一条 4b86cd7 的 create-release 前置 job 在真实发版中生效（对比 0.4.3 的 5 行）✅；tap Formula/Cask 0.4.5 ✅；官网联动重建 ✅
+- macOS 真机全链路实测：`uvx --from nmail-app nmail install-shortcut` 装图标（server 脚本=uvx 绝对路径 + `--idle-exit`）→ `open -a Nmail` 点图标 → 浏览器开标签 → 0.4.5 服务就绪；顺带把本机常驻的 0.4.3 旧实例经 `/api/quit` 优雅升级。Windows 真机（.vbs 无窗口/多击多开/空闲退出）待用户双机验证
+- 会话：S-0918-1335-idle退出与图标重构（续）
+
 ## b64aa62 — feat: uvx 体验优先——图标指向 uvx 命令 + 空闲自动退出 + 首跑横幅
 - 用户拍板（WIND_DOWN_PLAN 决策 7）：**点图标=开标签页，关标签页=后台自己退，图标永远最新版**；冻结 Windows 图标旧路径疑难等桌面集成投入
 - 图标启动器重构（desktop.py，UPDATE_AND_DESKTOP.md §2.1）：uvx 渠道图标指向 `uvx --from nmail-app nmail --idle-exit` 命令（uvx 绝对路径安装时 `shutil.which`+常见位置定死）——不再指向 uv 缓存环境，升级/`uv cache prune` 不死链（**Windows「点击无反应」的根因**），每次双击自动最新版。Windows 形态 .lnk→wscript 跑 UTF-16 带 BOM 的 .vbs（`Run …, 0, False` 全程无窗口）；macOS 存根 .app 的 server 脚本与 Linux wrapper 改跑 uvx 命令，reopen/单实例探测（多击多开标签）机制不变；pip/binary 渠道维持原方案仅补 `--idle-exit`
