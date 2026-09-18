@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — feat: uvx 体验优先——图标指向 uvx 命令 + 空闲自动退出 + 首跑横幅
+## b64aa62 — feat: uvx 体验优先——图标指向 uvx 命令 + 空闲自动退出 + 首跑横幅
 - 用户拍板（WIND_DOWN_PLAN 决策 7）：**点图标=开标签页，关标签页=后台自己退，图标永远最新版**；冻结 Windows 图标旧路径疑难等桌面集成投入
 - 图标启动器重构（desktop.py，UPDATE_AND_DESKTOP.md §2.1）：uvx 渠道图标指向 `uvx --from nmail-app nmail --idle-exit` 命令（uvx 绝对路径安装时 `shutil.which`+常见位置定死）——不再指向 uv 缓存环境，升级/`uv cache prune` 不死链（**Windows「点击无反应」的根因**），每次双击自动最新版。Windows 形态 .lnk→wscript 跑 UTF-16 带 BOM 的 .vbs（`Run …, 0, False` 全程无窗口）；macOS 存根 .app 的 server 脚本与 Linux wrapper 改跑 uvx 命令，reopen/单实例探测（多击多开标签）机制不变；pip/binary 渠道维持原方案仅补 `--idle-exit`
 - 空闲自动退出（core/idle_exit.py 新模块 + cli `--idle-exit` + main.py 中间件/看门狗，§7）：活动信号=HTTP 请求（前端常驻轮询即心跳，无需长连接）；ASGI 中间件请求全程计数（AI 长流式在途不误杀）；lifespan watchdog 每 tick 重读 `idle_exit_enabled` 设置项（设置页开关即时生效），无在途请求且空闲超阈值 → 注入钩子置 uvicorn `should_exit` 优雅退出（cli 改 `uvicorn.Server` 对象形态，等价）。阈值 90s 非 60s——浏览器后台标签定时器节流最低 1 次/分钟，恰好 60s 会误杀还开着的标签；关标签后约 1.5 分钟退出。**终端裸跑 `nmail` 无 flag 恒不退**（总管家/CLI/自动化零影响）。推翻 §6「关标签不退服」旧决策（仅图标启动范围）；「退出 Nmail」卡片保留
