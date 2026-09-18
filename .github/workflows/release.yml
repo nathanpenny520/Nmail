@@ -10,6 +10,22 @@ permissions:
   contents: write
 
 jobs:
+  # ⓪ 先一次性创建 Release 并生成说明（**Full Changelog** 只在这一步出现）。
+  #   之前由三个 matrix 上传步骤各自带 generate_release_notes=true——对已存在的
+  #   Release 每更新一次 GitHub 就往 body 追加一段生成说明，v0.4.3 因此重复 5 遍。
+  #   幂等：Release 已存在（失败重跑）直接跳过，不再动 body。
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 创建 Release（仅 tag 触发）
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && exit 0
+          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" \
+            --generate-notes --title "$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   # ① wheel 发布到 PyPI —— 用户可用 uvx nmail / pipx install nmail 一条命令运行
   python-package:
     runs-on: ubuntu-latest
@@ -61,6 +77,7 @@ jobs:
 
   # ② 三平台单文件可执行 —— 双击即用，挂到 GitHub Release
   binaries:
+    needs: create-release  # Release 已先建好，上传步骤一律不再生成说明（防 body 重复追加）
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -171,7 +188,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.name }}${{ matrix.ext }}
-          generate_release_notes: true
       - name: .app.zip 附加到 GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'macos-latest'
         uses: softprops/action-gh-release@v2
