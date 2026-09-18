@@ -3,6 +3,12 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 4b86cd7 — fix: GitHub Release 说明「Full Changelog」重复——发版工作流只生成一次
+- 用户截图官网更新日志页：v0.4.3 说明区连排 5 行 `**Full Changelog**: compare 链接`。根因不在站点——Release body 本身就重复：release.yml 三个 matrix 上传步骤各自带 `generate_release_notes: true`，对已存在的 Release 每更新一次 GitHub 就把新生成说明追加进 body（0.4.3 期间失败重跑又追加，共 5 遍；0.4.4 两遍）；官网 changelog.astro 以 `<pre>` 原样展示
+- 修复两层：①release.yml 新增 create-release 前置 job（`gh release create --generate-notes`，幂等——已存在即跳过），binaries `needs` 它且上传步骤一律去掉 generate_release_notes；②官网 lib/releases.ts 构建期 `cleanBody` 整行剔除 `**Full Changelog**` 并压掉多余空行（卡片头部本就有「在 GitHub 查看」链接，信息不丢）
+- 存量修复：v0.4.3 / v0.4.4 的 release body 已按保留一行去重（gh api PATCH），GitHub 页与官网重建后同步干净
+- 会话：S-0918-1150-更新日志去重
+
 ## a3ece50 — release: v0.4.4 + tag
 - 收录：Windows 启动崩溃修复（4c282b8，`raise_nofile_limit` 平台保护）——**本版恢复 Windows 全渠道可用**（0.4.3 带病、0.4.2 及更早正常）
 - CI 波折同 0.4.3：macOS 资产「附加到 GitHub Release」撞 GitHub 瞬时 Unicorn HTML 错误页 → `gh run rerun --failed` 重跑即绿；脚本中断的 winget/官网两步手工补做

@@ -16,6 +16,13 @@
 
 ## 进行中
 
+### S-0918-1150-更新日志去重 ✅
+- 目标: 官网更新日志页 v0.4.3「Full Changelog」连排 5 遍——查根因并修
+- 范围: .github/workflows/release.yml + docs(CHANGELOG, SESSIONS)；官网仓 lib/releases.ts 独立提交
+- 产出: 4b86cd7——create-release 前置 job 只生成一次说明，matrix 上传去掉 generate_release_notes（根因：对已存在 Release 每次更新 API 都追加生成说明）；存量 v0.4.3/v0.4.4 body 已去重；官网构建期 cleanBody 兜底剔除该行
+- 遗留: ①下一版（v0.4.5+）发版时验证 body 只有一行 ②用户拍板方向：**uvx 体验优先**——Windows 桌面图标点击无效等桌面集成问题先冻结不投入、不做 uv 长期安装路径，把 uvx（裸命令跟随新版已实测 ✅、旧 env 清理提示）做顺；待下一轮把该取舍写进 WIND_DOWN_PLAN
+- 时间: 2026-09-18 11:50 开工，12:00 完成
+
 ### S-0918-0007-Windows-resource ✅
 - 目标: 用户 Windows 机 uvx 装 v0.4.3 启动即崩（No module named 'resource'）——cli.py `raise_nofile_limit` 补平台保护
 - 范围: backend(app/cli.py) + docs(CHANGELOG, SESSIONS)
