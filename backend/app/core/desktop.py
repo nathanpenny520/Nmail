@@ -29,19 +29,47 @@ def _assets_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "assets"
 
 
-def _launch_target() -> tuple[str, list[str]]:
-    """图标最终运行的 (可执行文件, 参数)。优先用同环境的 console script
-    （pip venv 与 uvx 临时环境都有），源码直跑退回解释器内联调用。"""
+def _find_uvx() -> str | None:
+    """uvx 绝对路径：PATH → 常见安装位（uv 官方装 ~/.local/bin，brew /opt/homebrew）。
+    Finder/LaunchServices/开始菜单启动没有终端 PATH，绝对路径必须安装时定死（§2.1）。"""
+    found = shutil.which("uvx")
+    if found:
+        return found
+    exe = "uvx.exe" if os.name == "nt" else "uvx"
+    for candidate in (
+        Path.home() / ".local" / "bin" / exe,
+        Path("/opt/homebrew/bin/uvx"),
+        Path("/usr/local/bin/uvx"),
+    ):
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def _launch_target() -> tuple[str, list[str], str]:
+    """图标最终运行的 (可执行文件, 参数, 形态)。形态 uvx|console|python|frozen
+    （Windows 的 pythonw 无窗口优化只对 console 形态生效）。
+
+    uvx 渠道（§2.1）：指向 uvx 命令而非安装那一刻的 uv 缓存环境——升级、
+    `uv cache prune` 后图标不死链，且每次启动经 uvx 解析天然最新版。其余渠道
+    沿用环境内命令（环境稳定）。所有形态都带 `--idle-exit`（§7）：标志只是
+    「同意空闲退出」，是否真退由设置项 idle_exit_enabled 决定。"""
+    idle = ["--idle-exit"]
+    if channel.detect_channel() == "uvx":
+        uvx = _find_uvx()
+        if uvx is not None:
+            return uvx, ["--from", "nmail-app", "nmail", *idle], "uvx"
+        # uvx 找不到（异常 PATH）：退回环境内命令，图标可重装修复
     if not getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).parent
         script = exe_dir / ("nmail.exe" if os.name == "nt" else "nmail")
         if script.is_file():
-            return str(script), []
+            return str(script), list(idle), "console"
         # 源码直跑：启动器 cwd 不可控，把 backend 目录（app 包父目录）显式注入 sys.path
         backend_root = Path(__file__).resolve().parents[2]
         code = f"import sys; sys.path.insert(0, {str(backend_root)!r}); from app.cli import main; main()"
-        return sys.executable, ["-c", code]
-    return sys.executable, []
+        return sys.executable, ["-c", code, *idle], "python"
+    return sys.executable, list(idle), "frozen"
 
 
 def _sh(s: str) -> str:
@@ -116,6 +144,22 @@ def _win_cmd_wrapper(target: str, args: list[str]) -> str:
     if args:
         cmd += " " + " ".join(args)
     return f"@echo off\r\n{cmd} %*\r\n"
+
+
+def _wscript_path() -> str:
+    """wscript.exe 绝对路径（System32，自 XP 起恒在；GUI 子系统无控制台窗口）。"""
+    return str(Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "wscript.exe")
+
+
+def _win_vbs(target: str, args: list[str]) -> str:
+    """uvx 渠道隐藏启动器内容（§2.1）：Run 第二参数 0=隐藏窗口、False=不等待——
+    全程无终端、无任务栏残留；多次点击各起新进程走单实例探测重开页面。
+    写盘必须 UTF-16 带 BOM（wscript 对无 BOM 文件按 ANSI 读，中文用户名路径乱码）。"""
+    inner = " ".join(['"' + target + '"', *args]).replace('"', '""')
+    return (
+        "' Nmail launcher (UPDATE_AND_DESKTOP.md 2.1): hidden uvx + idle-exit\r\n"
+        f'CreateObject("WScript.Shell").Run "{inner}", 0, False\r\n'
+    )
 
 
 # ── 状态记录 ────────────────────────────────────────────────────────────
@@ -199,22 +243,28 @@ def _install_windows() -> list[str]:
     data = get_data_dir()
     bin_dir = data / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
-    target, args = _launch_target()
-    if getattr(sys, "frozen", False):
-        icon, wrapper = sys.executable, None  # exe 已内嵌图标，直接指它
+    target, args, kind = _launch_target()
+    if kind == "frozen":
+        icon, lnk_args = sys.executable, " ".join(args)  # exe 已内嵌图标，直接指它
     else:
         icon = bin_dir / "nmail.ico"
         shutil.copyfile(_assets_dir() / "nmail.ico", icon)
-        # .lnk 直指 pythonw：控制台脚本/.cmd 都会闪黑框（§6）。args==[] 即
-        # console-script 模式，包必已装进本解释器环境，pythonw -m app.cli 等价；
-        # pythonw 缺失（老发行版/极端环境）退回 .cmd 包装
-        pythonw = Path(sys.executable).with_name("pythonw.exe")
-        if args == [] and pythonw.is_file():
-            target, args, wrapper = str(pythonw), ["-m", "app.cli"], None
+        if kind == "uvx":
+            # .vbs 隐藏启动器（§2.1）：.lnk 指 wscript，全程无窗口、只依赖 uv 本体
+            vbs = bin_dir / "nmail.vbs"
+            vbs.write_text(_win_vbs(target, args), encoding="utf-16")
+            target, lnk_args = _wscript_path(), f'"{vbs}"'
         else:
-            wrapper = bin_dir / "nmail.cmd"
-            wrapper.write_text(_win_cmd_wrapper(target, args), "utf-8")
-            target = str(wrapper)
+            # .lnk 直指 pythonw：控制台脚本/.cmd 都会闪黑框（§6）。console 形态
+            # 包必已装进本解释器环境，pythonw -m app.cli 等价；
+            # pythonw 缺失（老发行版/极端环境）退回 .cmd 包装
+            pythonw = Path(sys.executable).with_name("pythonw.exe")
+            if kind == "console" and pythonw.is_file():
+                target, lnk_args = str(pythonw), f"-m app.cli {' '.join(args)}"
+            else:
+                wrapper = bin_dir / "nmail.cmd"
+                wrapper.write_text(_win_cmd_wrapper(target, args), "utf-8")
+                target, lnk_args = str(wrapper), ""
     script = "\n".join([
         "$ErrorActionPreference = 'Stop'",
         "$ws = New-Object -ComObject WScript.Shell",
@@ -225,7 +275,7 @@ def _install_windows() -> list[str]:
         "  $lnkPath = Join-Path $dir 'Nmail.lnk'",
         "  $lnk = $ws.CreateShortcut($lnkPath)",
         f"  $lnk.TargetPath = '{_ps(target)}'",
-        "  $lnk.Arguments = ''",
+        f"  $lnk.Arguments = '{_ps(lnk_args)}'",
         f"  $lnk.WorkingDirectory = '{_ps(str(data))}'",
         f"  $lnk.IconLocation = '{_ps(str(icon))},0'",
         "  $lnk.WindowStyle = 7",  # 最小化：控制台仍在任务栏可看日志，不糊脸
@@ -269,9 +319,10 @@ def _install_macos() -> list[str]:
     contents = bundle / "Contents"
     (contents / "MacOS").mkdir(parents=True, exist_ok=True)
     (contents / "Resources").mkdir(parents=True, exist_ok=True)
-    target, args = _launch_target()
+    target, args, _kind = _launch_target()
     # 优先用编译好的 ObjC 存根做「应用面」（LaunchServices 只为 GUI 进程注册应用，
-    # 纯脚本 bundle 无 Dock 图标，2026-09-15 用户实测）；无存根资产则退回脚本形态
+    # 纯脚本 bundle 无 Dock 图标，2026-09-15 用户实测）；无存根资产则退回脚本形态。
+    # uvx 渠道 target=uvx 绝对路径、args 含 --from/--idle-exit，脚本模板原样兼容
     stub = _assets_dir() / "nmail-stub"
     url_file = contents / "MacOS" / "url"
     if stub.is_file():
@@ -297,7 +348,7 @@ def _install_linux() -> list[str]:
     data = get_data_dir()
     bin_dir = data / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
-    target, args = _launch_target()
+    target, args, _kind = _launch_target()
     wrapper = bin_dir / "nmail.sh"
     quoted = " ".join([_sh(target), *(_sh(a) for a in args)])
     # Linux 无 Dock 常驻诉求：exec 原地替换最省一档进程

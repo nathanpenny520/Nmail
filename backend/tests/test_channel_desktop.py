@@ -86,10 +86,51 @@ def test_launch_target_prefers_console_script(tmp_path, monkeypatch):
     script.write_text("#!/bin/sh\n")
     monkeypatch.setattr(sys, "frozen", False, raising=False)
     monkeypatch.setattr(sys, "executable", str(exe))
-    assert desktop._launch_target() == (str(script), [])
+    assert desktop._launch_target() == (str(script), ["--idle-exit"], "console")
     script.unlink()
-    target, args = desktop._launch_target()
-    assert target == str(exe) and args and args[0] == "-c"
+    target, args, kind = desktop._launch_target()
+    assert target == str(exe) and args[0] == "-c" and args[-1] == "--idle-exit" and kind == "python"
+
+
+def test_launch_target_uvx_channel(monkeypatch):
+    """uvx 渠道图标指向 uvx 命令而非安装时的缓存环境（§2.1）：永远最新、清缓存不死链。"""
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    monkeypatch.setattr(desktop.channel, "detect_channel", lambda: "uvx")
+    monkeypatch.setattr(desktop, "_find_uvx", lambda: "/opt/homebrew/bin/uvx")
+    assert desktop._launch_target() == (
+        "/opt/homebrew/bin/uvx", ["--from", "nmail-app", "nmail", "--idle-exit"], "uvx")
+
+
+def test_launch_target_uvx_missing_binary_falls_back(monkeypatch, tmp_path):
+    """uvx 找不到（异常 PATH）：退回环境内命令，图标可重装修复，不死锁。"""
+    exe = tmp_path / "bin" / "python"
+    exe.parent.mkdir()
+    (exe.parent / "nmail").write_text("#!/bin/sh\n")
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    monkeypatch.setattr(sys, "executable", str(exe))
+    monkeypatch.setattr(desktop.channel, "detect_channel", lambda: "uvx")
+    monkeypatch.setattr(desktop, "_find_uvx", lambda: None)
+    target, args, kind = desktop._launch_target()
+    assert kind == "console" and target == str(exe.parent / "nmail")
+    assert args == ["--idle-exit"]
+
+
+def test_find_uvx_known_locations(tmp_path, monkeypatch):
+    assert desktop._find_uvx() is None or isinstance(desktop._find_uvx(), str)  # 本机 PATH 任一态
+    home_uvx = tmp_path / "home" / ".local" / "bin" / "uvx"
+    home_uvx.parent.mkdir(parents=True)
+    home_uvx.write_text("#!/bin/sh\n")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    monkeypatch.setattr(desktop.shutil, "which", lambda _: None)
+    assert desktop._find_uvx() == str(home_uvx)
+
+
+def test_win_vbs_hidden_launcher():
+    vbs = desktop._win_vbs(
+        r"C:\Program Files\UV\uvx.exe", ["--from", "nmail-app", "nmail", "--idle-exit"])
+    # 引号翻倍防空格路径（内层 "" + 外层 " = 三连引号）；Run 参数 0=隐藏窗口、False=不等待（§2.1）
+    assert 'Run """C:\\Program Files\\UV\\uvx.exe"" --from nmail-app nmail --idle-exit", 0, False' in vbs
+    assert vbs.endswith("\r\n")
 
 
 # ── desktop：状态与移除 ────────────────────────────────────

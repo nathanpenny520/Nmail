@@ -59,7 +59,7 @@ Then launch:
 uvx --from nmail-app nmail
 ```
 
-Your browser opens `http://127.0.0.1:8720`. This command **is the launcher** — run it every time (the package is cached; launches are near-instant from the second run). Upgrade with `uvx --refresh --from nmail-app nmail`.
+Your browser opens `http://127.0.0.1:8720`. This command **is the launcher** — run it every time (the package is cached; launches are near-instant from the second run). Want double-click launch? Run `uvx --from nmail-app nmail install-shortcut` to create a desktop icon (each launch auto-uses the latest version; closing the tabs shuts the background down). Upgrade with `uvx --refresh --from nmail-app nmail`.
 
 **First-time setup (~5 minutes)**
 

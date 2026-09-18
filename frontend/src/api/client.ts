@@ -125,6 +125,9 @@ export const api = {
     request<DesktopShortcutActionResp>('/api/desktop-shortcut', { method: 'POST' }),
   removeDesktopShortcut: () =>
     request<DesktopShortcutActionResp>('/api/desktop-shortcut', { method: 'DELETE' }),
+  /** §7.2 首跑横幅「显示即记」：渲染横幅时调一次，之后永不再弹 */
+  markDesktopBannerSeen: () =>
+    request<{ ok: boolean }>('/api/desktop-shortcut/banner-seen', { method: 'POST' }),
   getSystemPaths: () => request<SystemPaths>('/api/system/paths'),
   testAI: (payload: AITestPayload) =>
     request<AITestResult>('/api/ai/test', { method: 'POST', body: JSON.stringify(payload) }),

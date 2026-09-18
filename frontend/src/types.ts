@@ -42,6 +42,8 @@ export interface Settings {
   auto_insert_signature: boolean
   /** AI 摘要（§18.6）：到摘要时间总管家巡箱总结并拟稿，替代纯统计摘要 */
   agent_brief_enabled: boolean
+  /** 空闲自动退出（§7）：只约束桌面图标启动（--idle-exit）；终端裸跑不受影响 */
+  idle_exit_enabled: boolean
 }
 
 export interface SettingsPayload {
@@ -58,6 +60,7 @@ export interface SettingsPayload {
   notify_types?: Partial<Record<NotifyTypeKey, boolean>>
   auto_insert_signature?: boolean
   agent_brief_enabled?: boolean
+  idle_exit_enabled?: boolean
 }
 
 /** 本机路径（设置页「关于」展示软件本地性；均为运行进程实时解析的真实值） */
@@ -84,6 +87,8 @@ export interface DesktopShortcutResp {
   channel: string
   platform: string
   installed_at: string | null
+  /** §7.2 首跑横幅：未安装且没看过（显示即记）才弹 */
+  banner: boolean
 }
 
 /** 桌面图标安装/移除结果 */

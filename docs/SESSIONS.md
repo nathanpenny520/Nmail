@@ -16,6 +16,11 @@
 
 ## 进行中
 
+### S-0918-1335-idle退出与图标重构 🔄
+- 目标: 用户拍板三件套——①图标点击=开标签页（已有单实例探测，零改动）②关标签页 90s 后台自动退出（`--idle-exit` + 活动看门狗，推翻 §6「关标签不退服」）③uvx 渠道桌面图标改指 uvx 命令（修 Windows 死链 + 永远最新版）+ 首跑横幅弹一次引导装图标
+- 范围: backend(app/cli.py, app/main.py, app/core/{idle_exit,desktop}.py, api/{settings,system}.py) + frontend(SettingsPage 桌面卡片加开关、App 首跑横幅) + tests(test_channel_desktop/test_idle_exit) + docs(UPDATE_AND_DESKTOP/INSTALL/README双语/ARCHITECTURE/CHANGELOG/SESSIONS) + 官网 download.astro 四处同步
+- 时间: 2026-09-18 13:35 开工
+
 ### S-0918-1150-更新日志去重 ✅
 - 目标: 官网更新日志页 v0.4.3「Full Changelog」连排 5 遍——查根因并修
 - 范围: .github/workflows/release.yml + docs(CHANGELOG, SESSIONS)；官网仓 lib/releases.ts 独立提交

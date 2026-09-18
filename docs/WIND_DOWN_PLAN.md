@@ -13,6 +13,7 @@
 | 4 | **不迁 Tauri** | 项目无 Electron 前提：Python FastAPI 后端 + 浏览器 GUI。迁移 = Rust 重写或壳+sidecar，违背收官原则 |
 | 5 | **Linux 维持单文件** | 不做 AppImage/deb（难维护） |
 | 6 | Windows 不上代码签名 | portable zip 仅打包体验升级；SmartScreen 警告依旧（MOTW），EV 证书收官期不上 |
+| 7 | **uvx 体验优先（2026-09-18 拍板）** | 收官资源集中把 uvx 路线做顺：图标指向 uvx 命令（不死链、每次双击最新版，§2.1）+ 空闲自动退出（关标签 ≈90s 后台自退，§7）+ 首跑横幅弹一次；**冻结** Windows 图标旧路径疑难与其他桌面集成投入，不做 uv 长期安装的额外打磨 |
 
 ## 任务清单
 

@@ -59,7 +59,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 uvx --from nmail-app nmail
 ```
 
-浏览器自动打开 `http://127.0.0.1:8720`。这条命令**就是启动命令**——每次使用都运行它（包已缓存，第二次起秒级启动）；升级运行 `uvx --refresh --from nmail-app nmail`。
+浏览器自动打开 `http://127.0.0.1:8720`。这条命令**就是启动命令**——每次使用都运行它（包已缓存，第二次起秒级启动）；想要双击即用，运行 `uvx --from nmail-app nmail install-shortcut` 安装桌面图标（每次双击自动用最新版，不用了关掉标签页即自动退出）；升级运行 `uvx --refresh --from nmail-app nmail`。
 
 **首次配置（约 5 分钟）**
 

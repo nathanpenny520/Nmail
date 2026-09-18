@@ -7,7 +7,7 @@ from fastapi import APIRouter
 
 from app.config import APP_VERSION, get_data_dir, get_install_dir
 from app.core import desktop, update_apply, update_check
-from app.db.database import get_conn
+from app.db.database import get_conn, get_setting, set_setting
 
 router = APIRouter(tags=["system"])
 
@@ -63,18 +63,33 @@ def update_check_state(force: bool = False) -> dict:
 
 @router.get("/api/desktop-shortcut")
 def desktop_shortcut_status() -> dict:
-    return desktop.get_shortcut_status()
+    """状态 + 首跑横幅判定（§7.2）：未安装且没看过横幅时前端浮出一次性引导。"""
+    status = desktop.get_shortcut_status()
+    status["banner"] = not status["installed"] and not get_setting(
+        "desktop_banner_seen", False
+    )
+    return status
 
 
 @router.post("/api/desktop-shortcut")
 def desktop_shortcut_install() -> dict:
     """一键安装桌面图标（Windows .lnk / macOS Nmail.app / Linux .desktop）。"""
-    return desktop.install_shortcut()
+    result = desktop.install_shortcut()
+    if result.get("ok"):
+        set_setting("desktop_banner_seen", True)  # §7.2：装上即不再弹横幅
+    return result
 
 
 @router.delete("/api/desktop-shortcut")
 def desktop_shortcut_remove() -> dict:
     return desktop.remove_shortcut()
+
+
+@router.post("/api/desktop-shortcut/banner-seen")
+def desktop_banner_seen() -> dict:
+    """首跑横幅「显示即记」：前端渲染横幅时调用一次，之后永不再弹（§7.2）。"""
+    set_setting("desktop_banner_seen", True)
+    return {"ok": True}
 
 
 # ── 应用内更新执行（UPDATE_AND_DESKTOP.md §3）───────────────────────────

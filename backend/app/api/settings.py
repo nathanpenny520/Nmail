@@ -32,6 +32,9 @@ DEFAULT_SETTINGS: dict[str, object] = {
     # AI 摘要（§18.6）：digest_time 到点由调度触发 agent 运行（总结未读+拟稿进待审），
     # 开启时替代纯统计摘要；工具白名单硬边界（SCHEDULER_ALLOWED）
     "agent_brief_enabled": False,
+    # 空闲自动退出（UPDATE_AND_DESKTOP.md §7）：只约束图标启动（带 --idle-exit）的
+    # 实例——终端裸跑不受影响；看门狗每 tick 重读，改动即时生效无需重启
+    "idle_exit_enabled": True,
 }
 
 NOTIFY_TYPE_KEYS = ("new_mail", "ai_draft", "digest", "account_error")
@@ -51,6 +54,7 @@ class SettingsIn(BaseModel):
     notify_types: dict[str, bool] | None = None
     auto_insert_signature: bool | None = None
     agent_brief_enabled: bool | None = None
+    idle_exit_enabled: bool | None = None
 
     @field_validator("digest_time")
     @classmethod
@@ -129,6 +133,9 @@ def read_settings() -> dict:
         "agent_brief_enabled": get_setting(
             "agent_brief_enabled", DEFAULT_SETTINGS["agent_brief_enabled"]
         ),
+        "idle_exit_enabled": get_setting(
+            "idle_exit_enabled", DEFAULT_SETTINGS["idle_exit_enabled"]
+        ),
     }
 
 
@@ -160,6 +167,8 @@ def update_settings(payload: SettingsIn) -> dict:
         set_setting("auto_insert_signature", payload.auto_insert_signature)
     if payload.agent_brief_enabled is not None:
         set_setting("agent_brief_enabled", payload.agent_brief_enabled)
+    if payload.idle_exit_enabled is not None:
+        set_setting("idle_exit_enabled", payload.idle_exit_enabled)
     return read_settings()
 
 

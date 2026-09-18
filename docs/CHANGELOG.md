@@ -3,6 +3,16 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — feat: uvx 体验优先——图标指向 uvx 命令 + 空闲自动退出 + 首跑横幅
+- 用户拍板（WIND_DOWN_PLAN 决策 7）：**点图标=开标签页，关标签页=后台自己退，图标永远最新版**；冻结 Windows 图标旧路径疑难等桌面集成投入
+- 图标启动器重构（desktop.py，UPDATE_AND_DESKTOP.md §2.1）：uvx 渠道图标指向 `uvx --from nmail-app nmail --idle-exit` 命令（uvx 绝对路径安装时 `shutil.which`+常见位置定死）——不再指向 uv 缓存环境，升级/`uv cache prune` 不死链（**Windows「点击无反应」的根因**），每次双击自动最新版。Windows 形态 .lnk→wscript 跑 UTF-16 带 BOM 的 .vbs（`Run …, 0, False` 全程无窗口）；macOS 存根 .app 的 server 脚本与 Linux wrapper 改跑 uvx 命令，reopen/单实例探测（多击多开标签）机制不变；pip/binary 渠道维持原方案仅补 `--idle-exit`
+- 空闲自动退出（core/idle_exit.py 新模块 + cli `--idle-exit` + main.py 中间件/看门狗，§7）：活动信号=HTTP 请求（前端常驻轮询即心跳，无需长连接）；ASGI 中间件请求全程计数（AI 长流式在途不误杀）；lifespan watchdog 每 tick 重读 `idle_exit_enabled` 设置项（设置页开关即时生效），无在途请求且空闲超阈值 → 注入钩子置 uvicorn `should_exit` 优雅退出（cli 改 `uvicorn.Server` 对象形态，等价）。阈值 90s 非 60s——浏览器后台标签定时器节流最低 1 次/分钟，恰好 60s 会误杀还开着的标签；关标签后约 1.5 分钟退出。**终端裸跑 `nmail` 无 flag 恒不退**（总管家/CLI/自动化零影响）。推翻 §6「关标签不退服」旧决策（仅图标启动范围）；「退出 Nmail」卡片保留
+- 首跑横幅（§7.2，用户拍板弹出一次即可）：未装图标首次打开页面底部浮出「把 Nmail 放到桌面」引导（立即安装/关闭），**显示即记**（KV `desktop_banner_seen`，POST `/api/desktop-shortcut/banner-seen`）——错过不纠缠；GET desktop-shortcut 附 `banner` 布尔
+- 设置页：桌面图标卡片加「空闲自动退出」开关；DesktopBanner 组件挂 App 级
+- 测试：test_idle_exit.py 新 4 例（模式折算/活动记账/watchdog 触发/provider 门控）+ test_channel_desktop 扩 3 例（uvx 启动目标/缺 uvx 回退/VBS 引号转义）；全量 291 绿；ruff 通过；隔离实例三轮冒烟（裸 flag 短阈值 ×2 + uvx 真环境 wheel）：看门狗武装→优雅退出→日志留痕全对
+- 文档四处同步：INSTALL.md（图标一条命令/空闲退出/升级口径改实测紧跟新版+`--refresh` 兜底）｜ README 双语 ｜ 官网 download.astro ｜ 代码文案；另更 UPDATE_AND_DESKTOP §1/§2/§2.1/§6/§7、ARCHITECTURE（core/api 行 + 收尾注记）、WIND_DOWN_PLAN 决策 7
+- 会话：S-0918-1335-idle退出与图标重构
+
 ## 4b86cd7 — fix: GitHub Release 说明「Full Changelog」重复——发版工作流只生成一次
 - 用户截图官网更新日志页：v0.4.3 说明区连排 5 行 `**Full Changelog**: compare 链接`。根因不在站点——Release body 本身就重复：release.yml 三个 matrix 上传步骤各自带 `generate_release_notes: true`，对已存在的 Release 每更新一次 GitHub 就把新生成说明追加进 body（0.4.3 期间失败重跑又追加，共 5 遍；0.4.4 两遍）；官网 changelog.astro 以 `<pre>` 原样展示
 - 修复两层：①release.yml 新增 create-release 前置 job（`gh release create --generate-notes`，幂等——已存在即跳过），binaries `needs` 它且上传步骤一律去掉 generate_release_notes；②官网 lib/releases.ts 构建期 `cleanBody` 整行剔除 `**Full Changelog**` 并压掉多余空行（卡片头部本就有「在 GitHub 查看」链接，信息不丢）

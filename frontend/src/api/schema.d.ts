@@ -69,7 +69,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Desktop Shortcut Status */
+        /**
+         * Desktop Shortcut Status
+         * @description 状态 + 首跑横幅判定（§7.2）：未安装且没看过横幅时前端浮出一次性引导。
+         */
         get: operations["desktop_shortcut_status_api_desktop_shortcut_get"];
         put?: never;
         /**
@@ -79,6 +82,26 @@ export interface paths {
         post: operations["desktop_shortcut_install_api_desktop_shortcut_post"];
         /** Desktop Shortcut Remove */
         delete: operations["desktop_shortcut_remove_api_desktop_shortcut_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/desktop-shortcut/banner-seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Desktop Banner Seen
+         * @description 首跑横幅「显示即记」：前端渲染横幅时调用一次，之后永不再弹（§7.2）。
+         */
+        post: operations["desktop_banner_seen_api_desktop_shortcut_banner_seen_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2928,6 +2951,8 @@ export interface components {
             auto_insert_signature?: boolean | null;
             /** Agent Brief Enabled */
             agent_brief_enabled?: boolean | null;
+            /** Idle Exit Enabled */
+            idle_exit_enabled?: boolean | null;
         };
         /** SignatureItem */
         SignatureItem: {
@@ -3136,6 +3161,28 @@ export interface operations {
         };
     };
     desktop_shortcut_remove_api_desktop_shortcut_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    desktop_banner_seen_api_desktop_shortcut_banner_seen_post: {
         parameters: {
             query?: never;
             header?: never;

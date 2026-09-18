@@ -1109,6 +1109,7 @@ function DesktopShortcutCard() {
   const queryClient = useQueryClient()
   const [actionError, setActionError] = useState<string | null>(null)
   const statusQuery = useQuery({ queryKey: ['desktop-shortcut'], queryFn: api.getDesktopShortcut })
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings })
   const installMutation = useMutation({
     mutationFn: () => api.installDesktopShortcut(),
     onSuccess: (r) => {
@@ -1125,6 +1126,15 @@ function DesktopShortcutCard() {
       void queryClient.invalidateQueries({ queryKey: ['desktop-shortcut'] })
     },
     onError: (err: Error) => setActionError(err.message),
+  })
+  // 空闲自动退出（UPDATE_AND_DESKTOP.md §7）：只约束图标启动（--idle-exit）；
+  // 后端看门狗每 tick 重读设置项，改动即时生效。终端裸跑不受此开关影响。
+  const idleExitMutation = useMutation({
+    mutationFn: (v: boolean) => api.updateSettings({ idle_exit_enabled: v }),
+    onSuccess: (r) => {
+      void queryClient.setQueryData(['settings'], r)
+      void queryClient.invalidateQueries({ queryKey: ['settings'] })
+    },
   })
   const s = statusQuery.data
   const busy = installMutation.isPending || removeMutation.isPending
@@ -1167,14 +1177,28 @@ function DesktopShortcutCard() {
       {s && !s.installed && s.paths.length > 0 && (
         <p className="mt-1 t-sm text-amber-600">快捷方式已失效（目标被移动或删除），重新安装即可修复</p>
       )}
+      <label className="mt-2 flex items-center gap-2 t-md text-gray-700">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-indigo-600"
+          checked={settings?.idle_exit_enabled !== false}
+          disabled={idleExitMutation.isPending}
+          onChange={(e) => idleExitMutation.mutate(e.target.checked)}
+        />
+        空闲自动退出
+      </label>
+      <p className="mt-1 t-sm leading-relaxed text-gray-400">
+        从图标打开的 Nmail，在标签页全部关闭约一分半后自动退出，下次双击图标即重新打开；
+        关闭前正在进行的同步会在下次启动自动续上。终端运行 nmail 不受此开关影响。
+      </p>
       {actionError && <p className="mt-1 t-sm text-red-600">{actionError}</p>}
     </div>
   )
 }
 
 /** 退出卡片（UPDATE_AND_DESKTOP.md §6）：窗口化平台（Windows 不弹黑窗、Linux
- * 无托盘）没有天然的停服入口——关浏览器标签后服务继续常驻（后台轮询/每日摘要），
- * 显式退出只能来这里。两段确认；后端延迟强退，成功提示重开方式。 */
+ * 无托盘）没有天然的停服入口——空闲自动退出（§7）只管图标启动且要等冷却，
+ * 想立刻停服就来这里。两段确认；后端延迟强退，成功提示重开方式。 */
 function QuitCard() {
   const [confirming, setConfirming] = useState(false)
   const [stopped, setStopped] = useState(false)

@@ -234,12 +234,29 @@ def _launch(argv: list[str] | None = None) -> None:
         "--wait-port", type=int, default=None, metavar="N",
         help="等端口 N 释放后精确绑定它（更新重启专用；不做单实例探测）",
     )
+    parser.add_argument(
+        "--idle-exit", dest="idle_exit", nargs="?", const=-1, default=None, type=int,
+        metavar="N",
+        help="空闲自动退出（桌面图标启动专用）：裸 flag 按设置项开关（默认无请求 90s 后"
+             "退出）；N 显式指定秒数，0 关闭。不带本参数则永不空闲退出（终端/自动化场景）",
+    )
     parser.add_argument("--version", action="version", version=f"Nmail {APP_VERSION}")
     args = parser.parse_args(args_list)
 
     setup_file_logging()  # 尽早挂上：此后任何环节的异常都有处可查
     if (limits := raise_nofile_limit()) is not None:
         print(f"fd soft limit: {limits[0]} (hard {limits[1]})")
+
+    # 空闲自动退出（UPDATE_AND_DESKTOP.md §7）：模式在此定下；auto 的设置项
+    # 由 lifespan 解析（此时 DB 未必就绪），退出钩子在下面 Server 对象上注入
+    from app.core import idle_exit
+
+    if args.idle_exit is None:
+        idle_exit.configure("off")
+    elif args.idle_exit == -1:
+        idle_exit.configure("auto")
+    else:
+        idle_exit.configure("fixed", max(0, args.idle_exit))
 
     # 更新换身收尾：上次下载中途退出留下的半程更新在此完成或清理（binary 渠道，
     # UPDATE_AND_DESKTOP.md §3.1 第 5 步）——保证「下次打开一定是新版」
@@ -274,8 +291,15 @@ def _launch(argv: list[str] | None = None) -> None:
     if not args.no_browser:
         threading.Thread(target=open_browser_later, args=(url,), daemon=True).start()
 
-    # 直接传 app 对象而非导入字符串：PyInstaller 冻结环境里字符串导入不可靠
-    uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info", log_config=_log_config())
+    # 直接传 app 对象而非导入字符串：PyInstaller 冻结环境里字符串导入不可靠。
+    # Server 对象形态（等价于 uvicorn.run）：空闲退出的钩子需要摸到 should_exit
+    config = uvicorn.Config(
+        fastapi_app, host="127.0.0.1", port=port, log_level="info", log_config=_log_config()
+    )
+    server = uvicorn.Server(config)
+    if idle_exit.enabled():
+        idle_exit.set_exit_hook(lambda: setattr(server, "should_exit", True))
+    server.run()
 
 
 if __name__ == "__main__":  # 冻结单文件的入口即本文件，缺此保护则加载完即静默退出

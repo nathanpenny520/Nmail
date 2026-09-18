@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import threading
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
@@ -18,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api import api_router
 from app.api.ext import log_ext_call as _log_ext_call
 from app.config import APP_NAME, APP_VERSION, DIST_DIR
-from app.core import batch_ops, jobs, pipeline, update_apply  # noqa: F401 — pipeline 导入即注册 jobs runner
+from app.core import batch_ops, idle_exit, jobs, pipeline, update_apply  # noqa: F401 — pipeline 导入即注册 jobs runner
 from app.db.database import cleanup_orphans, cleanup_retention, run_migrations
 from app.scheduler import MailScheduler
 
@@ -59,11 +60,34 @@ async def lifespan(_: FastAPI):
     _update_timer = threading.Timer(8.0, update_apply.auto_update_tick)
     _update_timer.daemon = True
     _update_timer.start()
+    # 空闲自动退出（UPDATE_AND_DESKTOP.md §7）：DB 就绪后才解析 auto 模式的设置项，
+    # 未启用（终端裸跑无 --idle-exit）则零开销。触发即置 uvicorn should_exit，
+    # 走本 lifespan 正常收尾，无需特殊清理
+    from app.core import idle_exit
+    from app.db.database import get_setting
+
+    _idle_task: asyncio.Task | None = None
+    if idle_exit.enabled():
+        _threshold = idle_exit.resolve_seconds(get_setting)
+        if _threshold > 0:
+            # provider 每 tick 重读设置项：设置页开关即时生效，无需重启（§7）
+            _idle_task = asyncio.create_task(
+                idle_exit.watchdog(
+                    _threshold, seconds_provider=lambda: idle_exit.resolve_seconds(get_setting)
+                )
+            )
+        else:
+            idle_exit.configure("off")  # 设置项已关：与未启用等价
     yield
+    if _idle_task is not None:
+        _idle_task.cancel()
     scheduler.shutdown()
 
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION, lifespan=lifespan)
+
+# 空闲退出活动记账（UPDATE_AND_DESKTOP.md §7）：全程计数请求，SSE/长流式在途不误杀
+app.add_middleware(idle_exit.ActivityMiddleware)
 
 
 # ── 对外 API 错误 envelope（AGENT_SKILL_PLAN P1）─────────────────────────
