@@ -4,6 +4,9 @@ from __future__ import annotations
 import pytest
 
 from app.ai.tasks import _extract_json
+from app.db import database
+
+database.run_migrations()  # review_send_draft 经 _logged 写 ai_logs：单跑本文件也需要库
 
 
 def test_plain_array():
