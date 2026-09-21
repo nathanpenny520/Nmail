@@ -3,6 +3,11 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — fix: Ctrl+C 退出不再打印 KeyboardInterrupt 堆栈
+- 用户反馈终端 Ctrl+C 停服务后打出一整段 CancelledError/KeyboardInterrupt 堆栈——实为正常退出路径（uvicorn 已优雅关停、数据无损），但 Python 默认把 KeyboardInterrupt 当未捕获异常打印，观感像出错
+- 修复：cli `_launch` 捕获 KeyboardInterrupt，打一行「Nmail 已退出。」收尾；服务行为零变化
+- 会话：S-0921-1200（续）
+
 ## e27e36b — feat: AI 审查全程可见——按钮分阶段文案 + AI 不可用必确认
 - 用户反馈 77 号草稿 14:44 发出但 ai_logs 零 send_review 记录（76 号 13:40 发送前有成功审查记录）——AI 审查是否真的跑了对用户不可见，静默降级让人误以为「AI 审过了」
 - 修复：①发送按钮分阶段文案——「检查中…」（规则层毫秒）→「AI 审查中…」（LLM 秒级），AI 审查从始至终可见 ②AI 审查未能运行（失败/未配置，ai_error 非空）时**必须弹卡确认**（列出原因 + 仍要发送/返回修改），不再静默直发；用户主动关掉 AI 开关（ai_error 为空）则不打扰 ③AI 审查确实运行且无问题 → 不弹卡直接发送（保持流畅）

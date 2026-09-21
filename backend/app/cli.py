@@ -299,7 +299,12 @@ def _launch(argv: list[str] | None = None) -> None:
     server = uvicorn.Server(config)
     if idle_exit.enabled():
         idle_exit.set_exit_hook(lambda: setattr(server, "should_exit", True))
-    server.run()
+    try:
+        server.run()
+    except KeyboardInterrupt:
+        # Ctrl+C 退出：uvicorn 已优雅关停（服务至此都正常），不把 asyncio 取消堆栈
+        # 漏到顶层——默认行为会打印一大段 KeyboardInterrupt/CancelledError，像出了错
+        print("\nNmail 已退出。")
 
 
 if __name__ == "__main__":  # 冻结单文件的入口即本文件，缺此保护则加载完即静默退出
