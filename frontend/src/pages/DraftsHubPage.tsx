@@ -8,10 +8,11 @@ import { parseBackendTime } from '../utils/format'
 import { useFlash } from '../hooks/useFlash'
 import { usePageActive } from '../hooks/usePageActive'
 import { appZoom, usePanelWidth } from '../hooks/usePanelWidth'
-import type { UserDraft } from '../types'
+import type { PrecheckIssue, UserDraft } from '../types'
 import HtmlMail from '../components/HtmlMail'
 import SplitDivider from '../components/SplitDivider'
 import { useCompose } from '../components/compose/ComposeContext'
+import PrecheckModal from '../components/compose/PrecheckModal'
 
 type Tab = 'pending_review' | 'editing' | 'scheduled' | 'sent' | 'discarded'
 
@@ -347,6 +348,15 @@ function DraftDetail({
     }).catch((err: Error) => flash(`${okMsg}失败：${err.message}`, 6000))
 
   const sendMutation = useMutation({ mutationFn: () => api.sendUserDraft(draft.id), onSuccess: () => { flash('已发送'); refresh() }, onError: (err: Error) => flash(`发送失败：${err.message}`, 6000) })
+  // 发送前检查（S-0921）：问题弹卡确认，仍可强制越过
+  const [precheck, setPrecheck] = useState<{ issues: PrecheckIssue[]; aiUsed: boolean; aiError: string | null } | null>(null)
+  const requestSend = () => {
+    if (sendMutation.isPending) return
+    void api.precheckDraft(draft.id).then((resp) => {
+      if (resp.issues.length > 0) setPrecheck({ issues: resp.issues, aiUsed: resp.ai_used, aiError: resp.ai_error })
+      else sendMutation.mutate()
+    }).catch(() => sendMutation.mutate()) // precheck 不可用不挡发送
+  }
   const regenMutation = useMutation({
     mutationFn: () => api.regenerateUserDraft(draft.id, instruction.trim() || undefined),
     onSuccess: () => { setShowInstruction(false); setInstruction(''); flash('已重写'); refresh() },
@@ -384,7 +394,7 @@ function DraftDetail({
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             {tab === 'pending_review' && (
               <>
-                <button className={hubBtn} disabled={sendMutation.isPending} onClick={() => sendMutation.mutate()} title="按当前内容直接发送">
+                <button className={hubBtn} disabled={sendMutation.isPending} onClick={requestSend} title="按当前内容直接发送（发送前自动检查）">
                   <Send className="h-3.5 w-3.5" /> 批准并发送
                 </button>
                 <button className={hubBtn} onClick={() => compose.openDraft(draft)} title="进写信台修改后发送（同一发送通路）">
@@ -453,6 +463,19 @@ function DraftDetail({
           <div className="p-8 text-center t-sm text-gray-300">（空正文）</div>
         )}
       </div>
+      {precheck && (
+        <PrecheckModal
+          issues={precheck.issues}
+          aiUsed={precheck.aiUsed}
+          aiError={precheck.aiError}
+          busy={sendMutation.isPending}
+          onForce={() => {
+            setPrecheck(null)
+            sendMutation.mutate()
+          }}
+          onClose={() => setPrecheck(null)}
+        />
+      )}
     </div>
   )
 }

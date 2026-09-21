@@ -40,6 +40,8 @@ export interface Settings {
   notify_types: Partial<Record<NotifyTypeKey, boolean>>
   /** 写信/回复自动带该账号签名（设置页「写信」管理签名内容） */
   auto_insert_signature: boolean
+  /** 发送前 AI 深审（S-0921：规则层之外叠加语义检查；失败自动降级规则层） */
+  ai_send_review: boolean
   /** AI 摘要（§18.6）：到摘要时间总管家巡箱总结并拟稿，替代纯统计摘要 */
   agent_brief_enabled: boolean
   /** 空闲自动退出（§7）：只约束桌面图标启动（--idle-exit）；终端裸跑不受影响 */
@@ -59,6 +61,7 @@ export interface SettingsPayload {
   shortcuts_enabled?: boolean
   notify_types?: Partial<Record<NotifyTypeKey, boolean>>
   auto_insert_signature?: boolean
+  ai_send_review?: boolean
   agent_brief_enabled?: boolean
   idle_exit_enabled?: boolean
 }
@@ -528,11 +531,35 @@ export interface ContactDetail {
   }[]
 }
 
-/** 写信台模板/签名（Markdown 文本存储，插入时转 HTML） */
+/** 写信台模板/签名（Markdown 文本存储，插入时转 HTML）。
+ * 模板可携带默认主题与附件（S-0921）：应用时正文插光标处、空主题自动填、
+ * 附件复制进草稿；老模板无新字段行为不变。 */
+export interface ComposeTemplateAttachment {
+  filename: string
+  mime: string
+  size: number
+  disk_name: string
+}
+
 export interface ComposeTemplate {
   id: string
   name: string
   content: string
+  subject?: string
+  attachments?: ComposeTemplateAttachment[]
+}
+
+/** 发送前检查问题（core/precheck 规则层 + AI 深审） */
+export interface PrecheckIssue {
+  code: string
+  severity: 'blocker' | 'warn'
+  message: string
+}
+
+export interface PrecheckResp {
+  issues: PrecheckIssue[]
+  ai_used: boolean
+  ai_error: string | null
 }
 
 export interface ComposeSignature {

@@ -286,6 +286,37 @@ def write_assist(text: str, op: str, instruction: str | None = None,
     return result.strip()
 
 
+def review_send_draft(subject: str, body_text: str, attachment_names: list[str],
+                      profile_id: str | None = None) -> dict:
+    """发送前 AI 深审：规则层（core/precheck）之上的语义级检查。
+
+    检查附件意图与实际清单是否相符、模板痕迹没改净、主题与正文错位、
+    称呼/日期硬伤、明显错别字。返回 {"blockers": [str], "warns": [str]}；
+    AI 未配置抛 AINotConfigured，调用方负责降级为仅规则层结果。
+    """
+    base_url, model, api_key = _ai_config(profile_id)
+    system = (
+        "你是邮件发出前的质量审查员。只报告真实、值得提示的问题，不要吹毛求疵、"
+        "不要评论风格偏好。输出 JSON：{\"blockers\": [\"…\"], \"warns\": [\"…\"]}。"
+        "blockers=发出去会造成实际损失或尴尬的问题（如说有附件实际没带、占位符或"
+        "「某某」没替换、称呼/日期/事实明显错误）；warns=建议改进但不阻塞发送。"
+        "没有问题就返回空数组，每条问题用一句话说清位置和原因。"
+    )
+    att = "、".join(attachment_names) if attachment_names else "（无附件）"
+    user = f"主题：{subject or '（空）'}\n附件清单：{att}\n正文：\n{body_text[:4000]}"
+    with _logged("send_review", subject[:40] or "（无主题）", model) as ok:
+        result, usage = llm.chat(base_url, model, api_key, system, user)
+        ok(usage)
+    data = _extract_json(result)
+    out: dict[str, list[str]] = {"blockers": [], "warns": []}
+    if isinstance(data, dict):
+        for key in ("blockers", "warns"):
+            val = data.get(key)
+            if isinstance(val, list):
+                out[key] = [str(x).strip() for x in val if str(x).strip()]
+    return out
+
+
 def usage_stats() -> dict:
     conn = get_conn()
     totals = conn.execute(

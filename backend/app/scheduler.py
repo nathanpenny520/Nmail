@@ -176,9 +176,15 @@ def _notify(title: str, body: str) -> None:
 
 
 def send_due_drafts() -> None:
-    """定时发送到期草稿；成功/失败均写通知，失败退回编辑态。"""
+    """定时发送到期草稿；成功/失败均写通知，失败退回编辑态。
+
+    发送前跑 precheck（S-0921）：规则层 blocker 不发出、退回编辑态并通知；
+    AI 深审按设置开关叠加（失败降级仅规则层，不打断发送）。
+    """
+    from app.core import precheck
+
     rows = get_conn().execute(
-        "SELECT id, subject, to_addrs, send_at FROM user_drafts"
+        "SELECT id, subject, to_addrs, send_at, body_html FROM user_drafts"
         " WHERE status = 'scheduled' AND send_at IS NOT NULL"
     ).fetchall()
     now = datetime.now()
@@ -190,6 +196,45 @@ def send_due_drafts() -> None:
         if due is None or due > now:
             continue
         try:
+            blockers = [i for i in precheck.draft_rule_issues(row["id"], row)
+                        if i["severity"] == "blocker"]
+            if blockers:
+                get_conn().execute(
+                    "UPDATE user_drafts SET status = 'editing', send_at = NULL,"
+                    " updated_at = datetime('now') WHERE id = ?",
+                    (row["id"],),
+                )
+                get_conn().commit()
+                _notify("定时邮件未发出，草稿已退回写信台",
+                        f"「{row['subject'] or '（无主题）'}」发送前检查未通过："
+                        + "；".join(i["message"] for i in blockers))
+                logger.info("scheduled draft %s blocked by precheck", row["id"])
+                continue
+            # AI 深审（可选）：开关默认开，未配置/失败降级为仅规则层结果
+            if get_setting("ai_send_review", True):
+                try:
+                    from app.ai import tasks as ai_tasks
+                    from app.core.mail_html import html_to_plain_text
+
+                    names = [r["filename"] for r in get_conn().execute(
+                        "SELECT filename FROM user_draft_attachments WHERE draft_id = ?"
+                        " ORDER BY id", (row["id"],)).fetchall()]
+                    review = ai_tasks.review_send_draft(
+                        row["subject"] or "", html_to_plain_text(row["body_html"] or ""), names)
+                    if review["blockers"]:
+                        get_conn().execute(
+                            "UPDATE user_drafts SET status = 'editing', send_at = NULL,"
+                            " updated_at = datetime('now') WHERE id = ?",
+                            (row["id"],),
+                        )
+                        get_conn().commit()
+                        _notify("定时邮件未发出，草稿已退回写信台",
+                                f"「{row['subject'] or '（无主题）'}」AI 审查发现问题："
+                                + "；".join(review["blockers"][:3]))
+                        logger.info("scheduled draft %s blocked by ai review", row["id"])
+                        continue
+                except Exception:  # noqa: BLE001 — AI 深审不可用不阻塞发送
+                    logger.exception("ai send review failed for draft %s", row["id"])
             send_user_draft(row["id"])
             _notify("定时邮件已发送", f"「{row['subject'] or '（无主题）'}」已按计划发出")
             logger.info("scheduled draft %s sent", row["id"])

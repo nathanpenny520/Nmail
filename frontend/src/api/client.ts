@@ -28,6 +28,7 @@ import type {
   OauthAuthorizeResp,
   OauthFlowStatus,
   OauthStatusResp,
+  PrecheckResp,
   ProbeResult,
   ProvidersResp,
   AgentRunDetail,
@@ -44,6 +45,7 @@ import type {
   UsageStats,
   UserDraft,
   DigestResp,
+  ComposeTemplate,
 } from '../types'
 
 function detailToString(detail: unknown): string {
@@ -263,6 +265,16 @@ export const api = {
     }),
   sendUserDraft: (id: number) =>
     request<{ ok: boolean }>(`/api/user-drafts/${id}/send`, { method: 'POST' }),
+  precheckDraft: (id: number, useAi = true) =>
+    request<PrecheckResp>(`/api/user-drafts/${id}/precheck`, {
+      method: 'POST',
+      body: JSON.stringify({ use_ai: useAi }),
+    }),
+  copyTemplateAttachments: (id: number, templateId: string) =>
+    request<{ draft: UserDraft; copied: number }>(`/api/user-drafts/${id}/copy-template-attachments`, {
+      method: 'POST',
+      body: JSON.stringify({ template_id: templateId }),
+    }),
   scheduleDraft: (id: number, sendAt: string) =>
     request<{ draft: UserDraft }>(`/api/user-drafts/${id}/schedule`, {
       method: 'POST',
@@ -388,6 +400,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ html }),
     }),
+  uploadTemplateAttachments: (templateId: string, files: File[]) => {
+    const form = new FormData()
+    for (const f of files) form.append('files', f)
+    return request<{ templates: ComposeTemplate[] }>(
+      `/api/compose-extras/templates/${encodeURIComponent(templateId)}/attachments`,
+      { method: 'POST', body: form },
+    )
+  },
+  deleteTemplateAttachment: (templateId: string, index: number) =>
+    request<{ templates: ComposeTemplate[] }>(
+      `/api/compose-extras/templates/${encodeURIComponent(templateId)}/attachments/${index}`,
+      { method: 'DELETE' },
+    ),
 
   // ── 通知 ──
   getNotifications: () => request<NotificationsResp>('/api/notifications'),

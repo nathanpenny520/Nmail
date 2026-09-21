@@ -870,6 +870,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/user-drafts/{draft_id}/precheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Precheck Draft
+         * @description 发送前检查：规则层（core/precheck，必有）+ AI 深审（设置 ai_send_review
+         *     默认开；未配置/失败降级为仅规则层，ai_error 说明原因）。人工发送由前端
+         *     先调此端点弹卡、可越过；定时/AI 自动发送在后端发送前强制执行，不走这里。
+         */
+        post: operations["precheck_draft_api_user_drafts__draft_id__precheck_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/user-drafts/{draft_id}/copy-template-attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Template Attachments
+         * @description 把模板附件复制进草稿（写信台应用模板时调用，需草稿已落库；同名跳过；
+         *     源文件缺失的条目跳过不阻塞）。
+         */
+        post: operations["copy_template_attachments_api_user_drafts__draft_id__copy_template_attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/user-drafts/{draft_id}/schedule": {
         parameters: {
             query?: never;
@@ -1015,6 +1058,40 @@ export interface paths {
         put: operations["update_extras_api_compose_extras_put"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/compose-extras/templates/{template_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Template Attachments */
+        post: operations["upload_template_attachments_api_compose_extras_templates__template_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/compose-extras/templates/{template_id}/attachments/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Template Attachment */
+        delete: operations["delete_template_attachment_api_compose_extras_templates__template_id__attachments__index__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2495,6 +2572,11 @@ export interface components {
             /** Files */
             files: string[];
         };
+        /** Body_upload_template_attachments_api_compose_extras_templates__template_id__attachments_post */
+        Body_upload_template_attachments_api_compose_extras_templates__template_id__attachments_post: {
+            /** Files */
+            files: string[];
+        };
         /** ChatCreateIn */
         ChatCreateIn: {
             /**
@@ -2855,6 +2937,14 @@ export interface components {
              */
             limit: number;
         };
+        /** PrecheckIn */
+        PrecheckIn: {
+            /**
+             * Use Ai
+             * @default true
+             */
+            use_ai: boolean;
+        };
         /** ProbeIn */
         ProbeIn: {
             /** Email */
@@ -2961,6 +3051,28 @@ export interface components {
             /** Content */
             content: string;
         };
+        /** TemplateAttachmentMeta */
+        TemplateAttachmentMeta: {
+            /** Filename */
+            filename: string;
+            /**
+             * Mime
+             * @default
+             */
+            mime: string;
+            /**
+             * Size
+             * @default 0
+             */
+            size: number;
+            /** Disk Name */
+            disk_name: string;
+        };
+        /** TemplateCopyIn */
+        TemplateCopyIn: {
+            /** Template Id */
+            template_id: string;
+        };
         /** TemplateItem */
         TemplateItem: {
             /** Id */
@@ -2969,6 +3081,13 @@ export interface components {
             name: string;
             /** Content */
             content: string;
+            /**
+             * Subject
+             * @default
+             */
+            subject: string;
+            /** Attachments */
+            attachments?: components["schemas"]["TemplateAttachmentMeta"][];
         };
         /** UserDraftIn */
         UserDraftIn: {
@@ -4770,6 +4889,80 @@ export interface operations {
             };
         };
     };
+    precheck_draft_api_user_drafts__draft_id__precheck_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PrecheckIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_template_attachments_api_user_drafts__draft_id__copy_template_attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateCopyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     schedule_draft_api_user_drafts__draft_id__schedule_post: {
         parameters: {
             query?: never;
@@ -5045,6 +5238,77 @@ export interface operations {
                 "application/json": components["schemas"]["ComposeExtrasIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_template_attachments_api_compose_extras_templates__template_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_template_attachments_api_compose_extras_templates__template_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_template_attachment_api_compose_extras_templates__template_id__attachments__index__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

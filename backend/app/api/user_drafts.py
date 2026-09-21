@@ -20,9 +20,9 @@ from pydantic import BaseModel
 
 from app.ai import tasks
 from app.api.deps import ai_result_or_http, mail_error_to_http
-from app.core import imap_client, mailbox, outbox
-from app.core.mail_html import markdown_to_email_html
-from app.db.database import get_conn
+from app.core import imap_client, mailbox, outbox, precheck
+from app.core.mail_html import html_to_plain_text, markdown_to_email_html
+from app.db.database import get_conn, get_setting
 
 router = APIRouter(prefix="/api/user-drafts", tags=["user-drafts"])
 
@@ -356,6 +356,88 @@ def _copy_email_attachments(email_id: int, draft_id: int, conn) -> None:  # noqa
         conn.execute(
             "UPDATE user_draft_attachments SET path = ? WHERE id = ?", (str(target), cur.lastrowid)
         )
+
+
+# ── 发送前检查（S-0921）─────────────────────────────────────
+
+class PrecheckIn(BaseModel):
+    use_ai: bool = True
+
+
+@router.post("/{draft_id}/precheck")
+def precheck_draft(draft_id: int, payload: PrecheckIn | None = None) -> dict:
+    """发送前检查：规则层（core/precheck，必有）+ AI 深审（设置 ai_send_review
+    默认开；未配置/失败降级为仅规则层，ai_error 说明原因）。人工发送由前端
+    先调此端点弹卡、可越过；定时/AI 自动发送在后端发送前强制执行，不走这里。"""
+    row = _get_draft(draft_id)
+    issues = precheck.draft_rule_issues(draft_id, row)
+    ai_used = False
+    ai_error = None
+    use_ai = bool(payload.use_ai) if payload else True
+    if use_ai and get_setting("ai_send_review", True):
+        try:
+            names = [r["filename"] for r in get_conn().execute(
+                "SELECT filename FROM user_draft_attachments WHERE draft_id = ?"
+                " ORDER BY id", (draft_id,)).fetchall()]
+            review = tasks.review_send_draft(
+                row["subject"] or "",
+                html_to_plain_text(row["body_html"] or ""),
+                names,
+            )
+            ai_used = True
+            issues += [{"code": "ai_blocker", "severity": "blocker", "message": m}
+                       for m in review["blockers"]]
+            issues += [{"code": "ai_warn", "severity": "warn", "message": m}
+                       for m in review["warns"]]
+        except Exception as exc:  # noqa: BLE001 — AI 不可用降级为仅规则层，不挡发送
+            ai_error = "AI 未配置" if isinstance(exc, tasks.AINotConfigured) else str(exc)
+    return {"issues": issues, "ai_used": ai_used, "ai_error": ai_error}
+
+
+# ── 模板附件复制（S-0921：模板带附件，应用时复制进草稿）────────
+
+class TemplateCopyIn(BaseModel):
+    template_id: str
+
+
+@router.post("/{draft_id}/copy-template-attachments")
+def copy_template_attachments(draft_id: int, payload: TemplateCopyIn) -> dict:
+    """把模板附件复制进草稿（写信台应用模板时调用，需草稿已落库；同名跳过；
+    源文件缺失的条目跳过不阻塞）。"""
+    _get_draft(draft_id)
+    templates = get_setting("compose_templates", []) or []
+    tpl = next((t for t in templates
+                if isinstance(t, dict) and str(t.get("id")) == payload.template_id), None)
+    if tpl is None:
+        raise HTTPException(404, "模板不存在")
+    atts = tpl.get("attachments") or []
+    conn = get_conn()
+    target_dir = outbox.draft_dir(draft_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    existing = {r["filename"] for r in conn.execute(
+        "SELECT filename FROM user_draft_attachments WHERE draft_id = ?", (draft_id,)
+    ).fetchall()}
+    copied = 0
+    for a in atts:
+        if not isinstance(a, dict) or a.get("filename") in existing:
+            continue
+        src = outbox.template_files_dir(payload.template_id) / str(a.get("disk_name") or "")
+        if not src.exists():
+            continue
+        cur = conn.execute(
+            "INSERT INTO user_draft_attachments (draft_id, filename, mime, size, path)"
+            " VALUES (?, ?, ?, ?, '')",
+            (draft_id, a.get("filename"), a.get("mime"), a.get("size")),
+        )
+        target = target_dir / f"{cur.lastrowid}_{Path(a['filename']).name}"
+        shutil.copyfile(src, target)
+        conn.execute(
+            "UPDATE user_draft_attachments SET path = ? WHERE id = ?",
+            (str(target), cur.lastrowid),
+        )
+        copied += 1
+    conn.commit()
+    return {"draft": _draft_dict(_get_draft(draft_id)), "copied": copied}
 
 
 # ── 定时发送 ────────────────────────────────────────────────

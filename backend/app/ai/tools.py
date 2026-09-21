@@ -14,6 +14,7 @@ params 字符串保留（JSON 降级协议的系统提示词用）。附件为�
 """
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from collections.abc import Callable
 
@@ -559,8 +560,11 @@ def _t_discard_draft(args: dict, primary: int, scope: list[int]) -> dict:
 
 
 def _t_send_draft(args: dict, primary: int, scope: list[int]) -> dict:
-    """发送待审草稿（自动模式专用直发；审批模式走审批卡后同样到这里）。"""
-    from app.core import outbox
+    """发送待审草稿（自动模式专用直发；审批模式走审批卡后同样到这里）。
+
+    发送前跑 precheck（S-0921）：规则层 blocker 直接拒发、问题回给 agent
+    修正后重试；AI 深审按开关叠加（失败降级仅规则层）。"""
+    from app.core import outbox, precheck
 
     draft_id = int(args.get("draft_id") or 0)
     row = get_conn().execute("SELECT * FROM user_drafts WHERE id = ?", (draft_id,)).fetchone()
@@ -568,9 +572,35 @@ def _t_send_draft(args: dict, primary: int, scope: list[int]) -> dict:
         return {"error": "草稿不存在"}
     if row["account_id"] not in scope:
         raise PermissionError("草稿不属于当前会话的账号范围")
+
+    issues = precheck.draft_rule_issues(draft_id, row)
+    from app.db.database import get_setting
+
+    if get_setting("ai_send_review", True):
+        try:
+            from app.ai import tasks as ai_tasks
+            from app.core.mail_html import html_to_plain_text
+
+            names = [r["filename"] for r in get_conn().execute(
+                "SELECT filename FROM user_draft_attachments WHERE draft_id = ?"
+                " ORDER BY id", (draft_id,)).fetchall()]
+            review = ai_tasks.review_send_draft(
+                row["subject"] or "", html_to_plain_text(row["body_html"] or ""), names)
+            issues += [{"code": "ai_blocker", "severity": "blocker", "message": m}
+                       for m in review["blockers"]]
+            issues += [{"code": "ai_warn", "severity": "warn", "message": m}
+                       for m in review["warns"]]
+        except Exception:  # noqa: BLE001 — AI 深审不可用不阻塞发送
+            pass
+    blockers = [i["message"] for i in issues if i["severity"] == "blocker"]
+    if blockers:
+        return {"error": "发送前检查未通过，先修正再发：" + "；".join(blockers),
+                "issues": issues,
+                "hint": "用 update_draft 改正文/主题，或确认附件已就位后再 send_draft"}
     outbox.send_user_draft(draft_id)
+    warns = [i["message"] for i in issues if i["severity"] == "warn"]
     return {"sent": True, "to": row["to_addrs"], "subject": row["subject"],
-            "note": "发送不可撤销"}
+            "note": "发送不可撤销" + (f"；提示：{'；'.join(warns)}" if warns else "")}
 
 
 def _t_start_organize(args: dict, primary: int, scope: list[int]) -> dict:
@@ -769,7 +799,8 @@ def _t_list_signatures(args: dict, primary: int, scope: list[int]) -> dict:
 
 
 def _t_apply_template(args: dict, primary: int, scope: list[int]) -> dict:
-    """apply_template：取模板内容 + 可选补充段，走 create_draft 同一条落地路径。"""
+    """apply_template：模板正文（+可选补充段）走 create_draft 同一条落地路径；
+    模板自带主题与附件一并应用（S-0921），参数里的主题优先于模板默认主题。"""
     from app.db.database import get_setting
 
     templates = get_setting("compose_templates", []) or []
@@ -782,9 +813,50 @@ def _t_apply_template(args: dict, primary: int, scope: list[int]) -> dict:
     extra = str(args.get("extra") or "").strip()
     if extra:
         body = f"{body}\n\n{extra}"
-    return _t_create_draft({"to": args.get("to"), "subject": args.get("subject"),
-                            "body": body, "email_id": args.get("email_id")},
-                           primary, scope)
+    subject = str(args.get("subject") or "").strip() or str(template.get("subject") or "").strip()
+    result = _t_create_draft({"to": args.get("to"), "subject": subject,
+                              "body": body, "email_id": args.get("email_id")},
+                             primary, scope)
+    if "draft_id" in result:
+        copied = _copy_template_attachments(tid, template.get("attachments") or [],
+                                            int(result["draft_id"]))
+        if copied:
+            result["hint"] = (result.get("hint") or "") + f"；模板附件已复制 {copied} 个进草稿"
+    return result
+
+
+def _copy_template_attachments(template_id: str, atts: list, draft_id: int) -> int:  # noqa: ANN001
+    """模板附件文件复制进 AI 草稿（与 REST copy-template-attachments 同落盘惯例；
+    源文件缺失/同名已存的条目跳过）。"""
+    from pathlib import Path
+
+    from app.core.outbox import draft_dir, template_files_dir
+
+    existing = {r["filename"] for r in get_conn().execute(
+        "SELECT filename FROM user_draft_attachments WHERE draft_id = ?", (draft_id,)
+    ).fetchall()}
+    target_dir = draft_dir(draft_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for a in atts:
+        if not isinstance(a, dict) or a.get("filename") in existing:
+            continue
+        src = template_files_dir(template_id) / str(a.get("disk_name") or "")
+        if not src.exists():
+            continue
+        cur = get_conn().execute(
+            "INSERT INTO user_draft_attachments (draft_id, filename, mime, size, path)"
+            " VALUES (?, ?, ?, ?, '')",
+            (draft_id, a.get("filename"), a.get("mime"), a.get("size")),
+        )
+        target = target_dir / f"{cur.lastrowid}_{Path(a['filename']).name}"
+        shutil.copyfile(src, target)
+        get_conn().execute(
+            "UPDATE user_draft_attachments SET path = ? WHERE id = ?", (str(target), cur.lastrowid)
+        )
+        copied += 1
+    get_conn().commit()
+    return copied
 
 
 def _signature_content_for(account_id: int) -> str | None:
@@ -1098,9 +1170,10 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in [
     ToolSpec("list_signatures", "read", "read",
              "列出各账号的签名档内容", "{}", _OBJ.copy(), _t_list_signatures),
     ToolSpec("apply_template", "write", "draft",
-             "用指定模板起草邮件（模板内容+可选补充段 → 进入待审列表）",
-             '{"template_id": "模板id", "to": "收件人", "subject?": "主题", "extra?": "模板之外的补充正文",'
-             ' "email_id?": "若是回复则传回复的邮件id"}',
+             "用指定模板起草邮件（模板正文+可选补充段 → 进入待审列表；"
+             "模板自带的主题与附件会一并应用，subject 参数优先）",
+             '{"template_id": "模板id", "to": "收件人", "subject?": "主题（缺省用模板自带主题）",'
+             ' "extra?": "模板之外的补充正文", "email_id?": "若是回复则传回复的邮件id"}',
              _obj({"template_id": _str("模板 id"), "to": _str("收件人"), "subject": _str("主题"),
                    "extra": _str("补充正文（Markdown）"), "email_id": _int("回复的邮件 id")},
                   ["template_id", "to"]),

@@ -94,6 +94,7 @@ export default function SettingsPage() {
     new_mail: true, ai_draft: true, digest: true, account_error: true,
   })
   const [autoSig, setAutoSig] = useState(false)
+  const [sendReview, setSendReview] = useState(true)
   const [agentBrief, setAgentBrief] = useState(false)
   const [notifPerm, setNotifPerm] = useState<NotifyPermission>(() => notifyPermission())
 
@@ -142,6 +143,7 @@ export default function SettingsPage() {
       ),
     }) as Record<NotifyTypeKey, boolean>)
     setAutoSig(!!data.auto_insert_signature) // 旧后端无此字段 → undefined → 关
+    setSendReview(data.ai_send_review !== false) // 旧后端无此字段 → 默认开
     setAgentBrief(data.agent_brief_enabled === true)
   }, [data])
 
@@ -205,6 +207,10 @@ export default function SettingsPage() {
   const changeAutoSig = (v: boolean) => {
     setAutoSig(v)
     instantMutation.mutate({ auto_insert_signature: v })
+  }
+  const changeSendReview = (v: boolean) => {
+    setSendReview(v)
+    instantMutation.mutate({ ai_send_review: v })
   }
   const changeBrief = (v: boolean) => {
     setAgentBrief(v)
@@ -572,7 +578,7 @@ export default function SettingsPage() {
 
         {/* ── 写信：自动签名 + 签名/模板管理 ── */}
         {section === 'compose' && (
-          <ComposeSection accounts={accounts} autoSig={autoSig} onAutoSig={changeAutoSig} />
+          <ComposeSection accounts={accounts} autoSig={autoSig} onAutoSig={changeAutoSig} sendReview={sendReview} onSendReview={changeSendReview} />
         )}
 
         {/* ── 邮箱账号 ── */}
@@ -2873,10 +2879,14 @@ function ComposeSection({
   accounts,
   autoSig,
   onAutoSig,
+  sendReview,
+  onSendReview,
 }: {
   accounts: Account[]
   autoSig: boolean
   onAutoSig: (v: boolean) => void
+  sendReview: boolean
+  onSendReview: (v: boolean) => void
 }) {
   const { data: extras } = useQuery({ queryKey: ['compose-extras'], queryFn: api.getComposeExtras })
   const [tplOpen, setTplOpen] = useState(false)
@@ -2902,6 +2912,23 @@ function ComposeSection({
         <p className="mt-1.5 t-sm leading-relaxed text-gray-400">
           开启后，新邮件与回复/转发自动带上发件账号的签名（回复时插在引用块之前）；
           仅在打开写信标签时注入一次，草稿恢复不会重复添加，AI 拟稿由「文风提示词」负责。
+        </p>
+      </div>
+
+      <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3">
+        <label className="flex items-center gap-2 t-md font-medium text-gray-700">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-indigo-600"
+            checked={sendReview}
+            onChange={(e) => onSendReview(e.target.checked)}
+          />
+          发送前 AI 审查
+        </label>
+        <p className="mt-1.5 t-sm leading-relaxed text-gray-400">
+          点发送时先做两道检查：规则检查（主题为空、模板占位符没改净、正文提到附件但没带附件）
+          始终开启；配置 AI 后追加语义审查（主题与正文是否匹配、称呼/日期硬伤等）。
+          发现问题会弹卡确认，仍可强制发送；定时发送被拦时草稿退回写信台并通知。
         </p>
       </div>
 

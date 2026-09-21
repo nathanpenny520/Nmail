@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileBox, Loader2, PenLine, Plus, Trash2 } from 'lucide-react'
+import { FileBox, Loader2, Paperclip, PenLine, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { api } from '../../api/client'
+import { fmtSize } from '../../utils/format'
 import type { Account, ComposeTemplate } from '../../types'
 import { Dropdown, Modal, menuItemCls } from './ui'
 
@@ -15,8 +16,14 @@ async function insertHtml(editor: Editor, markdown: string, atEnd: boolean): Pro
   else editor.chain().focus().insertContent(html).run()
 }
 
-/** 工具栏「插入模板」：选择即插入光标处；底部入口进管理弹窗。 */
-export function TemplateMenu({ editor, onManage }: { editor: Editor | null; onManage: () => void }) {
+/** 工具栏「插入模板」：选择即插入光标处（主题/附件由 onApply 处理）；底部入口进管理弹窗。 */
+export function TemplateMenu({
+  editor, onApply, onManage,
+}: {
+  editor: Editor | null
+  onApply: (t: ComposeTemplate) => void
+  onManage: () => void
+}) {
   const { data } = useQuery({ queryKey: EXTRAS_KEY, queryFn: api.getComposeExtras })
   const templates = data?.templates ?? []
   return (
@@ -28,7 +35,7 @@ export function TemplateMenu({ editor, onManage }: { editor: Editor | null; onMa
           插入模板
         </>
       }
-      title="插入常用文案模板"
+      title="插入常用文案模板（自带主题与附件时一并应用）"
     >
       {templates.length === 0 && <div className="px-3 py-1.5 t-xs text-gray-400">还没有模板</div>}
       {templates.map((t) => (
@@ -38,9 +45,16 @@ export function TemplateMenu({ editor, onManage }: { editor: Editor | null; onMa
           title={t.content.slice(0, 120)}
           onClick={() => {
             if (editor) void insertHtml(editor, t.content, false)
+            onApply(t)
           }}
         >
           {t.name}
+          {(t.attachments?.length ?? 0) > 0 && (
+            <span className="ml-1 inline-flex items-center t-xs text-gray-400">
+              <Paperclip className="h-3 w-3" />
+              {t.attachments!.length}
+            </span>
+          )}
         </button>
       ))}
       <div className="my-1 border-t border-gray-100" />
@@ -105,15 +119,18 @@ export function SignatureMenu({
   )
 }
 
-/** 模板管理：新建/编辑（Markdown 文本）/删除，整表保存。 */
+/** 模板管理：新建/编辑（Markdown 文本+默认主题+附件）/删除，整表保存；
+ * 附件为二进制文件，走条目级端点即时上传/删除（S-0921）。 */
 export function TemplateManager({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
   const { data } = useQuery({ queryKey: EXTRAS_KEY, queryFn: api.getComposeExtras })
   const [items, setItems] = useState<ComposeTemplate[] | null>(null)
   const [editing, setEditing] = useState<ComposeTemplate | null>(null)
   const [error, setError] = useState('')
+  const [attBusy, setAttBusy] = useState(false)
   const templates = items ?? data?.templates ?? []
   const signatures = data?.signatures ?? []
+  const editingSaved = !!editing && templates.some((t) => t.id === editing.id)
 
   const saveMutation = useMutation({
     mutationFn: (next: ComposeTemplate[]) =>
@@ -138,6 +155,39 @@ export function TemplateManager({ onClose }: { onClose: () => void }) {
     saveMutation.mutate(next)
   }
 
+  // 附件上传/删除即时生效：更新缓存并同步进正在编辑的表单（保留名称/主题输入）
+  const syncAttachments = (allTemplates: ComposeTemplate[], id: string) => {
+    queryClient.setQueryData(EXTRAS_KEY, { templates: allTemplates, signatures })
+    const updated = allTemplates.find((t) => t.id === id)
+    if (updated && editing) setEditing({ ...editing, attachments: updated.attachments })
+  }
+  const uploadAtts = async (files: FileList | null) => {
+    if (!files?.length || !editing || attBusy) return
+    setAttBusy(true)
+    setError('')
+    try {
+      const resp = await api.uploadTemplateAttachments(editing.id, Array.from(files))
+      syncAttachments(resp.templates, editing.id)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setAttBusy(false)
+    }
+  }
+  const removeAtt = async (index: number) => {
+    if (!editing || attBusy) return
+    setAttBusy(true)
+    setError('')
+    try {
+      const resp = await api.deleteTemplateAttachment(editing.id, index)
+      syncAttachments(resp.templates, editing.id)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setAttBusy(false)
+    }
+  }
+
   return (
     <Modal title="管理模板" onClose={onClose} width="max-w-xl">
       {editing ? (
@@ -149,12 +199,58 @@ export function TemplateManager({ onClose }: { onClose: () => void }) {
             onChange={(e) => setEditing({ ...editing, name: e.target.value })}
             autoFocus
           />
+          <input
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 t-sm outline-none focus:border-indigo-500"
+            placeholder="模板默认主题（可选；应用模板时主题框为空才自动填）"
+            value={editing.subject ?? ''}
+            onChange={(e) => setEditing({ ...editing, subject: e.target.value })}
+          />
           <textarea
-            className="h-48 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 t-sm leading-relaxed outline-none focus:border-indigo-500"
+            className="h-40 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 t-sm leading-relaxed outline-none focus:border-indigo-500"
             placeholder={'模板内容，支持 Markdown（加粗 **x**、列表 -、链接等）。单个换行=分段；行尾打两个空格再换行=紧贴一行（同 Shift+Enter）'}
             value={editing.content}
             onChange={(e) => setEditing({ ...editing, content: e.target.value })}
           />
+          {editingSaved ? (
+            <div className="rounded-lg border border-gray-200 px-3 py-2">
+              <div className="flex items-center gap-2 t-xs text-gray-400">
+                <Paperclip className="h-3 w-3" />
+                模板附件（应用模板时自动复制进草稿）
+                <span className="flex-1" />
+                <label className="cursor-pointer whitespace-nowrap text-indigo-600 hover:text-indigo-700">
+                  {attBusy ? '处理中…' : '+ 添加附件'}
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      void uploadAtts(e.target.files)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              </div>
+              {(editing.attachments ?? []).map((a, idx) => (
+                <div key={idx} className="mt-1.5 flex items-center gap-2 t-sm text-gray-600">
+                  <span className="min-w-0 flex-1 truncate" title={a.filename}>{a.filename}</span>
+                  <span className="shrink-0 t-xs text-gray-400">{fmtSize(a.size)}</span>
+                  <button
+                    className="shrink-0 text-gray-400 hover:text-red-500"
+                    title="删除附件"
+                    disabled={attBusy}
+                    onClick={() => void removeAtt(idx)}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              {(editing.attachments ?? []).length === 0 && (
+                <div className="mt-1 t-xs text-gray-300">暂无附件</div>
+              )}
+            </div>
+          ) : (
+            <p className="t-xs text-gray-400">保存模板后可为其添加附件与默认主题</p>
+          )}
           {error && <div className="t-sm text-red-500">{error}</div>}
           <div className="flex justify-end gap-2">
             <button
@@ -190,7 +286,20 @@ export function TemplateManager({ onClose }: { onClose: () => void }) {
           {templates.map((t) => (
             <div key={t.id} className="flex items-center gap-2 rounded-lg border border-gray-100 px-3 py-2">
               <div className="min-w-0 flex-1">
-                <div className="truncate t-sm font-medium text-gray-800">{t.name}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate t-sm font-medium text-gray-800">{t.name}</span>
+                  {t.subject?.trim() && (
+                    <span className="shrink-0 truncate t-xs text-gray-400" title={`主题：${t.subject}`}>
+                      主题：{t.subject}
+                    </span>
+                  )}
+                  {(t.attachments?.length ?? 0) > 0 && (
+                    <span className="inline-flex shrink-0 items-center gap-0.5 t-xs text-gray-400">
+                      <Paperclip className="h-3 w-3" />
+                      {t.attachments!.length}
+                    </span>
+                  )}
+                </div>
                 <div className="truncate t-xs text-gray-400">{t.content.slice(0, 80) || '（空）'}</div>
               </div>
               <button

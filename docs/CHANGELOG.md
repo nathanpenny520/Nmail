@@ -3,6 +3,15 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
+## 待提交 — feat: 发送前检查（规则层+AI 深审）+ 模板带主题与附件
+- 用户痛点三连：模板信改漏（占位符残留）、说有附件实际没带、空主题照发。方案经用户确认（拦截策略两条：人工可强制越过；定时/AI 自动发送 blocker 不发出、退回写信台并通知）
+- **发送前检查规则层**（core/precheck.py 新模块，零成本零 AI 依赖，三个发送入口共用）：空主题 blocker；占位符残留 blocker（`{x}`/`[x]`/`___`/X 序列/中文占位词，方括号内纯数字时间编号白名单，X 占位避开邮箱/网址）；附件意图核对——正文提到附件但没带=blocker、带了但正文全未提=warn。人工发送：REST `POST /api/user-drafts/{id}/precheck` → 前端 PrecheckModal 弹卡（问题分组 + 仍要发送可越过，precheck 不可用不挡发送）；定时发送（scheduler.send_due_drafts）：blocker 不发出、退回 editing、写通知（复用既有失败退回模式）；AI 总管家 send_draft：拒发并把问题回给 agent 修正后重试
+- **AI 深审**（ai/tasks.review_send_draft，一次 LLM 调用 JSON 输出 blockers/warns，正文截断 4000 字，ai_logs 记账 send_review）：附件意图与实际清单、模板痕迹、主题与正文匹配、称呼/日期硬伤、明显错别字。开关 `ai_send_review`（默认开，设置页「写信」新开关；未配置/失败自动降级仅规则层不挡发送）；precheck 端点与 scheduler、AI 发送路径均叠加
+- **模板升级带主题与附件**（S-0921）：`compose_templates` 条目加可选 `subject`/`attachments` 元数据（KV 整存整取，老模板无字段行为不变）；附件二进制落盘 `data_dir/compose_template_files/<template_id>/`（目录函数在 core/outbox.template_files_dir——ai 层禁 import api 层），KV 只存元数据，上传/删除走条目级端点（上传要求模板已保存；单模板总量 50MB 上限）；update_extras 整存时 diff 清理被删模板/清空附件的落盘文件。前端：模板编辑弹窗加主题框+附件管理（上传/删除即时生效，同步回编辑表单），模板菜单应用时正文插光标处（不变）+空主题自动填模板主题（不覆盖已填）+附件复制进草稿（`POST /api/user-drafts/{id}/copy-template-attachments`，同名跳过、源缺失跳过）；列表/菜单条目显示主题与附件数徽标。AI `apply_template` 同步：参数主题优先，缺省用模板主题，附件复制进 AI 草稿并回 hint
+- 前端：DraftsHubPage「批准并发送」同样先 precheck 弹卡；openapi.json + schema.d.ts 重新生成；SettingsPage「写信」区加「发送前 AI 审查」开关（设置模型 ai_send_review 四处齐）
+- 测试：test_precheck.py 新 7 例（规则层全模式含方括号白名单/X 边界/附件三态 + precheck 端点 + 模板整链路 KV/落盘/复制/删除清理 + scheduler 定时拦截退回 + 通知）；test_ai_tools_b6.py 扩 apply_template 主题附件 2 例；全量 302 绿；ruff 通过；隔离实例冒烟：precheck 三 blocker 直出、模板未保存上传 404 语义、上传→KV 元数据→复制进草稿、加附件后 attachment_missing 消失、设置开关读写，全对
+- 会话：S-0921-1200-发送前检查与模板升级
+
 ## 41bab39 — release: v0.4.5 + tag
 - 收录：uvx 体验优先三件套（b64aa62——图标指向 uvx 命令 §2.1、空闲 90s 自动退出 §7、首跑横幅 §7.2）；winget PR microsoft/winget-pkgs#436892
 - 验证：PyPI `nmail-app`/`nmail-cli` 0.4.5 ✅；Release 六资产齐 ✅；**Release body「Full Changelog」恰好 1 行**——上一条 4b86cd7 的 create-release 前置 job 在真实发版中生效（对比 0.4.3 的 5 行）✅；tap Formula/Cask 0.4.5 ✅；官网联动重建 ✅

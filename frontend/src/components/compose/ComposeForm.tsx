@@ -7,10 +7,11 @@ import { api } from '../../api/client'
 import { useAIEnabled } from '../../api/useAI'
 import { useShortcutsEnabled } from '../../api/useSettings'
 import { fmtSize } from '../../utils/format'
-import type { Account, DraftAttachment, UserDraft } from '../../types'
+import type { Account, ComposeTemplate, DraftAttachment, PrecheckIssue, UserDraft } from '../../types'
 import { useCompose } from './ComposeContext'
 import RecipientChipsInput from './RecipientChipsInput'
 import AiWriteDialog from './AiWriteDialog'
+import PrecheckModal from './PrecheckModal'
 import { SignatureMenu, TemplateMenu, TemplateManager, SignatureEditor } from './InsertDialogs'
 import { EditorSurface, EditorToolbar, useMailEditor } from './RichEditor'
 import { Modal, toLocalInput } from './ui'
@@ -177,7 +178,7 @@ export default function ComposeForm({
     [],
   )
 
-  // ── 发送 ──
+  // ── 发送（S-0921：先 precheck 弹卡确认，仍可强制越过）──
   const sendMutation = useMutation({
     mutationFn: async () => {
       const id = await ensurePersisted()
@@ -185,9 +186,42 @@ export default function ComposeForm({
     },
     onSuccess: () => finishSent(tabId),
   })
+  const [precheck, setPrecheck] = useState<{ issues: PrecheckIssue[]; aiUsed: boolean; aiError: string | null } | null>(null)
   const sendNowRef = useRef<() => void>(() => {})
   sendNowRef.current = () => {
-    if (!sendMutation.isPending) sendMutation.mutate()
+    if (sendMutation.isPending) return
+    void (async () => {
+      try {
+        const id = await ensurePersisted()
+        const resp = await api.precheckDraft(id, aiEnabled)
+        if (resp.issues.length > 0) {
+          setPrecheck({ issues: resp.issues, aiUsed: resp.ai_used, aiError: resp.ai_error })
+          return
+        }
+      } catch {
+        // precheck 不可用不挡发送
+      }
+      sendMutation.mutate()
+    })()
+  }
+  const forceSend = () => {
+    setPrecheck(null)
+    sendMutation.mutate()
+  }
+
+  // ── 应用模板（S-0921）：正文插光标处（TemplateMenu 内处理）+ 空主题自动填 + 附件复制 ──
+  const applyTemplate = async (t: ComposeTemplate) => {
+    if (t.subject?.trim() && !subject.trim()) setSubject(t.subject.trim())
+    if (t.attachments?.length) {
+      try {
+        const id = await ensurePersisted()
+        const { draft: updated } = await api.copyTemplateAttachments(id, t.id)
+        setAtts(updated.attachments)
+        cacheDraft(updated)
+      } catch (err) {
+        setAttError(`模板附件添加失败：${(err as Error).message}`)
+      }
+    }
   }
 
   // ── 定时发送 ──
@@ -394,7 +428,7 @@ export default function ComposeForm({
         editor={editor}
         extra={
           <>
-            <TemplateMenu editor={editor} onManage={() => setTplOpen(true)} />
+            <TemplateMenu editor={editor} onApply={(t) => void applyTemplate(t)} onManage={() => setTplOpen(true)} />
             <SignatureMenu
               editor={editor}
               accounts={accounts}
@@ -477,6 +511,18 @@ export default function ComposeForm({
       {aiOpen && editor && <AiWriteDialog editor={editor} onClose={() => setAiOpen(false)} />}
       {tplOpen && <TemplateManager onClose={() => setTplOpen(false)} />}
       {sigOpen && <SignatureEditor accounts={accounts} onClose={() => setSigOpen(false)} />}
+
+      {/* 发送前检查问题卡（人工可强制越过） */}
+      {precheck && (
+        <PrecheckModal
+          issues={precheck.issues}
+          aiUsed={precheck.aiUsed}
+          aiError={precheck.aiError}
+          busy={sendMutation.isPending}
+          onForce={forceSend}
+          onClose={() => setPrecheck(null)}
+        />
+      )}
 
       {/* 收件人视角预览：与发送管线同参（消毒+内联化+wrap），沙箱 iframe 渲染 */}
       {previewHtml && (

@@ -7,6 +7,7 @@ A2/T4），且后台线程不应出现 HTTPException——本模块统一抛 mai
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -28,6 +29,14 @@ logger = logging.getLogger(__name__)
 def draft_dir(draft_id: int) -> Path:
     """草稿附件目录（删除草稿与发送成功后清理由调用方执行）。"""
     return get_data_dir() / "drafts" / str(draft_id)
+
+
+def template_files_dir(template_id: str) -> Path:
+    """模板附件目录（S-0921 模板带附件；template_id 由前端生成，sanitize 防穿越）。
+
+    放 core 的原因：ai/tools 的 apply_template 复制附件也要用，而 ai 层禁 import api 层。"""
+    safe = re.sub(r"[^\w.-]", "_", template_id) or "_"
+    return get_data_dir() / "compose_template_files" / safe
 
 
 def _append_signature_if_configured(account_id: int, body_html: str) -> str:

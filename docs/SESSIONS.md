@@ -16,6 +16,14 @@
 
 ## 进行中
 
+### S-0921-1200-发送前检查与模板升级 ✅
+- 目标: 用户确认的三模块——①发送前检查规则层(空主题/模板占位符残留/附件意图核对;人工弹卡可越过,定时/AI 强制拦截退回+通知)②模板升级带主题+附件(KV 加 subject/attachments 字段、模板附件端点、前端模板编辑/插入联动、AI apply_template 同步)③发送前 AI 深审(review_send_draft,开关默认开,失败降级规则层)
+- 范围: backend(core/precheck.py 新增, core/outbox.py, api/{compose_extras,user_drafts,settings}.py, ai/{tasks,tools}.py, scheduler.py) + frontend(compose/{PrecheckModal 新增,ComposeForm,InsertDialogs}, DraftsHubPage, SettingsPage, types, client, openapi/schema.d.ts) + tests(test_precheck.py 新增, test_ai_tools_b6.py 扩) + docs(CHANGELOG/ARCHITECTURE/SESSIONS)
+- 产出: 功能+测试+文档同提交;CHANGELOG 条目哈希待回填
+- 验证: 全量 pytest 302 绿;后端 ruff 通过;前端 npm run build(tsc)通过;隔离实例(8731)冒烟——precheck 三 blocker(空主题/占位符/缺附件)直出、模板未保存上传 404、上传→KV 元数据→copy-template-attachments 复制进草稿、加附件后 attachment_missing 消失、ai_send_review 设置读写,全对
+- 遗留: AI 深审(需要真实 AI 配置)与定时拦截真机通知待用户真实账号验证;老模板 KV 数据无新字段零迁移负担(行为不变)
+- 时间: 2026-09-21 12:00 开工,13:10 完成
+
 ### S-0918-1335-idle退出与图标重构 ✅
 - 目标: 用户拍板三件套——①图标点击=开标签页（已有单实例探测，零改动）②关标签页 90s 后台自动退出（`--idle-exit` + 活动看门狗，推翻 §6「关标签不退服」）③uvx 渠道桌面图标改指 uvx 命令（修 Windows 死链 + 永远最新版）+ 首跑横幅弹一次引导装图标
 - 范围: backend(app/cli.py, app/main.py, app/core/{idle_exit,desktop}.py, api/{settings,system}.py) + frontend(SettingsPage 桌面卡片加开关、App 首跑横幅) + tests(test_channel_desktop/test_idle_exit) + docs(UPDATE_AND_DESKTOP/INSTALL/README双语/ARCHITECTURE/CHANGELOG/SESSIONS) + 官网 download.astro 四处同步

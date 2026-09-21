@@ -27,7 +27,7 @@ def _seed_draft(aid: int) -> int:
     conn = database.get_conn()
     cur = conn.execute(
         "INSERT INTO user_drafts (account_id, mode, to_addrs, subject, body_html, status, origin)"
-        f" VALUES (?, 'reply', 'x@y.com', '标题', '<p>正文</p>', 'pending_review', 'ai')",
+        " VALUES (?, 'reply', 'x@y.com', '标题', '<p>正文</p>', 'pending_review', 'ai')",
         (aid,),
     )
     conn.commit()
@@ -55,6 +55,53 @@ def test_apply_template_unknown_id():
     aid = _aid()
     r = tools._t_apply_template({"template_id": "nope", "to": "a@b.com"}, aid, [aid])
     assert "error" in r
+
+
+def test_apply_template_carries_subject_and_attachments(tmp_path, monkeypatch):
+    """S-0921：模板自带主题与附件——subject 参数缺省时用模板主题；
+    附件文件复制进 AI 草稿（同 REST 复制路径）。"""
+    from app.core.outbox import draft_dir, template_files_dir
+
+    aid = _aid()
+    tid = "tpl-s0921"
+    tdir = template_files_dir(tid)
+    tdir.mkdir(parents=True, exist_ok=True)
+    (tdir / "0_report.xlsx").write_bytes(b"fake-xlsx")
+    database.set_setting("compose_templates", [
+        {"id": tid, "name": "对账", "content": "请查收对账单", "subject": "九月对账单",
+         "attachments": [{"filename": "report.xlsx", "mime": "", "size": 9,
+                          "disk_name": "0_report.xlsx"}]},
+    ])
+    try:
+        r = tools._t_apply_template({"template_id": tid, "to": "boss@x.com"}, aid, [aid])
+        assert "draft_id" in r, r
+        row = database.get_conn().execute(
+            "SELECT subject, body_html FROM user_drafts WHERE id = ?", (r["draft_id"],)
+        ).fetchone()
+        assert row["subject"] == "九月对账单"  # 模板主题兜底
+        assert "请查收对账单" in row["body_html"]
+        atts = database.get_conn().execute(
+            "SELECT filename, path FROM user_draft_attachments WHERE draft_id = ?",
+            (r["draft_id"],),
+        ).fetchall()
+        assert len(atts) == 1 and atts[0]["filename"] == "report.xlsx"
+        from pathlib import Path
+
+        assert Path(atts[0]["path"]).read_bytes() == b"fake-xlsx"
+        assert "模板附件已复制" in r["hint"]
+        # subject 参数优先于模板主题
+        r2 = tools._t_apply_template({"template_id": tid, "to": "boss@x.com",
+                                      "subject": "十月对账单"}, aid, [aid])
+        row2 = database.get_conn().execute(
+            "SELECT subject FROM user_drafts WHERE id = ?", (r2["draft_id"],)
+        ).fetchone()
+        assert row2["subject"] == "十月对账单"
+    finally:
+        import shutil
+
+        shutil.rmtree(draft_dir(r["draft_id"]), ignore_errors=True)
+        shutil.rmtree(draft_dir(r2.get("draft_id", -1)), ignore_errors=True)
+        shutil.rmtree(tdir, ignore_errors=True)
 
 
 def test_apply_signature_appends_once():
