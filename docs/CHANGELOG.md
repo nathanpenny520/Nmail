@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — feat: 发送前检查（规则层+AI 深审）+ 模板带主题与附件
+## e02c0fe — feat: 发送前检查（规则层+AI 深审）+ 模板带主题与附件
 - 用户痛点三连：模板信改漏（占位符残留）、说有附件实际没带、空主题照发。方案经用户确认（拦截策略两条：人工可强制越过；定时/AI 自动发送 blocker 不发出、退回写信台并通知）
 - **发送前检查规则层**（core/precheck.py 新模块，零成本零 AI 依赖，三个发送入口共用）：空主题 blocker；占位符残留 blocker（`{x}`/`[x]`/`___`/X 序列/中文占位词，方括号内纯数字时间编号白名单，X 占位避开邮箱/网址）；附件意图核对——正文提到附件但没带=blocker、带了但正文全未提=warn。人工发送：REST `POST /api/user-drafts/{id}/precheck` → 前端 PrecheckModal 弹卡（问题分组 + 仍要发送可越过，precheck 不可用不挡发送）；定时发送（scheduler.send_due_drafts）：blocker 不发出、退回 editing、写通知（复用既有失败退回模式）；AI 总管家 send_draft：拒发并把问题回给 agent 修正后重试
 - **AI 深审**（ai/tasks.review_send_draft，一次 LLM 调用 JSON 输出 blockers/warns，正文截断 4000 字，ai_logs 记账 send_review）：附件意图与实际清单、模板痕迹、主题与正文匹配、称呼/日期硬伤、明显错别字。开关 `ai_send_review`（默认开，设置页「写信」新开关；未配置/失败自动降级仅规则层不挡发送）；precheck 端点与 scheduler、AI 发送路径均叠加
