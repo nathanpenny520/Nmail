@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import DesktopBanner from './components/DesktopBanner'
+import NewBuildBar from './components/NewBuildBar'
 import Layout from './components/Layout'
 import { api } from './api/client'
 import { ComposeProvider } from './components/compose/ComposeContext'
@@ -27,6 +28,7 @@ export default function App() {
       </ComposeProvider>
       {/* 首跑横幅（UPDATE_AND_DESKTOP.md §7.2）：未装图标时弹一次引导 */}
       <DesktopBanner />
+      <NewBuildBar />
     </>
   )
 }
