@@ -25,7 +25,9 @@ def test_nested_fenced_with_newlines():
 
 
 def test_invalid_raises():
-    with pytest.raises(Exception):
+    import json
+
+    with pytest.raises(json.JSONDecodeError):
         _extract_json("完全不是 JSON 的输出")
 
 
