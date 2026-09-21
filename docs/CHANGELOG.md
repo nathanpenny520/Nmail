@@ -20,6 +20,12 @@
 - 草稿待审列表「批准并发送」同步；npm build 通过
 - 会话：S-0921-1200（续）
 
+## f9f1737 — release: v0.4.6 + tag
+- 收录：发送前检查（规则层+AI 深审）+ 模板带主题与附件（e02c0fe）；SPA 缓存策略+两阶段渐进审查（8637844）；AI 审查全程可见（e27e36b）；Ctrl+C 退出整洁化（597239f）；新构建自动感知/一键刷新（f26fe2f）
+- 验证：PyPI `nmail-app`/`nmail-cli` 0.4.6 ✅；Release 六资产齐 ✅；Homebrew tap 0.4.6 ✅；winget PR microsoft/winget-pkgs#438340（manifest 本地 validate 通过，等社区审核）；官网联动部署已触发
+- 背景：用户侧 run.py（开发版）与桌面图标（uvx 0.4.5）双实例共用一库引发"时而新时而旧"的困惑（77 号草稿经旧实例无审查直发），本版让 uvx 图标与开发版同代码，双入口一致
+- 会话：S-0921-1200（续，发版）
+
 ## 8637844 — fix: SPA 缓存策略——发新版后浏览器不再停留在旧界面
 - 用户重启后端后界面仍是旧版（模板主题/附件、发送前检查都不出现）：StaticFiles 默认只发 ETag 不发 Cache-Control，浏览器按「文件年龄 10%」启发式自行决定新鲜期、期间不回源；旧 index.html（壳）配缓存的旧 JS = 完整旧界面
 - 修复：`_local_source_guard` 中间件出口统一加缓存头——index.html（dist 唯一 text/html）`no-cache` 每次回源验证（ETag 命中即 304，开销可忽略）；/assets/*（Vite 哈希文件名）`public, max-age=31536000, immutable`。按响应类型判定而非路径形态：`/` 的响应在 Starlette Mount 内部生成、`get_path` 把路径归一成 `.`（静态文件路径判断曾三改仍漏），中间件层无死角
