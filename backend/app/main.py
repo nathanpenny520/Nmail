@@ -30,6 +30,8 @@ class SPAStaticFiles(StaticFiles):
     """SPA 历史路由回退：未命中的路径返回 index.html，由前端路由接管。
 
     兼容两种 Starlette 行为：返回 404 响应，或直接抛出 HTTPException(404)。
+    缓存策略不在本类——见 _local_source_guard 中间件出口（按响应类型统一处理，
+    对 Mount 内部生成的 / 响应同样生效）。
     """
 
     async def get_response(self, path: str, scope):
@@ -192,7 +194,22 @@ async def _local_source_guard(request: Request, call_next):
                 parsed.port is not None and server_port is not None and parsed.port != server_port):
             return JSONResponse({"detail": "拒绝跨源请求"}, status_code=403)
 
-    return await call_next(request)
+    response = await call_next(request)
+    # ── SPA 缓存策略（S-0921 修「发新版后浏览器仍跑旧界面」）──────────────
+    # StaticFiles 默认只发 ETag 不发 Cache-Control，浏览器按「文件年龄 10%」启发式
+    # 自行决定新鲜期，期间不回源——旧 index.html（壳）引用旧 JS，界面就停在旧版。
+    # 在中间件出口统一处理（/ 的响应在 Starlette Mount 内部生成，路径形态难穷尽，
+    # 按响应类型判定无死角）：
+    # - index.html（dist 里唯一的 text/html，壳，文件名不带哈希）→ no-cache：
+    #   可缓存但每次必 revalidate（ETag 条件请求，命中即 304，开销可忽略）——
+    #   发新版后普通刷新即可拿到新壳
+    # - /assets/*（Vite 文件名含内容哈希，内容变=文件名变）→ 一年 immutable 强缓存
+    ctype = response.headers.get("content-type", "")
+    if ctype.startswith("text/html"):
+        response.headers["Cache-Control"] = "no-cache"
+    elif request.url.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 
 app.include_router(api_router)

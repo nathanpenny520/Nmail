@@ -32,7 +32,7 @@ FastAPI (uvicorn, 127.0.0.1:8720)
 
 | 模块 | 职责 | 要点 |
 |------|------|------|
-| `main.py` | 入口、lifespan（迁移+调度器启停）、SPAStaticFiles 回退、本机来源校验中间件（`/api/ext/*` 豁免改持 API Key + ext 调用日志） | 路由先于静态挂载注册 |
+| `main.py` | 入口、lifespan（迁移+调度器启停）、SPAStaticFiles 回退、本机来源校验中间件（`/api/ext/*` 豁免改持 API Key + ext 调用日志） | 路由先于静态挂载注册；中间件出口统一 SPA 缓存策略（S-0921：index.html=text/html 响应 `no-cache` 每次回源验证，/assets/* 哈希文件名 `immutable` 一年强缓存——修「发新版后浏览器仍跑旧界面」，按响应类型判定对 Mount 内部生成的 `/` 响应无死角） |
 | `api/deps.py` | API 层公共错误翻译 | `mail_error_to_http`（MailError→4xx/502 翻译表）、`ai_config_or_400`（AI 未配置/停用→400）、`ai_result_or_http`（AI 调用统一 400/502）——端点零样板 |
 | `api/system.py` | `/api/health`、`/api/update-check`（24h 节流，force 可立即检查）、`/api/system/paths`（数据/安装目录实时解析：`get_data_dir()` 含 NMAIL_DATA_DIR 重定向；安装目录按运行形态——冻结=可执行目录、源码=仓库根（与版本号同一判定）、wheel=`app` 包所在目录）、`/api/desktop-shortcut` GET/POST/DELETE（桌面图标状态/安装/移除；GET 附 `banner` 布尔=未安装且未看过首跑横幅）+ `/banner-seen` POST（§7.2 显示即记，一次为准）、`/api/update-apply` GET/POST + `/restart?port=`（自更新状态/触发/一键重启，UPDATE_AND_DESKTOP.md §2–§3）、`/api/quit` POST（延迟 0.8s 强退，设置页退出按钮，UPDATE_AND_DESKTOP.md §6） | 只读展示，体现软件本地性，零硬编码；重启端点 port 由前端按 location 传入，新进程 `--wait-port` 接管同端口；quit 同款延迟强退节奏（SQLite WAL 崩溃安全） |
 | `api/settings.py` | 通用设置 KV 读写 + AI 端点测试（2026-09-13 增：`desktop_notifications_enabled` 桌面通知总开关、`notify_types` 按类型细分（new_mail/ai_draft/digest/account_error，读侧与默认合并缺省视为开）、`auto_insert_signature` 自动签名——前端 NotificationBell 弹系统通知前按两键过滤，ComposeContext 开写信标签时注入签名一次）；2026-09-17 增：`shortcuts_enabled` 键盘快捷键总开关（关=设置页清单内键位全停，MailBrowser/EmailReader/写信台键盘链各自守卫）；2026-09-18 增：`idle_exit_enabled` 空闲自动退出开关（§7，只约束图标启动） | 含 `ui_font/body_font` 档位校验；GET 附带只读 `detected_proxy`（系统代理探测）与 `effective_proxy`（实际生效通道，前端 3s 轮询实时展示）；AI 配置已移至 profiles；`/api/ai/test` 字段省略时回退激活档案 |

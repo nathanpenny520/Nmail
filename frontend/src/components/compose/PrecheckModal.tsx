@@ -1,4 +1,4 @@
-import { AlertTriangle, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, Loader2, ShieldAlert } from 'lucide-react'
 import type { PrecheckIssue } from '../../types'
 import { Modal } from './ui'
 
@@ -7,13 +7,15 @@ const btnFix =
 const btnForce =
   'rounded-lg bg-indigo-600 px-4 py-1.5 t-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50'
 
-/** 发送前检查问题卡（S-0921）：blocker/建议分组展示，人工可强制越过。 */
+/** 发送前检查问题卡（S-0921）：blocker/建议分组展示，人工可强制越过。
+ * 两阶段渐进：规则问题毫秒级先出，AI 深审回来后只增不删（aiPending 显示进行中）。 */
 export default function PrecheckModal({
-  issues, aiUsed, aiError, busy, onForce, onClose,
+  issues, aiUsed, aiError, aiPending, busy, onForce, onClose,
 }: {
   issues: PrecheckIssue[]
   aiUsed?: boolean
   aiError?: string | null
+  aiPending?: boolean
   busy?: boolean
   onForce: () => void
   onClose: () => void
@@ -49,8 +51,13 @@ export default function PrecheckModal({
             ))}
           </ul>
         )}
-        {aiUsed ? (
-          <p className="t-xs text-gray-400">以上含 AI 审查结果；规则检查始终开启。</p>
+        {aiPending ? (
+          <p className="flex items-center gap-1.5 t-xs text-violet-600">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            AI 深审进行中——结果出来会追加到这里（可先处理上方问题，无需等待）
+          </p>
+        ) : aiUsed ? (
+          <p className="t-xs text-gray-400">以上含 AI 深审结果；规则检查始终开启。</p>
         ) : aiError ? (
           <p className="t-xs text-gray-400">AI 审查不可用（{aiError}），本次仅规则检查。</p>
         ) : null}
