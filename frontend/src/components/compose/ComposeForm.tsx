@@ -189,7 +189,7 @@ export default function ComposeForm({
   const [precheck, setPrecheck] = useState<{
     issues: PrecheckIssue[]; aiUsed: boolean; aiError: string | null; aiPending: boolean
   } | null>(null)
-  const [checking, setChecking] = useState(false)
+  const [checkPhase, setCheckPhase] = useState<'' | 'rules' | 'ai'>('')
   // 单飞：从点发送到弹出卡/发出全程防重入——重复点击是「审查条目跳变」的根因
   // （两次并发 precheck 各自请求 LLM，后返回的覆盖前一张卡）
   const checkingRef = useRef(false)
@@ -201,7 +201,7 @@ export default function ComposeForm({
     if (checkingRef.current || sendMutation.isPending) return
     checkingRef.current = true
     skipAiRef.current = false
-    setChecking(true)
+    setCheckPhase('rules')
     setPrecheck(null)
     void (async () => {
       let draftId: number
@@ -209,7 +209,7 @@ export default function ComposeForm({
         draftId = await ensurePersisted()
       } catch {
         checkingRef.current = false
-        setChecking(false)
+        setCheckPhase('')
         return
       }
       // 第一波：规则层（毫秒级）——有问题立即弹卡，不等 AI
@@ -223,6 +223,7 @@ export default function ComposeForm({
       } catch {
         // precheck 不可用不挡发送（规则结果视为空）
       }
+      setCheckPhase('ai') // 按钮明示「AI 审查中…」——AI 审查必须可见，不静默
       // 第二波：AI 深审（几秒；后端按 ai_send_review 开关决定是否真调 LLM，
       // AI 总开关关闭则跳过本次请求）
       let aiIssues: PrecheckIssue[] = []
@@ -239,17 +240,18 @@ export default function ComposeForm({
         }
       }
       const finalIssues = [...ruleIssues, ...aiIssues]
-      if (finalIssues.length > 0 && !skipAiRef.current) {
-        // 合并：卡开着（第一波已弹）则追加 AI 条目（只增不删）；没卡则整体弹。
-        // prev 为 null（用户已返回修改/已强制发送）→ 由 skipAiRef 挡住，不弹
+      // 需要用户确认的情形：有问题，或 AI 审查未能运行（失败/未配置——静默直发会让人
+    // 误以为「AI 审过了」）。ai_error 为空且 ai_used=false = 用户主动关掉 AI 开关，不扰
+      const needConfirm = finalIssues.length > 0 || !!aiError
+      if (needConfirm && !skipAiRef.current) {
         setPrecheck({ issues: finalIssues, aiUsed, aiError, aiPending: false })
       }
-      // 全部通过 → 直接发送；有卡则等用户选择（仍要发送/返回修改）
-      if (finalIssues.length === 0) {
+      // 全部通过且 AI 确实运行 → 直接发送；否则等用户在卡上选择
+      if (!needConfirm) {
         sendMutation.mutate()
       }
       checkingRef.current = false
-      setChecking(false)
+      setCheckPhase('')
     })()
   }
   const forceSend = () => {
@@ -318,7 +320,7 @@ export default function ComposeForm({
 
   const editor = useMailEditor(draft.body_html, setBodyHtml, () => sendNowRef.current())
   const isScheduled = draft.status === 'scheduled' && !!draft.send_at
-  const submitDisabled = !to.trim() || sendMutation.isPending || checking
+  const submitDisabled = !to.trim() || sendMutation.isPending || !!checkPhase
 
   return (
     <div
@@ -496,12 +498,14 @@ export default function ComposeForm({
           onClick={() => sendNowRef.current()}
           disabled={submitDisabled}
         >
-          {sendMutation.isPending || checking ? (
+          {sendMutation.isPending || checkPhase ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
             <Send className="h-3.5 w-3.5" />
           )}
-          {checking ? '审查中…' : sendMutation.isPending ? '发送中…' : '发送'}
+          {checkPhase === 'rules' ? '检查中…'
+            : checkPhase === 'ai' ? 'AI 审查中…'
+            : sendMutation.isPending ? '发送中…' : '发送'}
         </button>
         <button
           className="rounded-lg border border-gray-300 px-3 py-1.5 t-sm text-gray-700 transition-colors hover:bg-gray-100"

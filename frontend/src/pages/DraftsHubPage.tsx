@@ -353,11 +353,11 @@ function DraftDetail({
   // 单飞防重入——重复点击会并发两次 LLM 检查互相覆盖（「条目跳变」根因）
   const aiEnabled = useAIEnabled()
   const [precheck, setPrecheck] = useState<{ issues: PrecheckIssue[]; aiUsed: boolean; aiError: string | null; aiPending: boolean } | null>(null)
-  const [checking, setChecking] = useState(false)
+  const [checkPhase, setCheckPhase] = useState<'' | 'rules' | 'ai'>('')
   const skipAiRef = useRef(false)
   const requestSend = () => {
-    if (checking || sendMutation.isPending) return
-    setChecking(true)
+    if (checkPhase || sendMutation.isPending) return
+    setCheckPhase('rules')
     skipAiRef.current = false
     setPrecheck(null)
     void (async () => {
@@ -369,6 +369,7 @@ function DraftDetail({
           setPrecheck({ issues: ruleIssues, aiUsed: false, aiError: null, aiPending: aiEnabled })
         }
       } catch { /* 规则层不可用视为空，不挡发送 */ }
+      setCheckPhase('ai') // 按钮明示「AI 审查中…」——AI 审查必须可见，不静默
       let aiIssues: PrecheckIssue[] = []
       let aiUsed = false
       let aiError: string | null = null
@@ -381,12 +382,14 @@ function DraftDetail({
         } catch (err) { aiError = (err as Error).message }
       }
       const finalIssues = [...ruleIssues, ...aiIssues]
-      if (finalIssues.length > 0 && !skipAiRef.current) {
+      // 有问题或 AI 审查未能运行（失败/未配置）都要用户确认——静默直发会让人误以为 AI 审过了
+      const needConfirm = finalIssues.length > 0 || !!aiError
+      if (needConfirm && !skipAiRef.current) {
         setPrecheck({ issues: finalIssues, aiUsed, aiError, aiPending: false })
-      } else if (finalIssues.length === 0) {
+      } else if (!needConfirm) {
         sendMutation.mutate()
       }
-      setChecking(false)
+      setCheckPhase('')
     })()
   }
   const regenMutation = useMutation({
@@ -426,7 +429,9 @@ function DraftDetail({
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             {tab === 'pending_review' && (
               <>
-                <button className={hubBtn} disabled={sendMutation.isPending || checking} onClick={requestSend} title="按当前内容直接发送（发送前自动检查）">
+                <button className={hubBtn} disabled={sendMutation.isPending || !!checkPhase} onClick={requestSend} title="按当前内容直接发送（发送前自动检查）">
+                  {checkPhase ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  {checkPhase === 'rules' ? '检查中…' : checkPhase === 'ai' ? 'AI 审查中…' : '批准并发送'}
                   <Send className="h-3.5 w-3.5" /> 批准并发送
                 </button>
                 <button className={hubBtn} onClick={() => compose.openDraft(draft)} title="进写信台修改后发送（同一发送通路）">
