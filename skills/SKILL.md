@@ -1,7 +1,7 @@
 ---
 name: nmail
 description: 通过 nmail-cli 命令行工具操作 Nmail 邮箱：搜索、读取、回复、转发、发送（两阶段确认）、附件收发、整理归档、新邮件监听，也可一条命令委托 Nmail 内置 AI 总管家（能搜信整理、用模板/签名写信、管理联系组、改受限设置、触发收信）。当用户需要进行任何邮件相关操作、或提到 Nmail 时使用此 skill。
-version: 0.4.5
+version: 0.4.6
 ---
 
 # Nmail
