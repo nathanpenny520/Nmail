@@ -20,6 +20,12 @@
 - 草稿待审列表「批准并发送」同步；npm build 通过
 - 会话：S-0921-1200（续）
 
+## 待提交 — fix: AI 审查空返回自动重试——偶发「Expecting value」不再直接失败
+- 用户实测弹卡「AI 审查不可用（Expecting value: line 1 column 1 (char 0)）」——模型偶发返回空串，_extract_json 解析空串抛 JSONDecodeError 原样透给用户；弹卡明示原因属预期行为（e27e36b 生效），但偶发抖动不应直接失败
+- 修复（ai/tasks.review_send_draft）：空返回/解析失败自动重试一次（提示词同时加严「只输出 JSON」）；重试仍失败抛人话 ValueError（「AI 返回了空内容/无法解析，请重试」）。ai_logs 摘要标注（重试）
+- 测试：test_tasks 新 2 例（空返回重试成功、连续空返回人话报错）；17 例过
+- 会话：S-0921-1200（续）
+
 ## f9f1737 — release: v0.4.6 + tag
 - 收录：发送前检查（规则层+AI 深审）+ 模板带主题与附件（e02c0fe）；SPA 缓存策略+两阶段渐进审查（8637844）；AI 审查全程可见（e27e36b）；Ctrl+C 退出整洁化（597239f）；新构建自动感知/一键刷新（f26fe2f）
 - 验证：PyPI `nmail-app`/`nmail-cli` 0.4.6 ✅；Release 六资产齐 ✅；Homebrew tap 0.4.6 ✅；winget PR microsoft/winget-pkgs#438340（manifest 本地 validate 通过，等社区审核）；官网联动部署已触发

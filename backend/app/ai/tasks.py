@@ -297,17 +297,32 @@ def review_send_draft(subject: str, body_text: str, attachment_names: list[str],
     base_url, model, api_key = _ai_config(profile_id)
     system = (
         "你是邮件发出前的质量审查员。只报告真实、值得提示的问题，不要吹毛求疵、"
-        "不要评论风格偏好。输出 JSON：{\"blockers\": [\"…\"], \"warns\": [\"…\"]}。"
+        "不要评论风格偏好。只输出这个 JSON，不要输出任何其他文字："
+        "{\"blockers\": [\"…\"], \"warns\": [\"…\"]}。"
         "blockers=发出去会造成实际损失或尴尬的问题（如说有附件实际没带、占位符或"
         "「某某」没替换、称呼/日期/事实明显错误）；warns=建议改进但不阻塞发送。"
         "没有问题就返回空数组，每条问题用一句话说清位置和原因。"
     )
     att = "、".join(attachment_names) if attachment_names else "（无附件）"
     user = f"主题：{subject or '（空）'}\n附件清单：{att}\n正文：\n{body_text[:4000]}"
+    # 模型偶发返回空串/非 JSON（解析报「Expecting value: line 1 column 1」即空串），
+    # 重试一次再放弃——审查是发送门禁，偶发抖动不该让用户频繁见到「AI 审查不可用」
+    data: Any = None
     with _logged("send_review", subject[:40] or "（无主题）", model) as ok:
-        result, usage = llm.chat(base_url, model, api_key, system, user)
-        ok(usage)
-    data = _extract_json(result)
+        for attempt in range(2):
+            result, usage = llm.chat(base_url, model, api_key, system, user)
+            ok(usage, summary_override=f"{subject[:40] or '（无主题）'}" + ("（重试）" if attempt else ""))
+            if not result.strip():
+                if attempt == 0:
+                    continue
+                raise ValueError("AI 返回了空内容，请重试")
+            try:
+                data = _extract_json(result)
+                break
+            except (ValueError, json.JSONDecodeError) as exc:
+                if attempt == 0:
+                    continue
+                raise ValueError("AI 返回内容无法解析，请重试") from exc
     out: dict[str, list[str]] = {"blockers": [], "warns": []}
     if isinstance(data, dict):
         for key in ("blockers", "warns"):

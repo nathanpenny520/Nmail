@@ -27,3 +27,33 @@ def test_nested_fenced_with_newlines():
 def test_invalid_raises():
     with pytest.raises(Exception):
         _extract_json("完全不是 JSON 的输出")
+
+
+def test_review_send_draft_retries_on_empty(monkeypatch):
+    """模型偶发空返回：第一次空、第二次正常 JSON → 成功且共调用两次（S-0921）。"""
+    import app.ai.tasks as tasks
+
+    monkeypatch.setattr(tasks, "_ai_config", lambda profile_id=None: ("http://x", "m", "k"))
+    calls = {"n": 0}
+
+    def fake_chat(base_url, model, api_key, system, user, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "", {"prompt_tokens": 1, "completion_tokens": 0}
+        return ('{"blockers": ["缺附件"], "warns": []}',
+                {"prompt_tokens": 10, "completion_tokens": 5})
+
+    monkeypatch.setattr(tasks.llm, "chat", fake_chat)
+    out = tasks.review_send_draft("主题", "正文", [])
+    assert out == {"blockers": ["缺附件"], "warns": []}
+    assert calls["n"] == 2
+
+
+def test_review_send_draft_gives_up_after_retry(monkeypatch):
+    """连续空返回：重试后仍空 → 抛人话 ValueError（透出为「AI 审查不可用」）。"""
+    import app.ai.tasks as tasks
+
+    monkeypatch.setattr(tasks, "_ai_config", lambda profile_id=None: ("http://x", "m", "k"))
+    monkeypatch.setattr(tasks.llm, "chat", lambda *a, **k: ("   ", {}))
+    with pytest.raises(ValueError, match="空内容"):
+        tasks.review_send_draft("主题", "正文", [])
