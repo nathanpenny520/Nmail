@@ -3,7 +3,7 @@
 > 规范：每次功能变更在同一提交内在此追加一条。格式：`## 提交短hash — 标题` + 要点。
 > 与 git 提交一一对应；本文件是"发生了什么"，ARCHITECTURE 是"现在是什么样"。
 
-## 待提交 — fix: Ctrl+C 退出不再打印 KeyboardInterrupt 堆栈
+## 597239f — fix: Ctrl+C 退出不再打印 KeyboardInterrupt 堆栈
 - 用户反馈终端 Ctrl+C 停服务后打出一整段 CancelledError/KeyboardInterrupt 堆栈——实为正常退出路径（uvicorn 已优雅关停、数据无损），但 Python 默认把 KeyboardInterrupt 当未捕获异常打印，观感像出错
 - 修复：cli `_launch` 捕获 KeyboardInterrupt，打一行「Nmail 已退出。」收尾；服务行为零变化
 - 会话：S-0921-1200（续）
