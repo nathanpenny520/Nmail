@@ -22,7 +22,7 @@
 - 产出: 功能+测试+文档同提交;CHANGELOG 条目哈希待回填
 - 验证: 全量 pytest 302 绿;后端 ruff 通过;前端 npm run build(tsc)通过;隔离实例(8731)冒烟——precheck 三 blocker(空主题/占位符/缺附件)直出、模板未保存上传 404、上传→KV 元数据→copy-template-attachments 复制进草稿、加附件后 attachment_missing 消失、ai_send_review 设置读写,全对
 - 遗留: AI 深审(需要真实 AI 配置)与定时拦截真机通知待用户真实账号验证;老模板 KV 数据无新字段零迁移负担(行为不变)
-- 续轮(同日): ①用户实测模板编辑见旧界面 → 根因 StaticFiles 无 Cache-Control 浏览器启发式缓存,8637844 中间件出口统一缓存头(index.html no-cache / assets immutable;`/` 的响应在 Mount 内部生成、路径形态判断三改仍漏,按响应类型判定无死角) ②审查卡条目跳变+像卡住 → 两阶段渐进(规则秒出/AI 追加只增不删)+单飞防重入,同提交。80a00dc 哈希回填 ③77 号草稿 AI 未审直发实证(ai_logs 14:00 后零记录)→ e27e36b 按钮分阶段文案+AI 不可用必确认 ④Ctrl+C 堆栈观感 → 597239f 捕获收尾 ⑤「新按钮要手动刷新才出现」→ f26fe2f 构建指纹(build-id.json + __BUILD_ID__)+ NewBuildBar 30s 轮询一键刷新
+- 续轮(同日): ①用户实测模板编辑见旧界面 → 根因 StaticFiles 无 Cache-Control 浏览器启发式缓存,8637844 中间件出口统一缓存头(index.html no-cache / assets immutable;`/` 的响应在 Mount 内部生成、路径形态判断三改仍漏,按响应类型判定无死角) ②审查卡条目跳变+像卡住 → 两阶段渐进(规则秒出/AI 追加只增不删)+单飞防重入,同提交。80a00dc 哈希回填 ③77 号草稿 AI 未审直发实证(ai_logs 14:00 后零记录)→ e27e36b 按钮分阶段文案+AI 不可用必确认 ④Ctrl+C 堆栈观感 → 597239f 捕获收尾 ⑤「新按钮要手动刷新才出现」→ f26fe2f 构建指纹(build-id.json + __BUILD_ID__)+ NewBuildBar 30s 轮询一键刷新 ⑥强刷仍见旧界面 → 实为双实例打架:run.py(8720,新)与桌面图标 uvx 0.4.5(顺延端口,旧)共用一库,用户在图标标签操作——发版 v0.4.6(f9f1737)根除:PyPI 双包/Release 六资产/Homebrew ✅、winget PR #438340、官网动态 a8d5ec6(nmail-site)、CHANGELOG 5dd92a1
 - 时间: 2026-09-21 12:00 开工,13:10 完成(续轮至 14:30)
 
 ### S-0918-1335-idle退出与图标重构 ✅
